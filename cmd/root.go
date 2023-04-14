@@ -10,15 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const (
-	// The name of our config file, without the file extension because viper supports many different config file languages.
-	defaultConfigFilename = "onctl"
-
-	// The environment variable prefix of all environment variables bound to our command line flags.
-	// For example, --number is bound to STING_NUMBER.
-	envPrefix = "ONCTL"
-)
-
 var (
 	rootCmd = &cobra.Command{
 		Use:   "onctl",
