@@ -1,0 +1,17 @@
+{
+    "source": [
+        "./dist/onctl_darwin_arm64/onctl"
+    ],
+    "bundle_id": "com.onkube.onctl",
+    "apple_id": {
+        "username": "cdalar@me.com",
+        "password": "@env:AC_PASSWORD",
+        "provider": "CemalDalar182157262"
+    },
+    "sign": {
+        "application_identity": "Developer ID Application: Cemal Y. Dalar (4935L7XX5T)"
+    },
+    "zip": {
+        "output_path": "./dist/onctl_darwin_arm64.zip"
+    }
+}

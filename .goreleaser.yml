@@ -1,0 +1,70 @@
+project_name: onctl
+
+before:
+  hooks:
+    # You may remove this if you don't use go modules.
+    - go mod tidy
+    # you may remove this if you don't need go generate
+    # - go generate ./...
+
+builds:
+  - binary: onctl
+    id: onctl-linux
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+    ldflags:
+      - -w -s -X 'cdalar/onctl/cmd.Version=v{{.Version}}-{{.ShortCommit}}'
+
+  - binary: onctl
+    id: onctl
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64 # M1 Chip
+    ldflags:
+      - -w -s -X 'cdalar/onctl/cmd.Version=v{{.Version}}-{{.ShortCommit}}'
+    hooks:
+      post: ["gon gon/config-{{.Arch}}.json"]
+
+
+archives:
+  - id: repl
+    name_template: "{{ .ProjectName }}-{{.Os}}-{{.Arch}}"
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    # files:
+    #   - non-existent*
+
+checksum:
+  name_template: "checksums.txt"
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+# .goreleaser.yml
+release:
+  github:
+    owner: cdalar
+    name: homebrew-tap
+  prerelease: auto
+
+brews:
+  - tap:
+      owner: cdalar
+      name: homebrew-tap
+    description: "onctl"

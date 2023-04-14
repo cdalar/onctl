@@ -1,0 +1,50 @@
+name: goreleaser
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  goreleaser:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.19'
+          check-latest: true
+          cache: true
+      - name: Import Code-Signing Certificates
+        uses: apple-actions/import-codesign-certs@v2
+        with:
+          # The certificates in a PKCS12 file encoded as a base64 string
+          p12-file-base64: ${{ secrets.APPLE_DEVELOPER_CERTIFICATE_P12_BASE64 }}
+          # The password used to import the PKCS12 file.
+          p12-password: ${{ secrets.APPLE_DEVELOPER_CERTIFICATE_PASSWORD }}
+      - name: install brew and gon
+        # /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        run: |
+          brew tap mitchellh/gon
+          brew install mitchellh/gon/gon
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v4.2.0
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GORELEASER_GH_TOKEN }}
+          AC_PASSWORD: ${{ secrets.AC_PASSWORD }}
+          # Your GoReleaser Pro key, if you are using the 'goreleaser-pro' distribution
+          # GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
