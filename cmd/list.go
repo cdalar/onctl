@@ -1,11 +1,11 @@
 package cmd
 
 import (
+	"cdalar/onctl/internal/cloud"
+	"cdalar/onctl/internal/provideraws"
+	"cdalar/onctl/internal/providerhtz"
 	"fmt"
 	"log"
-	"onkube/onctl/internal/cloud"
-	"onkube/onctl/internal/provideraws"
-	"onkube/onctl/internal/providerhtz"
 	"os"
 
 	"github.com/spf13/cobra"

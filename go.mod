@@ -1,4 +1,4 @@
-module onkube/onctl
+module cdalar/onctl
 
 go 1.19
 

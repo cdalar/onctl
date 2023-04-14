@@ -1,8 +1,8 @@
 package main
 
 import (
+	"cdalar/onctl/cmd"
 	"log"
-	"onkube/onctl/cmd"
 	"os"
 
 	"github.com/hashicorp/logutils"

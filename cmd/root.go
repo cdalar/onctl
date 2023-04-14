@@ -1,9 +1,9 @@
 package cmd
 
 import (
+	"cdalar/onctl/internal/tools"
 	"fmt"
 	"log"
-	"onkube/onctl/internal/tools"
 	"os"
 	"strings"
 

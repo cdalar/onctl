@@ -3,9 +3,9 @@ package provideraws
 import (
 	"fmt"
 
+	"cdalar/onctl/internal/rand"
+	"cdalar/onctl/internal/tools"
 	"log"
-	"onkube/onctl/internal/rand"
-	"onkube/onctl/internal/tools"
 	"os"
 	"path/filepath"
 	"strings"
