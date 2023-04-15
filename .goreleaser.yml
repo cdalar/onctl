@@ -56,11 +56,10 @@ changelog:
       - "^docs:"
       - "^test:"
 
-# .goreleaser.yml
 release:
   github:
     owner: cdalar
-    name: homebrew-tap
+    name: onctl
   prerelease: auto
 
 brews:
