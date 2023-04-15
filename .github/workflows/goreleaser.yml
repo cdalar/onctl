@@ -6,11 +6,6 @@ on:
       - "v*"
   workflow_dispatch:
 
-
-permissions:
-  contents: write
-  packages: write
-
 jobs:
   goreleaser:
     runs-on: macos-latest
