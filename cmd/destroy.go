@@ -13,8 +13,9 @@ import (
 )
 
 var destroyCmd = &cobra.Command{
-	Use:   "destroy",
-	Short: "Destroy VM(s)",
+	Use:     "destroy",
+	Aliases: []string{"teardown", "down", "delete", "remove"},
+	Short:   "Destroy VM(s)",
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Println("[DEBUG] args: ", args)
 		if len(args) == 0 {
