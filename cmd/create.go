@@ -75,7 +75,7 @@ var createCmd = &cobra.Command{
 			SSHKeyID:    keyID,
 			ExposePorts: []int64{exposePort},
 		}
-		log.Println("Starting server...")
+		fmt.Println("Starting server...")
 		vm, err = provider.Deploy(s)
 		if err != nil {
 			log.Println(err)

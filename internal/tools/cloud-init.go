@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"fmt"
 	"log"
 	"strconv"
 	"time"
@@ -15,7 +16,7 @@ func WaitForCloudInit(username, ip string, privateKey string) {
 			log.Println("[DEBUG] RemoteRun:" + err.Error())
 		}
 		if err == nil {
-			log.Println("Server started.")
+			fmt.Println("Vm started.")
 			if isOK == "OK" {
 				break
 			}
