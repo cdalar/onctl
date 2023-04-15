@@ -2,7 +2,7 @@
     "source": [
         "./dist/onctl_darwin_arm64/onctl"
     ],
-    "bundle_id": "com.onkube.onctl",
+    "bundle_id": "net.dalar.onctl",
     "apple_id": {
         "username": "cdalar@me.com",
         "password": "@env:AC_PASSWORD",

@@ -1,6 +1,6 @@
 {
     "go.testEnvFile": "${workspaceFolder}/test.env",
     "yaml.schemas": {
-        "https://goreleaser.com/static/schema.json": "file:///Users/cd/cdalar/onctl/.goreleaser.yml"
+        "https://json.schemastore.org/github-workflow.json": "${workspaceFolder}/.github/workflows/goreleaser.yml"
     }
 }
