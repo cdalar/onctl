@@ -7,6 +7,23 @@
 1. Starts a vm on defined cloud (supports aws, hetzer at the moment)
 2. Installs docker package and make necessary adjustments.
 
+## Getting Started 
+
+For MacOS (ARM or Intel) 
+
+```
+brew install cdalar/tap/onctl
+```
+
+For Linux (amd64)
+
+```
+wget https://www.github.com/cdalar/onctl/releases/latest/download/onctl-linux-amd64.tar.gz
+tar zxvf onctl-linux-amd64.tar.gz
+sudo mv onctl /usr/local/bin/
+```
+
+
 ### Example repo. 
 
 Please check [onctl-demo](https://github.com/cdalar/onctl-demo) repo for how to use this tool inside github-actions
