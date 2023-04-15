@@ -37,8 +37,9 @@ func init() {
 }
 
 var createCmd = &cobra.Command{
-	Use:   "create",
-	Short: "Create a VM",
+	Use:     "create",
+	Aliases: []string{"deploy", "up"},
+	Short:   "Create a VM",
 	Run: func(cmd *cobra.Command, args []string) {
 		home, err := homedir.Dir()
 		if err != nil {
