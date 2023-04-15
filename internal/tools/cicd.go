@@ -57,6 +57,15 @@ func GenerateMachineUniqueName() string {
 				log.Fatal(err)
 			}
 			name = ref.Name().Short()
+		} else {
+			// If not in CI and not in a git repository, use the current user name
+			log.Println("[DEBUG] .git directory not found, using current user name and directory name")
+			dir, err := os.Getwd()
+			log.Println("[DEBUG] current dir: " + dir)
+			if err != nil {
+				log.Fatal(err)
+			}
+			name = strings.Replace(dir[strings.LastIndex(dir, "/")+1:], "/", "-", -1)
 		}
 		currentUser, err := user.Current()
 		if err != nil {
