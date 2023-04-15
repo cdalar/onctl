@@ -21,8 +21,9 @@ This should start the vm and make it ready to use. Then;
 Run these to deploy your docker compose app
 
 ```
-ssh-keyscan $(cat onctl-deploy.json | jq -r '.public_ip') >> ~/.ssh/known_hosts
-DOCKER_HOST=$(cat onctl-deploy.json | jq -r '.docker_host') docker compose up -d --build
+ssh-keyscan $(jq -r .public_ip onctl-deploy.json) >> ~/.ssh/known_hosts
+cd <project_folder>
+DOCKER_HOST=$(jq -r .docker_host onctl-deploy.json) docker compose up -d --build
 ```
 
 Have fun!
