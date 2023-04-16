@@ -12,7 +12,7 @@ import (
 )
 
 var sshCmd = &cobra.Command{
-	Use:                   "ssh [FLAGS] VM Name [COMMAND...]",
+	Use:                   "ssh VM_NAME",
 	Short:                 "Spawn an SSH connection to a VM",
 	Args:                  cobra.MinimumNArgs(1),
 	TraverseChildren:      true,
