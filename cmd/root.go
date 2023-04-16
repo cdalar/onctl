@@ -55,4 +55,5 @@ func init() {
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(createCmd)
 	rootCmd.AddCommand(destroyCmd)
+	rootCmd.AddCommand(sshCmd)
 }
