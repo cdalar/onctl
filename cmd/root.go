@@ -18,7 +18,7 @@ var (
 )
 
 func checkCloudProvider() {
-	var cloudProviderList = []string{"aws", "hetzner"}
+	var cloudProviderList = []string{"aws", "hetzner", "azure"}
 	var cloudProvider = os.Getenv("CLOUD_PROVIDER")
 	if cloudProvider != "" {
 		if !tools.Contains(cloudProviderList, cloudProvider) {

@@ -3,6 +3,7 @@ package cmd
 import (
 	"cdalar/onctl/internal/cloud"
 	"cdalar/onctl/internal/provideraws"
+	"cdalar/onctl/internal/providerazure"
 	"cdalar/onctl/internal/providerhtz"
 	"fmt"
 	"log"
@@ -28,6 +29,10 @@ var listCmd = &cobra.Command{
 		case "aws":
 			provider = &cloud.ProviderAws{
 				Client: provideraws.GetClient(),
+			}
+		case "azure":
+			provider = &cloud.ProviderAzure{
+				Client: providerazure.GetClient(),
 			}
 		}
 		serverList, err = provider.List()
