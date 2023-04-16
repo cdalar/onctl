@@ -186,6 +186,11 @@ func (p ProviderHetzner) getServerByServerName(serverName string) Vm {
 func (p ProviderHetzner) SSHInto(serverName string) {
 	// server, _, err := p.Client.Server().Get(ctx, idOrName)
 	server, _, err := p.Client.Server.GetByName(context.TODO(), serverName)
+	if server == nil {
+		fmt.Println("No Server found with name: " + serverName)
+		os.Exit(1)
+	}
+
 	if err != nil {
 		if herr, ok := err.(hcloud.Error); ok {
 			switch herr.Code {
