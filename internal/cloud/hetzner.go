@@ -1,6 +1,7 @@
 package cloud
 
 import (
+	"cdalar/onctl/internal/tools"
 	"context"
 	"crypto/md5"
 	"fmt"
@@ -180,4 +181,29 @@ func (p ProviderHetzner) getServerByServerName(serverName string) Vm {
 		return Vm{}
 	}
 	return mapHetznerServer(*s)
+}
+
+func (p ProviderHetzner) SSHInto(serverName string) {
+	// server, _, err := p.Client.Server().Get(ctx, idOrName)
+	server, _, err := p.Client.Server.GetByName(context.TODO(), serverName)
+	if server == nil {
+		fmt.Println("No Server found with name: " + serverName)
+		os.Exit(1)
+	}
+
+	if err != nil {
+		if herr, ok := err.(hcloud.Error); ok {
+			switch herr.Code {
+			case hcloud.ErrorCodeNotFound:
+				log.Fatalln("Server not found")
+			default:
+				log.Fatalln(herr.Error())
+			}
+		} else {
+			log.Fatalln(err.Error())
+		}
+	}
+
+	ipAddress := server.PublicNet.IPv4.IP
+	tools.SSHIntoVM(ipAddress.String(), "root")
 }
