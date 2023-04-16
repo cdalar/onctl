@@ -11,11 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	sshCmd.Flags().StringP("user", "u", "root", "Username for SSH connection")
-	sshCmd.Flags().IntP("port", "p", 22, "Port for SSH connection")
-}
-
 var sshCmd = &cobra.Command{
 	Use:                   "ssh [FLAGS] VM Name [COMMAND...]",
 	Short:                 "Spawn an SSH connection to a VM",
