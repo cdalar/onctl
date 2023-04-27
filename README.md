@@ -23,12 +23,15 @@ tar zxvf onctl-linux-amd64.tar.gz
 sudo mv onctl /usr/local/bin/
 ```
 
+## Github Action
+You can use this action to integrate onctl on your pipeline [onctl-action](https://github.com/marketplace/actions/onctl-action). You on every PR you created you can have an ready to check environment.
 
-### Example repo. 
+
+## Example/Template Repository
 
 Please check [onctl-demo](https://github.com/cdalar/onctl-demo) repo for how to use this tool inside github-actions
 
-### Use it on your local machine directly
+## Use it on your local machine directly
 
 ```
 cd <into your git folder>
