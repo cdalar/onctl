@@ -1,0 +1,22 @@
+site_name: onctl
+theme:
+  name: material
+  language: en
+#   palette:
+#     primary: indigo
+#     accent: indigo
+  font:
+    text: Roboto
+    code: Roboto Mono
+#   features:
+#     - navigation.tabs
+# Extensions
+markdown_extensions:
+  - admonition
+  - pymdownx.inlinehilite
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.superfences
+  - pymdownx.tabbed
+  - toc:
+      permalink: true
