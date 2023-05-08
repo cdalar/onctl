@@ -30,7 +30,7 @@ require (
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/pjbgf/sha1cd v0.3.0 // indirect
-	github.com/prometheus/client_golang v1.15.0 // indirect
+	github.com/prometheus/client_golang v1.15.1 // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.42.0 // indirect
 	github.com/prometheus/procfs v0.9.0 // indirect
@@ -49,7 +49,7 @@ require (
 
 require (
 	github.com/hashicorp/logutils v1.0.0
-	github.com/hetznercloud/hcloud-go v1.43.0
+	github.com/hetznercloud/hcloud-go v1.44.0
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/pkg/sftp v1.13.5
 	golang.org/x/crypto v0.8.0
