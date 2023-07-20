@@ -8,7 +8,7 @@ require (
 	github.com/manifoldco/promptui v0.9.0
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/spf13/cobra v1.7.0
-	k8s.io/apimachinery v0.27.1
+	k8s.io/apimachinery v0.27.4
 )
 
 require (
