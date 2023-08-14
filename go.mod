@@ -51,7 +51,7 @@ require (
 	github.com/hashicorp/logutils v1.0.0
 	github.com/hetznercloud/hcloud-go v1.43.0
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	github.com/pkg/sftp v1.13.5
+	github.com/pkg/sftp v1.13.6
 	golang.org/x/crypto v0.12.0
 	golang.org/x/text v0.12.0 // indirect
 )
