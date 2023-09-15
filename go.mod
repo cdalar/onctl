@@ -41,7 +41,7 @@ require (
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	golang.org/x/mod v0.10.0 // indirect
 	golang.org/x/net v0.12.0 // indirect
-	golang.org/x/sys v0.11.0 // indirect
+	golang.org/x/sys v0.12.0 // indirect
 	golang.org/x/tools v0.8.0 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
@@ -52,6 +52,6 @@ require (
 	github.com/hetznercloud/hcloud-go v1.50.0
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/pkg/sftp v1.13.5
-	golang.org/x/crypto v0.12.0
-	golang.org/x/text v0.12.0 // indirect
+	golang.org/x/crypto v0.13.0
+	golang.org/x/text v0.13.0 // indirect
 )
