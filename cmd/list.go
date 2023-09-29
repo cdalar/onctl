@@ -2,12 +2,7 @@ package cmd
 
 import (
 	"cdalar/onctl/internal/cloud"
-	"cdalar/onctl/internal/provideraws"
-	"cdalar/onctl/internal/providerazure"
-	"cdalar/onctl/internal/providerhtz"
-	"fmt"
 	"log"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -20,31 +15,14 @@ var listCmd = &cobra.Command{
 
 		var serverList cloud.VmList
 		var err error
-		log.Println("[DEBUG] Cloud Provider: ", os.Getenv("CLOUD_PROVIDER"))
-		switch os.Getenv("CLOUD_PROVIDER") {
-		case "hetzner":
-			provider = &cloud.ProviderHetzner{
-				Client: providerhtz.GetClient(),
-			}
-		case "aws":
-			provider = &cloud.ProviderAws{
-				Client: provideraws.GetClient(),
-			}
-		case "azure":
-			provider = &cloud.ProviderAzure{
-				Client: providerazure.GetClient(),
-			}
-		}
 		serverList, err = provider.List()
 		log.Println("[DEBUG] VM List: ", serverList)
 		if err != nil {
 			log.Println(err)
 		}
 		tmpl := "ID\tNAME\tTYPE\tPUBLIC IP\tSTATE\tAGE\n{{range .List}}{{.ID}}\t{{.Name}}\t{{.Type}}\t{{.IP}}\t{{.Status}}\t{{durationFromCreatedAt .CreatedAt}}\n{{end}}"
-		if len(serverList.List) != 0 {
-			TabWriter(serverList, tmpl)
-		} else {
-			fmt.Println("No VMs Found")
-		}
+		// if len(serverList.List) != 0 {
+		TabWriter(serverList, tmpl)
+		// }
 	},
 }

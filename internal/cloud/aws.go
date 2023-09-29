@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"cdalar/onctl/internal/provideraws"
+	"cdalar/onctl/internal/tools"
 	"crypto/md5"
 	"fmt"
 	"log"
@@ -297,4 +298,16 @@ func (p ProviderAws) getServerByServerName(serverName string) Vm {
 		log.Fatalln("No server found with name: " + serverName)
 	}
 	return mapAwsServer(s.Reservations[0].Instances[0])
+}
+
+func (p ProviderAws) SSHInto(serverName string) {
+
+	s := p.getServerByServerName(serverName)
+	log.Println("[DEBUG] " + s.String())
+	if s.ID == "" {
+		fmt.Println("Server not found")
+	}
+
+	ipAddress := s.IP
+	tools.SSHIntoVM(ipAddress, "ubuntu")
 }

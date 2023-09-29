@@ -48,4 +48,6 @@ type CloudProviderInterface interface {
 	List() (VmList, error)
 	// CreateSSHKey creates a new SSH key
 	CreateSSHKey(publicKeyFile string) (keyID string, err error)
+	// SSHInto connects to a VM
+	SSHInto(serverName string)
 }
