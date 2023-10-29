@@ -21,6 +21,7 @@ var destroyCmd = &cobra.Command{
 		}
 
 		switch args[0] {
+		// TODO: only works on the current directory
 		case "self":
 			serverName := tools.GenerateMachineUniqueName()
 			log.Println("[DEBUG] Tear down self: " + serverName)
