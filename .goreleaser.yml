@@ -28,7 +28,7 @@ builds:
       - darwin
     goarch:
       - amd64
-      - arm64 # M1 Chip
+      # - arm64 # M1 Chip
     ldflags:
       - -w -s -X 'cdalar/onctl/cmd.Version=v{{.Version}}-{{.ShortCommit}}'
     hooks:
