@@ -295,7 +295,8 @@ func (p ProviderAws) getServerByServerName(serverName string) Vm {
 		log.Fatalln(err)
 	}
 	if len(s.Reservations) == 0 {
-		log.Fatalln("No server found with name: " + serverName)
+		fmt.Println("No server found with name: " + serverName)
+		os.Exit(1)
 	}
 	return mapAwsServer(s.Reservations[0].Instances[0])
 }
