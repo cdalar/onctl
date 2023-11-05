@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -51,7 +50,7 @@ func checkCloudProvider() {
 // Execute executes the root command.
 func Execute() error {
 	log.Println("[DEBUG] Args: " + strings.Join(os.Args, ","))
-	if len(os.Args) > 1 && !slices.Contains([]string{"version", "init"}, os.Args[1]) {
+	if len(os.Args) > 1 && os.Args[1] != "init" && os.Args[1] != "version" {
 		checkCloudProvider()
 		ReadConfig(cloudProvider)
 	}
