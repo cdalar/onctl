@@ -37,6 +37,7 @@ jobs:
         run: |
           brew tap mitchellh/gon
           brew install mitchellh/gon/gon
+          gon gon/config-amd64.json
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v4.6.0
         with:
