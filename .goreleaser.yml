@@ -63,7 +63,7 @@ release:
   prerelease: auto
 
 brews:
-  - tap:
+  - repository:
       owner: cdalar
       name: homebrew-tap
     description: "onctl"
