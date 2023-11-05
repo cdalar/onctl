@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/hetznercloud/hcloud-go/hcloud"
+	"github.com/spf13/viper"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -18,20 +19,21 @@ type ProviderHetzner struct {
 }
 
 func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
-	if server.Type == "##" {
-		server.Type = "cpx21"
-	}
+
 	sshKeyIDint, err := strconv.Atoi(server.SSHKeyID)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	result, _, err := p.Client.Server.Create(context.TODO(), hcloud.ServerCreateOpts{
 		Name: server.Name,
+		Location: &hcloud.Location{
+			Name: viper.GetString("hetzner.location"),
+		},
 		Image: &hcloud.Image{
 			Name: "ubuntu-22.04",
 		},
 		ServerType: &hcloud.ServerType{
-			Name: server.Type,
+			Name: viper.GetString("hetzner.vm.type"),
 		},
 		SSHKeys: []*hcloud.SSHKey{
 			{
@@ -46,7 +48,7 @@ func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 		if herr, ok := err.(hcloud.Error); ok {
 			switch herr.Code {
 			case hcloud.ErrorCodeUniquenessError:
-				log.Println("[DEBUG] Server already exists")
+				log.Println("Server already exists")
 				s, _, err := p.Client.Server.GetByName(context.TODO(), server.Name)
 				if err != nil {
 					log.Fatalln(err)

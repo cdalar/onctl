@@ -2,9 +2,6 @@ package cmd
 
 import (
 	"cdalar/onctl/internal/cloud"
-	"cdalar/onctl/internal/files"
-	"cdalar/onctl/internal/provideraws"
-	"cdalar/onctl/internal/providerhtz"
 	"cdalar/onctl/internal/tools"
 	"fmt"
 	"log"
@@ -15,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -23,17 +21,15 @@ var (
 	initFile      string
 	exposePort    int64
 	instanceType  string
-	username      string
 	vm            cloud.Vm
-	provider      cloud.CloudProviderInterface
 )
 
 func init() {
-	createCmd.Flags().StringVarP(&composeFile, "composeFile", "c", "##", "Path to docker-compose file")
-	createCmd.Flags().StringVarP(&publicKeyFile, "publicKey", "k", "##", "Path to publicKey file (default: ~/.ssh/id_rsa))")
-	createCmd.Flags().StringVarP(&initFile, "initFile", "i", "##", "init bash script file")
+	createCmd.Flags().StringVarP(&composeFile, "composeFile", "c", "", "Path to docker-compose file")
+	createCmd.Flags().StringVarP(&publicKeyFile, "publicKey", "k", "", "Path to publicKey file (default: ~/.ssh/id_rsa))")
+	createCmd.Flags().StringVarP(&initFile, "initFile", "i", "", "init bash script file")
 	createCmd.Flags().Int64VarP(&exposePort, "port", "p", 80, "port you want to expose to internet")
-	createCmd.Flags().StringVarP(&instanceType, "type", "t", "##", "instance type")
+	createCmd.Flags().StringVarP(&instanceType, "type", "t", "", "instance type")
 }
 
 var createCmd = &cobra.Command{
@@ -45,25 +41,12 @@ var createCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		if publicKeyFile == "##" {
+		if publicKeyFile == "" {
 			publicKeyFile = home + "/.ssh/id_rsa.pub"
 		}
 
 		if err != nil {
 			log.Fatal(err)
-		}
-		switch os.Getenv("CLOUD_PROVIDER") {
-		case "hetzner":
-			provider = cloud.ProviderHetzner{
-				Client: providerhtz.GetClient(),
-			}
-			//TODO username should be part of the image
-			username = "root"
-		case "aws":
-			provider = &cloud.ProviderAws{
-				Client: provideraws.GetClient(),
-			}
-			username = "ubuntu"
 		}
 		keyID, err := provider.CreateSSHKey(publicKeyFile)
 		if err != nil {
@@ -87,39 +70,36 @@ var createCmd = &cobra.Command{
 		if err != nil {
 			log.Println(err)
 		}
-		if initFile == "##" {
-			initFileEmbeded, _ := files.EmbededFiles.ReadFile("init.sh")
-			tmpfile, err := os.CreateTemp("", "onctl")
-			if err != nil {
-				log.Fatal(err)
-			}
-			log.Println("[DEBUG] initTmpfile:" + tmpfile.Name())
-			_, err = tmpfile.Write(initFileEmbeded)
-			if err != nil {
-				log.Fatal(err)
-			}
-			defer tmpfile.Close()
-			initFile = tmpfile.Name()
-		}
+		// if initFile == "" {
+		// 	initFileEmbeded, _ := files.EmbededFiles.ReadFile("init.sh")
+		// 	tmpfile, err := os.CreateTemp("", "onctl")
+		// 	if err != nil {
+		// 		log.Fatal(err)
+		// 	}
+		// 	log.Println("[DEBUG] initTmpfile:" + tmpfile.Name())
+		// 	_, err = tmpfile.Write(initFileEmbeded)
+		// 	if err != nil {
+		// 		log.Fatal(err)
+		// 	}
+		// 	defer tmpfile.Close()
+		// 	initFile = tmpfile.Name()
+		// }
 
-		if _, err := os.Stat(initFile); err != nil {
-			fmt.Println(initFile + " Init file not found")
-			os.Exit(1)
-		}
+		// if _, err := os.Stat(initFile); err != nil {
+		// 	log.Fatalln(initFile + " Init file not found")
+		// }
 		if _, err := os.Stat(publicKeyFile); err != nil {
-			fmt.Println(publicKeyFile + " Public key file not found")
-			os.Exit(1)
+			log.Fatalln(publicKeyFile + " Public key file not found")
 		}
+		tools.WaitForCloudInit(viper.GetString(cloudProvider+".vm.username"), vm.IP, string(privateKey))
+		// tools.PrepareDocker(username, vm.IP, string(privateKey), initFile)
 
-		tools.WaitForCloudInit(username, vm.IP, string(privateKey))
-		tools.PrepareDocker(username, vm.IP, string(privateKey), initFile)
-
-		tools.CreateDeployOutputFile(&tools.DeployOutput{
-			Username:   username,
-			PublicIP:   vm.IP,
-			PublicURL:  "http://" + vm.IP,
-			DockerHost: "ssh://" + username + "@" + vm.IP,
-		})
+		// tools.CreateDeployOutputFile(&tools.DeployOutput{
+		// 	Username:   username,
+		// 	PublicIP:   vm.IP,
+		// 	PublicURL:  "http://" + vm.IP,
+		// 	DockerHost: "ssh://" + username + "@" + vm.IP,
+		// })
 
 		// tools.RunDockerCompose(username, cloudServer.IP, string(privateKey), composeFile)
 	},

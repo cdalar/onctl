@@ -1,0 +1,27 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "Launch",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceRoot}/onctl.go",
+            "env": {
+                "ONCTL_LOG": "DEBUG",
+                "ONCTL_CLOUD": "azure"
+            },
+            // The -- here is key, telling delve to pass arguments after it to your code
+            // "args": ["ls"], 
+            "args": ["up"], 
+            // This controls the Working directory the code runs in, as my config.lgpriv.toml in my root 
+            // I want the working dir to be the workspace root
+            "cwd": "${workspaceRoot}", 
+            "showLog": true
+        }
+    ]
+}

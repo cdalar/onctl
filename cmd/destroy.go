@@ -2,12 +2,9 @@ package cmd
 
 import (
 	"cdalar/onctl/internal/cloud"
-	"cdalar/onctl/internal/provideraws"
-	"cdalar/onctl/internal/providerhtz"
 	"cdalar/onctl/internal/tools"
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -23,22 +20,8 @@ var destroyCmd = &cobra.Command{
 			return
 		}
 
-		// Set up cloud provider and client
-		var provider cloud.CloudProviderInterface
-		switch os.Getenv("CLOUD_PROVIDER") {
-		case "hetzner":
-			provider = &cloud.ProviderHetzner{
-				Client: providerhtz.GetClient(),
-			}
-		case "aws":
-			provider = &cloud.ProviderAws{
-				Client: provideraws.GetClient(),
-			}
-		default:
-			log.Fatal("Unknown cloud provider")
-		}
-
 		switch args[0] {
+		// TODO: only works on the current directory
 		case "self":
 			serverName := tools.GenerateMachineUniqueName()
 			log.Println("[DEBUG] Tear down self: " + serverName)

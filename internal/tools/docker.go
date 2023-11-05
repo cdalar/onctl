@@ -3,8 +3,6 @@ package tools
 import (
 	"fmt"
 	"log"
-	"os"
-	"os/exec"
 )
 
 func PrepareDocker(username, ip, privateKey, initFile string) {
@@ -35,21 +33,21 @@ func PrepareDocker(username, ip, privateKey, initFile string) {
 	fmt.Println("DONE")
 }
 
-func RunDockerCompose(username, ip, privateKey, composeFile string) {
+// func RunDockerCompose(username, ip, privateKey, composeFile string) {
 
-	// cmdCompose := exec.Command("DOCKER_HOST=ssh://ubuntu@$(cat ip.txt)", "docker", "compose", "up", "-d", "--build")
-	// log.Println(*instance.PublicIpAddress)
-	os.Setenv("DOCKER_HOST", "ssh://"+username+"@"+ip)
-	cmdCompose := exec.Command("docker", "compose", "up", "-d", "--build")
-	err := cmdCompose.Run()
-	if err != nil {
-		log.Println("Run Compose")
-		log.Fatal(err)
-	}
-	out, err := cmdCompose.Output()
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(string(out))
-	log.Println("Service configured on:", "http://"+ip+"/")
-}
+// 	// cmdCompose := exec.Command("DOCKER_HOST=ssh://ubuntu@$(cat ip.txt)", "docker", "compose", "up", "-d", "--build")
+// 	// log.Println(*instance.PublicIpAddress)
+// 	os.Setenv("DOCKER_HOST", "ssh://"+username+"@"+ip)
+// 	cmdCompose := exec.Command("docker", "compose", "up", "-d", "--build")
+// 	err := cmdCompose.Run()
+// 	if err != nil {
+// 		log.Println("Run Compose")
+// 		log.Fatal(err)
+// 	}
+// 	out, err := cmdCompose.Output()
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+// 	fmt.Println(string(out))
+// 	log.Println("Service configured on:", "http://"+ip+"/")
+// }
