@@ -1,6 +1,6 @@
 module cdalar/onctl
 
-go 1.21
+go 1.20
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute v1.0.0
