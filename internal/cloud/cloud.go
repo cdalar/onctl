@@ -21,6 +21,8 @@ type Vm struct {
 	Type string
 	// Status is the status of the instance
 	Status string
+	// Location is the location of the instance
+	Location string
 	// SSHKeyID is the ID of the SSH key
 	SSHKeyID string
 	// ExposePorts is the list of ports to expose

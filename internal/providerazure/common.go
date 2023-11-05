@@ -38,6 +38,19 @@ func GetNicClient() (nicClient *armnetwork.InterfacesClient) {
 	return nicClient
 }
 
+func GetSSHKeyClient() (sshClient *armcompute.SSHPublicKeysClient) {
+	cred, err := connectionAzure()
+	if err != nil {
+		log.Fatalf("cannot connect to Azure:%+v", err)
+	}
+	sshClient, err = armcompute.NewSSHPublicKeysClient(subscriptionId, cred, nil)
+	if err != nil {
+		return nil
+	}
+
+	return sshClient
+}
+
 func GetIPClient() (publicIpClient *armnetwork.PublicIPAddressesClient) {
 	cred, err := connectionAzure()
 	if err != nil {

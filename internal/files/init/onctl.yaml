@@ -1,6 +1,5 @@
 vm:
-  name: testing
-  type: cax21
+  name: onctl-vm
   initFile: init.sh
 docker:
   compose: internal/files/docker-compose.yml

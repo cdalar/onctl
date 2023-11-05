@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -20,7 +21,6 @@ var (
 	initFile      string
 	exposePort    int64
 	instanceType  string
-	username      string
 	vm            cloud.Vm
 )
 
@@ -91,8 +91,7 @@ var createCmd = &cobra.Command{
 		if _, err := os.Stat(publicKeyFile); err != nil {
 			log.Fatalln(publicKeyFile + " Public key file not found")
 		}
-
-		tools.WaitForCloudInit(username, vm.IP, string(privateKey))
+		tools.WaitForCloudInit(viper.GetString(cloudProvider+".vm.username"), vm.IP, string(privateKey))
 		// tools.PrepareDocker(username, vm.IP, string(privateKey), initFile)
 
 		// tools.CreateDeployOutputFile(&tools.DeployOutput{

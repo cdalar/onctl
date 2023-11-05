@@ -21,8 +21,6 @@ var listCmd = &cobra.Command{
 			log.Println(err)
 		}
 		tmpl := "ID\tNAME\tTYPE\tPUBLIC IP\tSTATE\tAGE\n{{range .List}}{{.ID}}\t{{.Name}}\t{{.Type}}\t{{.IP}}\t{{.Status}}\t{{durationFromCreatedAt .CreatedAt}}\n{{end}}"
-		// if len(serverList.List) != 0 {
 		TabWriter(serverList, tmpl)
-		// }
 	},
 }

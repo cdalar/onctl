@@ -13,8 +13,36 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/manifoldco/promptui"
+	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/util/duration"
 )
+
+// TODO decomple viper and use onctlConfig instead
+// var onctlConfig map[string]interface{}
+
+func ReadConfig(filename string) {
+	dir, err := os.Getwd()
+	if err != nil {
+		log.Println(err)
+	}
+	viper.SetConfigName("onctl")
+	viper.AddConfigPath(dir + "/.onctl")
+	err = viper.ReadInConfig()
+	if err != nil {
+		log.Println(err)
+	}
+
+	if _, err := os.Stat(dir + "/.onctl/" + filename + ".yaml"); err == nil {
+		viper.SetConfigName(filename)
+		err = viper.MergeInConfig()
+		if err != nil {
+			log.Println(err)
+		}
+	}
+
+	log.Println("[DEBUG]", viper.AllSettings())
+	// onctlConfig = viper.AllSettings()
+}
 
 func getNameFromTags(tags []*ec2.Tag) string {
 	for _, v := range tags {
