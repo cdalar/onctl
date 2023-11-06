@@ -31,8 +31,8 @@ builds:
       # - arm64 # M1 Chip
     ldflags:
       - -w -s -X 'cdalar/onctl/cmd.Version=v{{.Version}}-{{.ShortCommit}}'
-    hooks:
-      post: ["gon gon/config-{{.Arch}}.json"]
+    # hooks:
+    #   post: ["gon gon/config-{{.Arch}}.json"]
 
 
 archives:
