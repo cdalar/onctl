@@ -1,0 +1,12 @@
+{
+    "customizations": {
+        "codespaces": {
+          "repositories": {
+            "cdalar/argocd-demo": {
+                "permissions": "write-all"
+            }
+          }
+        }
+      },
+    "image":"mcr.microsoft.com/devcontainers/universal:2"
+}
