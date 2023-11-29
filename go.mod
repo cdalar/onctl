@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute v1.0.0
-	github.com/aws/aws-sdk-go v1.44.244
+	github.com/aws/aws-sdk-go v1.48.7
 	github.com/go-git/go-git/v5 v5.6.1
 	github.com/manifoldco/promptui v0.9.0
 	github.com/mitchellh/go-homedir v1.1.0
@@ -63,8 +63,8 @@ require (
 	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
 	golang.org/x/mod v0.12.0 // indirect
-	golang.org/x/net v0.15.0 // indirect
-	golang.org/x/sys v0.12.0 // indirect
+	golang.org/x/net v0.17.0 // indirect
+	golang.org/x/sys v0.13.0 // indirect
 	golang.org/x/tools v0.13.0 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
@@ -81,6 +81,6 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/pkg/sftp v1.13.5
 	github.com/spf13/viper v1.17.0
-	golang.org/x/crypto v0.13.0
+	golang.org/x/crypto v0.14.0
 	golang.org/x/text v0.13.0 // indirect
 )
