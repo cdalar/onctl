@@ -29,7 +29,7 @@ func ReadConfig(filename string) {
 	viper.AddConfigPath(dir + "/.onctl")
 	err = viper.ReadInConfig()
 	if err != nil {
-		log.Println(err)
+		fmt.Println(err)
 	}
 
 	if _, err := os.Stat(dir + "/.onctl/" + filename + ".yaml"); err == nil {

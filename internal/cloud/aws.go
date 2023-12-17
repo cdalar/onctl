@@ -1,13 +1,15 @@
 package cloud
 
 import (
-	"cdalar/onctl/internal/provideraws"
-	"cdalar/onctl/internal/tools"
 	"crypto/md5"
 	"fmt"
 	"log"
 	"os"
 	"strconv"
+
+	"github.com/cdalar/onctl/internal/tools"
+
+	"github.com/cdalar/onctl/internal/provideraws"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"

@@ -1,12 +1,13 @@
 package cloud
 
 import (
-	"cdalar/onctl/internal/tools"
 	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/user"
+
+	"github.com/cdalar/onctl/internal/tools"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"

@@ -5,10 +5,10 @@ import (
 	"log"
 )
 
-func PrepareDocker(username, ip, privateKey, initFile string) {
-	fmt.Print("Preparing docker...")
-	log.Println("[DEBUG] initFile: " + initFile)
-	err := SSHCopyFile(username, ip, privateKey, initFile, "./init.sh")
+func RunRemoteBashScript(username, ip, privateKey, bashScript string) {
+	fmt.Print("Running Remote Bash Script...")
+	log.Println("[DEBUG] scriptFile: " + bashScript)
+	err := SSHCopyFile(username, ip, privateKey, bashScript, "./init.sh")
 	if err != nil {
 		log.Println("Error on copy Init")
 		log.Fatalln(err)

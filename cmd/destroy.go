@@ -1,17 +1,18 @@
 package cmd
 
 import (
-	"cdalar/onctl/internal/cloud"
-	"cdalar/onctl/internal/tools"
 	"fmt"
 	"log"
+
+	"github.com/cdalar/onctl/internal/cloud"
+	"github.com/cdalar/onctl/internal/tools"
 
 	"github.com/spf13/cobra"
 )
 
 var destroyCmd = &cobra.Command{
 	Use:     "destroy",
-	Aliases: []string{"teardown", "down", "delete", "remove"},
+	Aliases: []string{"down", "delete", "remove", "rm"},
 	Short:   "Destroy VM(s)",
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Println("[DEBUG] args: ", args)
@@ -43,9 +44,9 @@ var destroyCmd = &cobra.Command{
 			}
 		default:
 			// Tear down specific server
-			serverID := args[0]
-			log.Println("[DEBUG] Tear down server: " + serverID)
-			if err := provider.Destroy(cloud.Vm{ID: serverID}); err != nil {
+			serverName := args[0]
+			log.Println("[DEBUG] Tear down server: " + serverName)
+			if err := provider.Destroy(cloud.Vm{Name: serverName}); err != nil {
 				log.Println(err)
 			}
 		}
