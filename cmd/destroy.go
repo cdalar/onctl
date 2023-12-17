@@ -1,20 +1,18 @@
 package cmd
 
 import (
-	"cdalar/onctl/internal/cloud"
-	"cdalar/onctl/internal/provideraws"
-	"cdalar/onctl/internal/providerhtz"
-	"cdalar/onctl/internal/tools"
 	"fmt"
 	"log"
-	"os"
+
+	"github.com/cdalar/onctl/internal/cloud"
+	"github.com/cdalar/onctl/internal/tools"
 
 	"github.com/spf13/cobra"
 )
 
 var destroyCmd = &cobra.Command{
 	Use:     "destroy",
-	Aliases: []string{"teardown", "down", "delete", "remove"},
+	Aliases: []string{"down", "delete", "remove", "rm"},
 	Short:   "Destroy VM(s)",
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Println("[DEBUG] args: ", args)
@@ -23,22 +21,8 @@ var destroyCmd = &cobra.Command{
 			return
 		}
 
-		// Set up cloud provider and client
-		var provider cloud.CloudProviderInterface
-		switch os.Getenv("CLOUD_PROVIDER") {
-		case "hetzner":
-			provider = &cloud.ProviderHetzner{
-				Client: providerhtz.GetClient(),
-			}
-		case "aws":
-			provider = &cloud.ProviderAws{
-				Client: provideraws.GetClient(),
-			}
-		default:
-			log.Fatal("Unknown cloud provider")
-		}
-
 		switch args[0] {
+		// TODO: only works on the current directory
 		case "self":
 			serverName := tools.GenerateMachineUniqueName()
 			log.Println("[DEBUG] Tear down self: " + serverName)
@@ -60,9 +44,9 @@ var destroyCmd = &cobra.Command{
 			}
 		default:
 			// Tear down specific server
-			serverID := args[0]
-			log.Println("[DEBUG] Tear down server: " + serverID)
-			if err := provider.Destroy(cloud.Vm{ID: serverID}); err != nil {
+			serverName := args[0]
+			log.Println("[DEBUG] Tear down server: " + serverName)
+			if err := provider.Destroy(cloud.Vm{Name: serverName}); err != nil {
 				log.Println(err)
 			}
 		}

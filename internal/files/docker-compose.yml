@@ -1,6 +1,26 @@
 version: "3.9"
 services:
-  web:
-    image: "nginx:alpine"
+  traefik:
+    image: "traefik:v2.10"
+    container_name: "traefik"
+    command:
+      - "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
     ports:
       - "80:80"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+  web:
+    image: "nginx:alpine"
+    container_name: "nginx"
+    labels:
+      # Explicitly tell Traefik to expose this container
+      - "traefik.enable=true"
+      # # The domain the service will respond to
+      - "traefik.http.routers.web.rule=PathPrefix(`/`)"
+      # Allow request only from the predefined entry point named "web"
+      - "traefik.http.routers.web.entrypoints=web"

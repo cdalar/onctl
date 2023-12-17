@@ -1,9 +1,10 @@
 package main
 
 import (
-	"cdalar/onctl/cmd"
 	"log"
 	"os"
+
+	"github.com/cdalar/onctl/cmd"
 
 	"github.com/hashicorp/logutils"
 )
@@ -23,4 +24,5 @@ func main() {
 	if err != nil {
 		log.Println(err)
 	}
+
 }
