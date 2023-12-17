@@ -18,7 +18,7 @@ builds:
     goarch:
       - amd64
     ldflags:
-      - -w -s -X 'cdalar/onctl/cmd.Version=v{{.Version}}-{{.ShortCommit}}'
+      - -w -s -X 'github.com/cdalar/onctl/cmd.Version=v{{.Version}}-{{.ShortCommit}}'
 
   - binary: onctl
     id: onctl
@@ -28,9 +28,9 @@ builds:
       - darwin
     goarch:
       - amd64
-      # - arm64 # M1 Chip
+      - arm64 # M1 Chip
     ldflags:
-      - -w -s -X 'cdalar/onctl/cmd.Version=v{{.Version}}-{{.ShortCommit}}'
+      - -w -s -X 'github.com/cdalar/onctl/cmd.Version=v{{.Version}}-{{.ShortCommit}}'
     # hooks:
     #   post: ["gon gon/config-{{.Arch}}.json"]
 
