@@ -1,6 +1,8 @@
 package tools
 
-import "os"
+import (
+	"os"
+)
 
 func Contains(slice []string, searchValue string) bool {
 	for _, value := range slice {

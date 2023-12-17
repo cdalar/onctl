@@ -3,12 +3,13 @@ package provideraws
 import (
 	"fmt"
 
-	"cdalar/onctl/internal/rand"
-	"cdalar/onctl/internal/tools"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/cdalar/onctl/internal/rand"
+	"github.com/cdalar/onctl/internal/tools"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"

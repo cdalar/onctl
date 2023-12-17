@@ -1,0 +1,5 @@
+hetzner:
+  location: fsn1
+  vm:
+    type: cpx21
+    username: root
