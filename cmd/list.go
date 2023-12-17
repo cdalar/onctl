@@ -1,8 +1,9 @@
 package cmd
 
 import (
-	"cdalar/onctl/internal/cloud"
 	"log"
+
+	"github.com/cdalar/onctl/internal/cloud"
 
 	"github.com/spf13/cobra"
 )

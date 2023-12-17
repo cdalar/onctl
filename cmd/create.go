@@ -1,11 +1,15 @@
 package cmd
 
 import (
-	"cdalar/onctl/internal/cloud"
-	"cdalar/onctl/internal/tools"
 	"fmt"
 	"log"
 	"os"
+
+	"github.com/cdalar/onctl/internal/tools"
+
+	"github.com/cdalar/onctl/internal/files"
+
+	"github.com/cdalar/onctl/internal/cloud"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -21,6 +25,7 @@ var (
 	initFile      string
 	exposePort    int64
 	instanceType  string
+	vmName        string
 	vm            cloud.Vm
 )
 
@@ -30,17 +35,28 @@ func init() {
 	createCmd.Flags().StringVarP(&initFile, "initFile", "i", "", "init bash script file")
 	createCmd.Flags().Int64VarP(&exposePort, "port", "p", 80, "port you want to expose to internet")
 	createCmd.Flags().StringVarP(&instanceType, "type", "t", "", "instance type")
+	createCmd.Flags().StringVarP(&vmName, "name", "n", "", "vm name")
 }
 
 var createCmd = &cobra.Command{
 	Use:     "create",
-	Aliases: []string{"deploy", "up"},
+	Aliases: []string{"start", "up"},
 	Short:   "Create a VM",
 	Run: func(cmd *cobra.Command, args []string) {
 		home, err := homedir.Dir()
 		if err != nil {
 			log.Fatal(err)
 		}
+		if initFile != "" {
+			if _, err := os.Stat(initFile); err != nil {
+				log.Println(initFile, "file not found in fileststem, trying to find in embeded files")
+				if _, err = files.EmbededFiles.ReadFile(initFile); err != nil {
+					log.Println(initFile, "file not found in embeded files")
+					os.Exit(1)
+				}
+			}
+		}
+
 		if publicKeyFile == "" {
 			publicKeyFile = home + "/.ssh/id_rsa.pub"
 		}
@@ -53,8 +69,12 @@ var createCmd = &cobra.Command{
 			log.Fatalln(err)
 		}
 		log.Printf("[DEBUG] keyID: %s", keyID)
+		if vmName == "" {
+			vmName = tools.GenerateMachineUniqueName()
+		}
+		log.Printf("[DEBUG] vmName: %s", vmName)
 		s := cloud.Vm{
-			Name:        tools.GenerateMachineUniqueName(),
+			Name:        vmName,
 			Type:        instanceType,
 			SSHKeyID:    keyID,
 			ExposePorts: []int64{exposePort},
@@ -70,29 +90,26 @@ var createCmd = &cobra.Command{
 		if err != nil {
 			log.Println(err)
 		}
-		// if initFile == "" {
-		// 	initFileEmbeded, _ := files.EmbededFiles.ReadFile("init.sh")
-		// 	tmpfile, err := os.CreateTemp("", "onctl")
-		// 	if err != nil {
-		// 		log.Fatal(err)
-		// 	}
-		// 	log.Println("[DEBUG] initTmpfile:" + tmpfile.Name())
-		// 	_, err = tmpfile.Write(initFileEmbeded)
-		// 	if err != nil {
-		// 		log.Fatal(err)
-		// 	}
-		// 	defer tmpfile.Close()
-		// 	initFile = tmpfile.Name()
-		// }
 
-		// if _, err := os.Stat(initFile); err != nil {
-		// 	log.Fatalln(initFile + " Init file not found")
-		// }
 		if _, err := os.Stat(publicKeyFile); err != nil {
 			log.Fatalln(publicKeyFile + " Public key file not found")
 		}
 		tools.WaitForCloudInit(viper.GetString(cloudProvider+".vm.username"), vm.IP, string(privateKey))
-		// tools.PrepareDocker(username, vm.IP, string(privateKey), initFile)
+		if initFile != "" {
+			initFileEmbeded, _ := files.EmbededFiles.ReadFile(initFile)
+			tmpfile, err := os.CreateTemp("", "onctl")
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Println("[DEBUG] initTmpfile:" + tmpfile.Name())
+			_, err = tmpfile.Write(initFileEmbeded)
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer tmpfile.Close()
+			initFile = tmpfile.Name()
+			tools.RunRemoteBashScript(viper.GetString(cloudProvider+".vm.username"), vm.IP, string(privateKey), initFile)
+		}
 
 		// tools.CreateDeployOutputFile(&tools.DeployOutput{
 		// 	Username:   username,

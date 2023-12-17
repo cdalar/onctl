@@ -1,4 +1,4 @@
-module cdalar/onctl
+module github.com/cdalar/onctl
 
 go 1.20
 

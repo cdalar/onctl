@@ -1,10 +1,11 @@
 package cmd
 
 import (
-	"cdalar/onctl/internal/files"
 	"fmt"
 	"log"
 	"os"
+
+	"github.com/cdalar/onctl/internal/files"
 
 	"github.com/spf13/cobra"
 )

@@ -1,15 +1,16 @@
 package cmd
 
 import (
-	"cdalar/onctl/internal/cloud"
-	"cdalar/onctl/internal/provideraws"
-	"cdalar/onctl/internal/providerazure"
-	"cdalar/onctl/internal/providerhtz"
-	"cdalar/onctl/internal/tools"
 	"fmt"
 	"log"
 	"os"
 	"strings"
+
+	"github.com/cdalar/onctl/internal/cloud"
+	"github.com/cdalar/onctl/internal/provideraws"
+	"github.com/cdalar/onctl/internal/providerazure"
+	"github.com/cdalar/onctl/internal/providerhtz"
+	"github.com/cdalar/onctl/internal/tools"
 
 	"github.com/spf13/cobra"
 )
