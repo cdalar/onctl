@@ -10,6 +10,7 @@ import (
 	"github.com/cdalar/onctl/internal/provideraws"
 	"github.com/cdalar/onctl/internal/providerazure"
 	"github.com/cdalar/onctl/internal/providerhtz"
+	"github.com/cdalar/onctl/internal/provideroracle"
 	"github.com/cdalar/onctl/internal/tools"
 
 	"github.com/spf13/cobra"
@@ -21,7 +22,7 @@ var (
 		Short: "onctl is a tool to manage cross platform resources in cloud",
 	}
 	cloudProvider     string
-	cloudProviderList = []string{"aws", "hetzner", "azure"}
+	cloudProviderList = []string{"aws", "hetzner", "azure", "oracle"}
 	provider          cloud.CloudProviderInterface
 )
 
@@ -71,6 +72,10 @@ func Execute() error {
 			NicClient:      providerazure.GetNicClient(),
 			PublicIPClient: providerazure.GetIPClient(),
 			SSHKeyClient:   providerazure.GetSSHKeyClient(),
+		}
+	case "oracle":
+		provider = &cloud.ProviderOracle{
+			Client: provideroracle.GetClient(),
 		}
 	}
 	return rootCmd.Execute()

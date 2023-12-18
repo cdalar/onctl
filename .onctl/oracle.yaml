@@ -1,0 +1,6 @@
+oracle:
+  location: fsn1
+  compartment: cdalar
+  vm:
+    type: cpx21
+    username: root
