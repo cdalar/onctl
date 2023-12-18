@@ -8,7 +8,7 @@ require (
 	github.com/go-git/go-git/v5 v5.11.0
 	github.com/manifoldco/promptui v0.9.0
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/spf13/cobra v1.7.0
+	github.com/spf13/cobra v1.8.0
 	k8s.io/apimachinery v0.27.1
 )
 
