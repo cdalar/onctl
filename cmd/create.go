@@ -96,18 +96,24 @@ var createCmd = &cobra.Command{
 		}
 		tools.WaitForCloudInit(viper.GetString(cloudProvider+".vm.username"), vm.IP, string(privateKey))
 		if initFile != "" {
-			initFileEmbeded, _ := files.EmbededFiles.ReadFile(initFile)
-			tmpfile, err := os.CreateTemp("", "onctl")
-			if err != nil {
-				log.Fatal(err)
+			initFileLocal, err := os.Stat(initFile)
+			if err != nil { // file not found in filesystem
+				initFileEmbeded, _ := files.EmbededFiles.ReadFile(initFile)
+				tmpfile, err := os.CreateTemp("", "onctl")
+				if err != nil {
+					log.Fatal(err)
+				}
+				log.Println("[DEBUG] initTmpfile:" + tmpfile.Name())
+				_, err = tmpfile.Write(initFileEmbeded)
+				if err != nil {
+					log.Fatal(err)
+				}
+				defer tmpfile.Close()
+				initFile = tmpfile.Name()
+			} else {
+				initFile = initFileLocal.Name()
 			}
-			log.Println("[DEBUG] initTmpfile:" + tmpfile.Name())
-			_, err = tmpfile.Write(initFileEmbeded)
-			if err != nil {
-				log.Fatal(err)
-			}
-			defer tmpfile.Close()
-			initFile = tmpfile.Name()
+
 			tools.RunRemoteBashScript(viper.GetString(cloudProvider+".vm.username"), vm.IP, string(privateKey), initFile)
 		}
 
