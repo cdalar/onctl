@@ -80,7 +80,7 @@ require (
 	github.com/hetznercloud/hcloud-go v1.50.0
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/pkg/sftp v1.13.6
-	github.com/spf13/viper v1.18.1
+	github.com/spf13/viper v1.18.2
 	golang.org/x/crypto v0.16.0
 	golang.org/x/text v0.14.0 // indirect
 )
