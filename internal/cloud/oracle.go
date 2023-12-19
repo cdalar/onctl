@@ -14,6 +14,7 @@ import (
 
 type ProviderOracle struct {
 	Client core.ComputeClient
+	Base   common.BaseClient
 }
 
 const (
@@ -64,6 +65,7 @@ func (p ProviderOracle) List() (VmList, error) {
 }
 
 func (p ProviderOracle) CreateSSHKey(publicKeyFile string) (keyID string, err error) {
+	log.Println("[DEBUG] Create SSH Key")
 	return
 }
 

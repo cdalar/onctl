@@ -75,7 +75,8 @@ func Execute() error {
 		}
 	case "oracle":
 		provider = &cloud.ProviderOracle{
-			Client: provideroracle.GetClient(),
+			Client: provideroracle.GetComputeClient(),
+			Base:   provideroracle.GetBaseClient(),
 		}
 	}
 	return rootCmd.Execute()
