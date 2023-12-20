@@ -1,13 +1,14 @@
 package cloud
 
 import (
-	"cdalar/onctl/internal/tools"
 	"context"
 	"crypto/md5"
 	"fmt"
 	"log"
 	"os"
 	"strconv"
+
+	"github.com/cdalar/onctl/internal/tools"
 
 	"github.com/hetznercloud/hcloud-go/hcloud"
 	"github.com/spf13/viper"
@@ -66,7 +67,8 @@ func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 }
 
 func (p ProviderHetzner) Destroy(server Vm) error {
-	if server.ID == "" {
+	log.Println("[DEBUG] Destroy server: ", server)
+	if server.ID == "" && server.Name != "" {
 		log.Println("[DEBUG] Server ID is empty")
 		log.Println("[DEBUG] Server name: " + server.Name)
 		s := p.getServerByServerName(server.Name)

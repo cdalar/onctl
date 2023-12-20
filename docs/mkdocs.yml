@@ -1,16 +1,8 @@
 site_name: onctl
+repo_url: https://github.com/cdalar/onctl
 theme:
   name: material
   language: en
-#   palette:
-#     primary: indigo
-#     accent: indigo
-  font:
-    text: Roboto
-    code: Roboto Mono
-#   features:
-#     - navigation.tabs
-# Extensions
 markdown_extensions:
   - admonition
   - pymdownx.inlinehilite

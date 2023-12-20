@@ -1,5 +1,5 @@
 # Downloads
 
-Check [Releases page](https://github.com/onkube/homebrew-tap/releases) and download acording to your OS. 
+Check [Releases page](https://github.com/cdalar/onctl/releases) and download acording to your OS. 
 
 
