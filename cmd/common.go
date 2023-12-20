@@ -41,7 +41,6 @@ func ReadConfig(filename string) {
 	}
 
 	log.Println("[DEBUG]", viper.AllSettings())
-	// onctlConfig = viper.AllSettings()
 }
 
 func getNameFromTags(tags []*ec2.Tag) string {

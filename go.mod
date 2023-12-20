@@ -76,6 +76,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.8.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.4.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork v1.1.0
+	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v2 v2.2.1
 	github.com/hashicorp/logutils v1.0.0
 	github.com/hetznercloud/hcloud-go v1.53.0
 	github.com/jmespath/go-jmespath v0.4.0 // indirect

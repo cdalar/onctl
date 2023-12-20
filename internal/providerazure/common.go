@@ -10,14 +10,12 @@ import (
 	"github.com/spf13/viper"
 )
 
-var subscriptionId string = viper.GetString("azure.subscription_id")
-
 func GetVmClient() (vmClient *armcompute.VirtualMachinesClient) {
 	cred, err := connectionAzure()
 	if err != nil {
 		log.Fatalf("cannot connect to Azure:%+v", err)
 	}
-	vmClient, err = armcompute.NewVirtualMachinesClient(subscriptionId, cred, nil)
+	vmClient, err = armcompute.NewVirtualMachinesClient(viper.GetString("azure.subscriptionId"), cred, nil)
 	// armCompute, err = armcompute.
 	if err != nil {
 		return nil
@@ -31,7 +29,7 @@ func GetNicClient() (nicClient *armnetwork.InterfacesClient) {
 	if err != nil {
 		log.Fatalf("cannot connect to Azure:%+v", err)
 	}
-	nicClient, err = armnetwork.NewInterfacesClient(subscriptionId, cred, nil)
+	nicClient, err = armnetwork.NewInterfacesClient(viper.GetString("azure.subscriptionId"), cred, nil)
 	if err != nil {
 		return nil
 	}
@@ -44,7 +42,7 @@ func GetSSHKeyClient() (sshClient *armcompute.SSHPublicKeysClient) {
 	if err != nil {
 		log.Fatalf("cannot connect to Azure:%+v", err)
 	}
-	sshClient, err = armcompute.NewSSHPublicKeysClient(subscriptionId, cred, nil)
+	sshClient, err = armcompute.NewSSHPublicKeysClient(viper.GetString("azure.subscriptionId"), cred, nil)
 	if err != nil {
 		return nil
 	}
@@ -57,12 +55,25 @@ func GetIPClient() (publicIpClient *armnetwork.PublicIPAddressesClient) {
 	if err != nil {
 		log.Fatalf("cannot connect to Azure:%+v", err)
 	}
-	ipClient, err := armnetwork.NewPublicIPAddressesClient(subscriptionId, cred, nil)
+	ipClient, err := armnetwork.NewPublicIPAddressesClient(viper.GetString("azure.subscriptionId"), cred, nil)
 	if err != nil {
 		return nil
 	}
 
 	return ipClient
+}
+
+func GetVnetClient() (vnetClient *armnetwork.VirtualNetworksClient) {
+	cred, err := connectionAzure()
+	if err != nil {
+		log.Fatalf("cannot connect to Azure:%+v", err)
+	}
+	vnetClient, err = armnetwork.NewVirtualNetworksClient(viper.GetString("azure.subscriptionId"), cred, nil)
+	if err != nil {
+		return nil
+	}
+
+	return vnetClient
 }
 
 func connectionAzure() (azcore.TokenCredential, error) {

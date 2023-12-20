@@ -10,3 +10,13 @@ azure:
       offer:     0001-com-ubuntu-server-jammy
       version:   latest
       sku:       22_04-lts-gen2
+    nic:
+      name: onctl-nic
+    publicIP:
+      name: onctl-pip
+    vnet:
+      name: onctl-vnet
+      cidr: 10.1.0.0/16
+      subnet:
+        name: subnet1
+        cidr: 10.1.1.0/24
