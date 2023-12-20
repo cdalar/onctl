@@ -6,10 +6,12 @@ import (
 	"log"
 	"os"
 	"os/user"
+	"time"
 
 	"github.com/cdalar/onctl/internal/tools"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork"
@@ -113,39 +115,18 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 		log.Fatalln(err)
 	}
 	log.Println("[DEBUG] ", vnet)
-	pip, err := createPublicIP(context.Background(), &p)
+	pip, err := createPublicIP(context.Background(), &p, server)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	log.Println("[DEBUG] ", pip)
-	nicResp, err := p.NicClient.BeginCreateOrUpdate(context.Background(), viper.GetString("azure.resourceGroup"), viper.GetString("azure.vm.nic.name"), armnetwork.Interface{
-		Location: to.Ptr(viper.GetString("azure.location")),
-		Properties: &armnetwork.InterfacePropertiesFormat{
-			IPConfigurations: []*armnetwork.InterfaceIPConfiguration{
-				{
-					Name: to.Ptr("ipConfig"),
-					Properties: &armnetwork.InterfaceIPConfigurationPropertiesFormat{
-						PrivateIPAllocationMethod: to.Ptr(armnetwork.IPAllocationMethodDynamic),
-						Subnet: &armnetwork.Subnet{
-							ID: vnet.Properties.Subnets[0].ID,
-						},
-						PublicIPAddress: &armnetwork.PublicIPAddress{
-							ID: pip.ID,
-						},
-					},
-				},
-			},
-		},
-	}, nil)
+	nic, err := createNic(context.Background(), &p, server, vnet, pip)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	nicRespDone, err := nicResp.PollUntilDone(context.Background(), nil)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	log.Println("[DEBUG] ", nicRespDone)
-	poller, err := p.VmClient.BeginCreateOrUpdate(context.Background(), viper.GetString("azure.resourceGroup"), viper.GetString("vm.name"), armcompute.VirtualMachine{
+	log.Println("[DEBUG] ", nic)
+
+	poller, err := p.VmClient.BeginCreateOrUpdate(context.Background(), viper.GetString("azure.resourceGroup"), server.Name, armcompute.VirtualMachine{
 		Location: to.Ptr(viper.GetString("azure.location")),
 		Properties: &armcompute.VirtualMachineProperties{
 			HardwareProfile: &armcompute.HardwareProfile{
@@ -158,11 +139,19 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 					Version:   to.Ptr(viper.GetString("azure.vm.image.version")),
 					SKU:       to.Ptr(viper.GetString("azure.vm.image.sku")),
 				},
+				OSDisk: &armcompute.OSDisk{
+					DiffDiskSettings: &armcompute.DiffDiskSettings{
+						Option:    to.Ptr(armcompute.DiffDiskOptionsLocal),
+						Placement: to.Ptr(armcompute.DiffDiskPlacementResourceDisk),
+					},
+					Caching:      to.Ptr(armcompute.CachingTypesReadOnly),
+					CreateOption: to.Ptr(armcompute.DiskCreateOptionTypesFromImage),
+				},
 			},
 			NetworkProfile: &armcompute.NetworkProfile{
 				NetworkInterfaces: []*armcompute.NetworkInterfaceReference{
 					{
-						ID: nicRespDone.Interface.ID,
+						ID: nic.ID,
 						Properties: &armcompute.NetworkInterfaceReferenceProperties{
 							Primary: to.Ptr(true),
 						},
@@ -189,11 +178,13 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	resp, err := poller.PollUntilDone(context.Background(), nil)
+	resp, err := poller.PollUntilDone(context.Background(), &runtime.PollUntilDoneOptions{
+		Frequency: time.Duration(3) * time.Second,
+	})
 	return Vm{
-		ID:   *resp.VirtualMachine.Properties.VMID,
-		Name: *resp.VirtualMachine.Name,
-		// IP:        string(*publicIP.Properties.IPAddress),
+		ID:        *resp.VirtualMachine.Properties.VMID,
+		Name:      *resp.VirtualMachine.Name,
+		IP:        *pip.Properties.IPAddress,
 		Type:      string(*resp.VirtualMachine.Properties.HardwareProfile.VMSize),
 		Status:    *resp.VirtualMachine.Properties.ProvisioningState,
 		CreatedAt: *resp.VirtualMachine.Properties.TimeCreated,
@@ -202,12 +193,47 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 
 func (p ProviderAzure) Destroy(server Vm) error {
 	log.Println("[DEBUG] Destroy Server")
-	resp, err := p.VmClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.ID, nil)
+	fmt.Print("Destroying server...")
+	resp, err := p.VmClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name, nil)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	_, err = resp.PollUntilDone(context.Background(), nil)
+	log.Println("[DEBUG] ", resp)
+
+	respDone, err := resp.PollUntilDone(context.Background(), &runtime.PollUntilDoneOptions{
+		Frequency: time.Duration(3) * time.Second,
+	})
+	if err != nil {
+		log.Fatalln(err)
+	}
+	log.Println("[DEBUG] ", respDone)
+	if resp.Done() {
+		fmt.Println("DONE")
+	}
+
+	fmt.Println("Destroying other resources...")
+	pip, err := p.PublicIPClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-pip", nil)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	pipDone, err := pip.PollUntilDone(context.Background(), &runtime.PollUntilDoneOptions{
+		Frequency: time.Duration(3) * time.Second,
+	})
+	if err != nil {
+		log.Fatalln(err)
+	}
+	log.Println("[DEBUG] ", pipDone)
+	if pip.Done() {
+		fmt.Println("DONE")
+	}
+	nic, err := p.NicClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-nic", nil)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	log.Println("[DEBUG] ", nic)
+
 	return err
+
 }
 
 func mapAzureServer(server *armcompute.VirtualMachine, publicIP armnetwork.PublicIPAddressesClientGetResponse) Vm {
@@ -253,7 +279,7 @@ func createVirtualNetwork(ctx context.Context, p *ProviderAzure) (*armnetwork.Vi
 		Properties: &armnetwork.VirtualNetworkPropertiesFormat{
 			AddressSpace: &armnetwork.AddressSpace{
 				AddressPrefixes: []*string{
-					to.Ptr(viper.GetString("azure.vm.vnet.cidr")), // example 10.1.0.0/16
+					to.Ptr(viper.GetString("azure.vm.vnet.cidr")),
 				},
 			},
 			Subnets: []*armnetwork.Subnet{
@@ -266,21 +292,27 @@ func createVirtualNetwork(ctx context.Context, p *ProviderAzure) (*armnetwork.Vi
 			},
 		},
 	}
-
+	fmt.Print("Creating virtual network...")
 	pollerResponse, err := p.VnetClient.BeginCreateOrUpdate(ctx, viper.GetString("azure.resourceGroup"), viper.GetString("azure.vm.vnet.name"), parameters, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := pollerResponse.PollUntilDone(ctx, nil)
+	resp, err := pollerResponse.PollUntilDone(ctx, &runtime.PollUntilDoneOptions{
+		Frequency: time.Duration(3) * time.Second,
+	})
 	if err != nil {
 		return nil, err
+	}
+
+	if pollerResponse.Done() {
+		fmt.Println("DONE")
 	}
 
 	return &resp.VirtualNetwork, nil
 }
 
-func createPublicIP(ctx context.Context, p *ProviderAzure) (*armnetwork.PublicIPAddress, error) {
+func createPublicIP(ctx context.Context, p *ProviderAzure, server Vm) (*armnetwork.PublicIPAddress, error) {
 
 	parameters := armnetwork.PublicIPAddress{
 		Location: to.Ptr(viper.GetString("azure.location")),
@@ -288,15 +320,60 @@ func createPublicIP(ctx context.Context, p *ProviderAzure) (*armnetwork.PublicIP
 			PublicIPAllocationMethod: to.Ptr(armnetwork.IPAllocationMethodStatic), // Static or Dynamic
 		},
 	}
-
-	pollerResponse, err := p.PublicIPClient.BeginCreateOrUpdate(ctx, viper.GetString("azure.resourceGroup"), viper.GetString("azure.vm.publicIP.name"), parameters, nil)
+	fmt.Print("Creating public IP...")
+	pollerResponse, err := p.PublicIPClient.BeginCreateOrUpdate(ctx, viper.GetString("azure.resourceGroup"), server.Name+"-pip", parameters, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := pollerResponse.PollUntilDone(ctx, nil)
+	resp, err := pollerResponse.PollUntilDone(ctx, &runtime.PollUntilDoneOptions{
+		Frequency: time.Duration(3) * time.Second,
+	})
 	if err != nil {
 		return nil, err
 	}
+	if pollerResponse.Done() {
+		fmt.Println("DONE")
+	}
+
 	return &resp.PublicIPAddress, err
+}
+
+func createNic(ctx context.Context, p *ProviderAzure, server Vm, vnet *armnetwork.VirtualNetwork, pip *armnetwork.PublicIPAddress) (*armnetwork.Interface, error) {
+	fmt.Print("Creating network interface...")
+	nicResp, err := p.NicClient.BeginCreateOrUpdate(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-nic", armnetwork.Interface{
+		Location: to.Ptr(viper.GetString("azure.location")),
+		Properties: &armnetwork.InterfacePropertiesFormat{
+			IPConfigurations: []*armnetwork.InterfaceIPConfiguration{
+				{
+					Name: to.Ptr("ipConfig"),
+					Properties: &armnetwork.InterfaceIPConfigurationPropertiesFormat{
+						PrivateIPAllocationMethod: to.Ptr(armnetwork.IPAllocationMethodDynamic),
+						Subnet: &armnetwork.Subnet{
+							ID: vnet.Properties.Subnets[0].ID,
+						},
+						PublicIPAddress: &armnetwork.PublicIPAddress{
+							ID: pip.ID,
+						},
+					},
+				},
+			},
+		},
+	}, nil)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	nicRespDone, err := nicResp.PollUntilDone(ctx, &runtime.PollUntilDoneOptions{
+		Frequency: time.Duration(3) * time.Second,
+	})
+	if err != nil {
+		log.Fatalln(err)
+	}
+	if nicResp.Done() {
+		fmt.Println("DONE")
+	}
+
+	log.Println("[DEBUG] ", nicRespDone)
+	return &nicRespDone.Interface, err
+
 }
