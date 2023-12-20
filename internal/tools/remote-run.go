@@ -28,6 +28,7 @@ func RemoteRun(user string, addr string, privateKey string, cmd string) (string,
 	if err != nil {
 		return "", err
 	}
+	defer client.Close()
 	// Create a session. It is one session per command.
 	session, err := client.NewSession()
 	if err != nil {

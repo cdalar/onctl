@@ -5,7 +5,7 @@ import (
 	"log"
 )
 
-func RunRemoteBashScript(username, ip, privateKey, bashScript string) {
+func RunRemoteBashScript(username, ip, privateKey, bashScript string) (string, error) {
 	fmt.Print("Running Remote Bash Script...")
 	log.Println("[DEBUG] scriptFile: " + bashScript)
 	err := SSHCopyFile(username, ip, privateKey, bashScript, "./init.sh")
@@ -22,15 +22,11 @@ func RunRemoteBashScript(username, ip, privateKey, bashScript string) {
 		log.Fatalln(err)
 	}
 
-	log.Println("[DEBUG] init.sh output: " + runInitOutput)
-	if username != "root" {
-		_, err := RemoteRun(username, ip, privateKey, "sudo usermod -aG docker ubuntu")
-		if err != nil {
-			log.Println("Error on usermod")
-			log.Fatalln(err)
-		}
-	}
+	// log.Println("[DEBUG] init.sh output: " + runInitOutput)
+	// fmt.Println(runInitOutput)
 	fmt.Println("DONE")
+	return runInitOutput, err
+
 }
 
 // func RunDockerCompose(username, ip, privateKey, composeFile string) {

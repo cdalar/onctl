@@ -114,9 +114,13 @@ var createCmd = &cobra.Command{
 				initFile = initFileLocal.Name()
 			}
 
-			tools.RunRemoteBashScript(viper.GetString(cloudProvider+".vm.username"), vm.IP, string(privateKey), initFile)
+			_, err = tools.RunRemoteBashScript(viper.GetString(cloudProvider+".vm.username"), vm.IP, string(privateKey), initFile)
+			if err != nil {
+				log.Fatal(err)
+			}
+			// fmt.Println(output)
 		}
-		tools.WaitForCloudInit(viper.GetString(cloudProvider+".vm.username"), vm.IP, string(privateKey))
+		// tools.WaitForCloudInit(viper.GetString(cloudProvider+".vm.username"), vm.IP, string(privateKey))
 		// tools.PrepareDocker(username, vm.IP, string(privateKey), initFile)
 
 		// tools.CreateDeployOutputFile(&tools.DeployOutput{
