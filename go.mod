@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute v1.0.0
-	github.com/aws/aws-sdk-go v1.49.4
+	github.com/aws/aws-sdk-go v1.49.5
 	github.com/go-git/go-git/v5 v5.11.0
 	github.com/manifoldco/promptui v0.9.0
 	github.com/mitchellh/go-homedir v1.1.0
@@ -77,10 +77,10 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.4.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork v1.1.0
 	github.com/hashicorp/logutils v1.0.0
-	github.com/hetznercloud/hcloud-go v1.50.0
+	github.com/hetznercloud/hcloud-go v1.53.0
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/pkg/sftp v1.13.6
-	github.com/spf13/viper v1.18.1
-	golang.org/x/crypto v0.16.0
+	github.com/spf13/viper v1.18.2
+	golang.org/x/crypto v0.17.0
 	golang.org/x/text v0.14.0 // indirect
 )
