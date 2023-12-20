@@ -21,6 +21,7 @@ type ProviderAzure struct {
 	NicClient      *armnetwork.InterfacesClient
 	PublicIPClient *armnetwork.PublicIPAddressesClient
 	SSHKeyClient   *armcompute.SSHPublicKeysClient
+	VnetClient     *armnetwork.VirtualNetworksClient
 }
 
 func (p ProviderAzure) List() (VmList, error) {
@@ -91,6 +92,7 @@ func (p ProviderAzure) CreateSSHKey(publicKeyFileName string) (string, error) {
 
 func (p ProviderAzure) getSSHKeyPublicData() string {
 	currentUser, err := user.Current()
+	log.Println("[DEBUG] ", currentUser)
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
@@ -99,32 +101,50 @@ func (p ProviderAzure) getSSHKeyPublicData() string {
 	if err != nil {
 		log.Println(err)
 	}
+	log.Println("[DEBUG] ", sshKey)
 	return *sshKey.Properties.PublicKey
 }
 
 func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 	log.Println("[DEBUG] Deploy Server")
 
-	// resp, err := p.NicClient.BeginCreateOrUpdate(context.Background(), "onkube", "testabc", armnetwork.Interface{
-	// 	Location: to.Ptr("westeurope"),
-	// 	Properties: &armnetwork.InterfacePropertiesFormat{
-	// 		IPConfigurations: []*armnetwork.InterfaceIPConfiguration{
-	// 			{
-	// 				Name: to.Ptr("ipConfig"),
-	// 				Properties: &armnetwork.InterfaceIPConfigurationPropertiesFormat{
-	// 					PrivateIPAllocationMethod: to.Ptr(armnetwork.IPAllocationMethodDynamic),
-	// 					Subnet: &armnetwork.Subnet{
-	// 						ID: to.Ptr("/subscriptions/3c110410-a29d-4402-96c4-f82b0feaa895/resourceGroups/onkube/providers/Microsoft.Network/virtualNetworks/onkube-vnet/subnets/default"),
-	// 					},
-	// 				},
-
-	// 			}
-	// 		}
-	// }, nil)
-	// if err != nil {
-	// 	log.Fatalln(err)
-	// }
-	// log.Println("[DEBUG] ", resp)
+	vnet, err := createVirtualNetwork(context.Background(), &p)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	log.Println("[DEBUG] ", vnet)
+	pip, err := createPublicIP(context.Background(), &p)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	log.Println("[DEBUG] ", pip)
+	nicResp, err := p.NicClient.BeginCreateOrUpdate(context.Background(), viper.GetString("azure.resourceGroup"), viper.GetString("azure.vm.nic.name"), armnetwork.Interface{
+		Location: to.Ptr(viper.GetString("azure.location")),
+		Properties: &armnetwork.InterfacePropertiesFormat{
+			IPConfigurations: []*armnetwork.InterfaceIPConfiguration{
+				{
+					Name: to.Ptr("ipConfig"),
+					Properties: &armnetwork.InterfaceIPConfigurationPropertiesFormat{
+						PrivateIPAllocationMethod: to.Ptr(armnetwork.IPAllocationMethodDynamic),
+						Subnet: &armnetwork.Subnet{
+							ID: vnet.Properties.Subnets[0].ID,
+						},
+						PublicIPAddress: &armnetwork.PublicIPAddress{
+							ID: pip.ID,
+						},
+					},
+				},
+			},
+		},
+	}, nil)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	nicRespDone, err := nicResp.PollUntilDone(context.Background(), nil)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	log.Println("[DEBUG] ", nicRespDone)
 	poller, err := p.VmClient.BeginCreateOrUpdate(context.Background(), viper.GetString("azure.resourceGroup"), viper.GetString("vm.name"), armcompute.VirtualMachine{
 		Location: to.Ptr(viper.GetString("azure.location")),
 		Properties: &armcompute.VirtualMachineProperties{
@@ -142,7 +162,7 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 			NetworkProfile: &armcompute.NetworkProfile{
 				NetworkInterfaces: []*armcompute.NetworkInterfaceReference{
 					{
-						ID: to.Ptr("/subscriptions/3c110410-a29d-4402-96c4-f82b0feaa895/resourceGroups/onkube/providers/Microsoft.Network/networkInterfaces/myVMVMNic"),
+						ID: nicRespDone.Interface.ID,
 						Properties: &armcompute.NetworkInterfaceReferenceProperties{
 							Primary: to.Ptr(true),
 						},
@@ -226,62 +246,57 @@ func (p ProviderAzure) getServerByServerName(serverName string) Vm {
 	return Vm{}
 }
 
-// func (p ProviderAzure) createNetWorkInterface(ctx context.Context, subnetID string, publicIPID string, networkSecurityGroupID string) (*armnetwork.Interface, error) {
+func createVirtualNetwork(ctx context.Context, p *ProviderAzure) (*armnetwork.VirtualNetwork, error) {
 
-// 	parameters := armnetwork.Interface{
-// 		Location: to.Ptr(location),
-// 		Properties: &armnetwork.InterfacePropertiesFormat{
-// 			//NetworkSecurityGroup:
-// 			IPConfigurations: []*armnetwork.InterfaceIPConfiguration{
-// 				{
-// 					Name: to.Ptr("ipConfig"),
-// 					Properties: &armnetwork.InterfaceIPConfigurationPropertiesFormat{
-// 						PrivateIPAllocationMethod: to.Ptr(armnetwork.IPAllocationMethodDynamic),
-// 						Subnet: &armnetwork.Subnet{
-// 							ID: to.Ptr(subnetID),
-// 						},
-// 						PublicIPAddress: &armnetwork.PublicIPAddress{
-// 							ID: to.Ptr(publicIPID),
-// 						},
-// 					},
-// 				},
-// 			},
-// 			NetworkSecurityGroup: &armnetwork.SecurityGroup{
-// 				ID: to.Ptr(networkSecurityGroupID),
-// 			},
-// 		},
-// 	}
+	parameters := armnetwork.VirtualNetwork{
+		Location: to.Ptr(viper.GetString("azure.location")),
+		Properties: &armnetwork.VirtualNetworkPropertiesFormat{
+			AddressSpace: &armnetwork.AddressSpace{
+				AddressPrefixes: []*string{
+					to.Ptr(viper.GetString("azure.vm.vnet.cidr")), // example 10.1.0.0/16
+				},
+			},
+			Subnets: []*armnetwork.Subnet{
+				{
+					Name: to.Ptr(viper.GetString("azure.vm.vnet.subnet.name")),
+					Properties: &armnetwork.SubnetPropertiesFormat{
+						AddressPrefix: to.Ptr(viper.GetString("azure.vm.vnet.subnet.cidr")),
+					},
+				},
+			},
+		},
+	}
 
-// 	pollerResponse, err := p.NicClient.BeginCreateOrUpdate(ctx, "onkube", "nicName", parameters, nil)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+	pollerResponse, err := p.VnetClient.BeginCreateOrUpdate(ctx, viper.GetString("azure.resourceGroup"), viper.GetString("azure.vm.vnet.name"), parameters, nil)
+	if err != nil {
+		return nil, err
+	}
 
-// 	resp, err := pollerResponse.PollUntilDone(ctx, nil)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+	resp, err := pollerResponse.PollUntilDone(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
 
-// 	return &resp.Interface, err
-// }
+	return &resp.VirtualNetwork, nil
+}
 
-// func createPublicIP(ctx context.Context) (*armnetwork.PublicIPAddress, error) {
+func createPublicIP(ctx context.Context, p *ProviderAzure) (*armnetwork.PublicIPAddress, error) {
 
-// 	parameters := armnetwork.PublicIPAddress{
-// 		Location: to.Ptr(location),
-// 		Properties: &armnetwork.PublicIPAddressPropertiesFormat{
-// 			PublicIPAllocationMethod: to.Ptr(armnetwork.IPAllocationMethodStatic), // Static or Dynamic
-// 		},
-// 	}
+	parameters := armnetwork.PublicIPAddress{
+		Location: to.Ptr(viper.GetString("azure.location")),
+		Properties: &armnetwork.PublicIPAddressPropertiesFormat{
+			PublicIPAllocationMethod: to.Ptr(armnetwork.IPAllocationMethodStatic), // Static or Dynamic
+		},
+	}
 
-// 	pollerResponse, err := publicIPAddressesClient.BeginCreateOrUpdate(ctx, resourceGroupName, publicIPName, parameters, nil)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+	pollerResponse, err := p.PublicIPClient.BeginCreateOrUpdate(ctx, viper.GetString("azure.resourceGroup"), viper.GetString("azure.vm.publicIP.name"), parameters, nil)
+	if err != nil {
+		return nil, err
+	}
 
-// 	resp, err := pollerResponse.PollUntilDone(ctx, nil)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return &resp.PublicIPAddress, err
-// }
+	resp, err := pollerResponse.PollUntilDone(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &resp.PublicIPAddress, err
+}

@@ -116,6 +116,8 @@ var createCmd = &cobra.Command{
 
 			tools.RunRemoteBashScript(viper.GetString(cloudProvider+".vm.username"), vm.IP, string(privateKey), initFile)
 		}
+		tools.WaitForCloudInit(viper.GetString(cloudProvider+".vm.username"), vm.IP, string(privateKey))
+		// tools.PrepareDocker(username, vm.IP, string(privateKey), initFile)
 
 		// tools.CreateDeployOutputFile(&tools.DeployOutput{
 		// 	Username:   username,
