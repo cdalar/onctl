@@ -7,9 +7,10 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork"
+	"github.com/spf13/viper"
 )
 
-var subscriptionId string = "3c110410-a29d-4402-96c4-f82b0feaa895"
+var subscriptionId string = viper.GetString("azure.subscription_id")
 
 func GetVmClient() (vmClient *armcompute.VirtualMachinesClient) {
 	cred, err := connectionAzure()
