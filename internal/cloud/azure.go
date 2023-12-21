@@ -38,27 +38,29 @@ func (p ProviderAzure) List() (VmList, error) {
 	}
 	cloudList := make([]Vm, 0, len(resp.Value))
 	for _, server := range resp.Value {
-		var publicIP armnetwork.PublicIPAddressesClientGetResponse
+		var serverIP string
 		for _, nicRef := range server.Properties.NetworkProfile.NetworkInterfaces {
 			nicID, _ := arm.ParseResourceID(*nicRef.ID)
 			nic, _ := p.NicClient.Get(context.Background(), nicID.ResourceGroupName, nicID.Name, nil)
 			for _, ipCfg := range nic.Properties.IPConfigurations {
 				if ipCfg.Properties.PublicIPAddress != nil {
 					publicID, _ := arm.ParseResourceID(*ipCfg.Properties.PublicIPAddress.ID)
-					publicIP, err = p.PublicIPClient.Get(context.Background(), publicID.ResourceGroupName, publicID.Name, &armnetwork.PublicIPAddressesClientGetOptions{Expand: nil})
+					publicIP, err := p.PublicIPClient.Get(context.Background(), publicID.ResourceGroupName, publicID.Name, &armnetwork.PublicIPAddressesClientGetOptions{Expand: nil})
 					if err != nil {
 						log.Println(err)
 					}
-					log.Println("[DEBUG] public IP: ", *publicIP.Properties.IPAddress)
+					serverIP = *publicIP.Properties.IPAddress
+					log.Println("[DEBUG] public IP: ", serverIP)
 					// do something with public IP
 				} else if ipCfg.Properties.PrivateIPAddress != nil {
 					// do something with the private IP
-					log.Println("[DEBUG] public IP: " + *ipCfg.Properties.PrivateIPAddress)
+					serverIP = *ipCfg.Properties.PrivateIPAddress
+					log.Println("[DEBUG] private IP: ", serverIP)
 				}
 			}
 		}
 
-		cloudList = append(cloudList, mapAzureServer(server, publicIP))
+		cloudList = append(cloudList, mapAzureServer(server, serverIP))
 		log.Println("[DEBUG] server name: " + *server.Name)
 	}
 	output := VmList{
@@ -239,11 +241,11 @@ func (p ProviderAzure) Destroy(server Vm) error {
 
 }
 
-func mapAzureServer(server *armcompute.VirtualMachine, publicIP armnetwork.PublicIPAddressesClientGetResponse) Vm {
+func mapAzureServer(server *armcompute.VirtualMachine, serverIP string) Vm {
 	vm := Vm{
 		ID:        *server.Properties.VMID,
 		Name:      *server.Name,
-		IP:        string(*publicIP.Properties.IPAddress),
+		IP:        serverIP,
 		Type:      string(*server.Properties.HardwareProfile.VMSize),
 		Status:    *server.Properties.ProvisioningState,
 		CreatedAt: *server.Properties.TimeCreated,
