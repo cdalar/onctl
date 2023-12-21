@@ -187,7 +187,7 @@ func (p ProviderHetzner) getServerByServerName(serverName string) Vm {
 	return mapHetznerServer(*s)
 }
 
-func (p ProviderHetzner) SSHInto(serverName string) {
+func (p ProviderHetzner) SSHInto(serverName, port string) {
 	// server, _, err := p.Client.Server().Get(ctx, idOrName)
 	server, _, err := p.Client.Server.GetByName(context.TODO(), serverName)
 	if server == nil {
@@ -209,5 +209,5 @@ func (p ProviderHetzner) SSHInto(serverName string) {
 	}
 
 	ipAddress := server.PublicNet.IPv4.IP
-	tools.SSHIntoVM(ipAddress.String(), "root")
+	tools.SSHIntoVM(ipAddress.String(), "root", port)
 }

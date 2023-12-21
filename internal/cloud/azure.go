@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/user"
 	"time"
 
 	"github.com/cdalar/onctl/internal/tools"
@@ -72,12 +71,8 @@ func (p ProviderAzure) List() (VmList, error) {
 
 func (p ProviderAzure) CreateSSHKey(publicKeyFileName string) (string, error) {
 	log.Println("[DEBUG] Create SSH Key")
-	currentUser, err := user.Current()
-	if err != nil {
-		log.Fatalf(err.Error())
-	}
 
-	username := currentUser.Username
+	username := tools.GenerateUserName()
 	sshPublicKeyData, err := os.ReadFile(publicKeyFileName)
 	if err != nil {
 		log.Println(err)
@@ -95,13 +90,8 @@ func (p ProviderAzure) CreateSSHKey(publicKeyFileName string) (string, error) {
 }
 
 func (p ProviderAzure) getSSHKeyPublicData() string {
-	currentUser, err := user.Current()
-	log.Println("[DEBUG] ", currentUser)
-	if err != nil {
-		log.Fatalf(err.Error())
-	}
-
-	sshKey, err := p.SSHKeyClient.Get(context.Background(), viper.GetString("azure.resourceGroup"), currentUser.Username, nil)
+	userName := tools.GenerateUserName()
+	sshKey, err := p.SSHKeyClient.Get(context.Background(), viper.GetString("azure.resourceGroup"), userName, nil)
 	if err != nil {
 		log.Println(err)
 	}
@@ -254,14 +244,14 @@ func mapAzureServer(server *armcompute.VirtualMachine, serverIP string) Vm {
 	return vm
 }
 
-func (p ProviderAzure) SSHInto(serverName string) {
+func (p ProviderAzure) SSHInto(serverName, port string) {
 	s := p.getServerByServerName(serverName)
 	log.Println("[DEBUG] " + s.String())
 	if s.ID == "" {
 		fmt.Println("Server not found")
 	}
 
-	tools.SSHIntoVM(s.IP, "azureuser")
+	tools.SSHIntoVM(s.IP, "azureuser", port)
 }
 
 func (p ProviderAzure) getServerByServerName(serverName string) Vm {

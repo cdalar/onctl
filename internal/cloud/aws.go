@@ -303,7 +303,7 @@ func (p ProviderAws) getServerByServerName(serverName string) Vm {
 	return mapAwsServer(s.Reservations[0].Instances[0])
 }
 
-func (p ProviderAws) SSHInto(serverName string) {
+func (p ProviderAws) SSHInto(serverName, port string) {
 
 	s := p.getServerByServerName(serverName)
 	log.Println("[DEBUG] " + s.String())
@@ -312,5 +312,5 @@ func (p ProviderAws) SSHInto(serverName string) {
 	}
 
 	ipAddress := s.IP
-	tools.SSHIntoVM(ipAddress, "ubuntu")
+	tools.SSHIntoVM(ipAddress, "ubuntu", port)
 }
