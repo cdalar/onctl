@@ -1,11 +1,26 @@
 package tools
 
 import (
+	"encoding/base64"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
+
+	"github.com/cdalar/onctl/internal/files"
 )
+
+func GetCustomData() string {
+	fileEmbeded, err := files.EmbededFiles.ReadFile("custom-data.sh")
+	if err != nil {
+		log.Fatal(err)
+	}
+	encodedData := base64.StdEncoding.EncodeToString(fileEmbeded)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return string(encodedData)
+}
 
 func RunLocalInit(username, ip, privateKey, initFile string) {
 	fmt.Print("Running LocalInit Script...")

@@ -25,6 +25,8 @@ type Vm struct {
 	Location string
 	// SSHKeyID is the ID of the SSH key
 	SSHKeyID string
+	// SSHPort is the port to connect to the instance
+	SSHPort string
 	// ExposePorts is the list of ports to expose
 	ExposePorts []int64
 	// CreatedAt is the creation date of the instance

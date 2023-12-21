@@ -151,6 +151,7 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 				},
 			},
 			OSProfile: &armcompute.OSProfile{
+				CustomData:    to.Ptr(tools.GetCustomData()),
 				ComputerName:  to.Ptr(tools.GenerateMachineUniqueName()),
 				AdminUsername: to.Ptr(viper.GetString("azure.vm.username")),
 				LinuxConfiguration: &armcompute.LinuxConfiguration{

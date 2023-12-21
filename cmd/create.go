@@ -33,9 +33,11 @@ func init() {
 	createCmd.Flags().StringVarP(&composeFile, "composeFile", "c", "", "Path to docker-compose file")
 	createCmd.Flags().StringVarP(&publicKeyFile, "publicKey", "k", "", "Path to publicKey file (default: ~/.ssh/id_rsa))")
 	createCmd.Flags().StringVarP(&initFile, "initFile", "i", "", "init bash script file")
-	createCmd.Flags().Int64VarP(&exposePort, "port", "p", 80, "port you want to expose to internet")
+	// createCmd.Flags().Int64VarP(&exposePort, "port", "p", 80, "port you want to expose to internet")
 	createCmd.Flags().StringVarP(&instanceType, "type", "t", "", "instance type")
 	createCmd.Flags().StringVarP(&vmName, "name", "n", "", "vm name")
+	createCmd.Flags().StringVarP(&port, "port", "p", "22", "ssh port")
+
 }
 
 var createCmd = &cobra.Command{
@@ -74,10 +76,11 @@ var createCmd = &cobra.Command{
 		}
 		log.Printf("[DEBUG] vmName: %s", vmName)
 		s := cloud.Vm{
-			Name:        vmName,
-			Type:        instanceType,
-			SSHKeyID:    keyID,
-			ExposePorts: []int64{exposePort},
+			Name:     vmName,
+			Type:     instanceType,
+			SSHKeyID: keyID,
+			// ExposePorts: []int64{exposePort},
+			SSHPort: port,
 		}
 		fmt.Println("Starting server...")
 		vm, err = provider.Deploy(s)
