@@ -12,7 +12,7 @@ var (
 )
 
 func init() {
-	createCmd.Flags().StringVarP(&port, "port", "p", "22", "ssh port")
+	sshCmd.Flags().StringVarP(&port, "port", "p", "22", "ssh port")
 }
 
 var sshCmd = &cobra.Command{
