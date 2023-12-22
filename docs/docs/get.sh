@@ -46,7 +46,7 @@ case $os in
     CYGWIN*|MINGW32*|MSYS*|MINGW*)
         os="windows"
         extension=".zip"
-        unzip_command="unzip"
+        unzip_command="unzip -o"
         ;;
     *)
         echo "Error: Unsupported operating system: $os"
