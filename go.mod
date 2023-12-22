@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute v1.0.0
-	github.com/aws/aws-sdk-go v1.49.7
+	github.com/aws/aws-sdk-go v1.49.8
 	github.com/manifoldco/promptui v0.9.0
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/spf13/cobra v1.8.0
