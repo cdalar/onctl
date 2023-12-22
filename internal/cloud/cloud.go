@@ -29,6 +29,8 @@ type Vm struct {
 	SSHPort string
 	// ExposePorts is the list of ports to expose
 	ExposePorts []int64
+	// CloudInit is the cloud-init file
+	CloudInitFile string
 	// CreatedAt is the creation date of the instance
 	CreatedAt time.Time
 }

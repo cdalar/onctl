@@ -44,6 +44,7 @@ func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 		Labels: map[string]string{
 			"Owner": "onctl",
 		},
+		UserData: tools.FileToBase64(server.CloudInitFile),
 	})
 	if err != nil {
 		if herr, ok := err.(hcloud.Error); ok {

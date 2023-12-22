@@ -27,6 +27,7 @@ var sshCmd = &cobra.Command{
 			fmt.Println("Please provide a VM id")
 			return
 		}
+		log.Println("[DEBUG] port: ", port)
 		provider.SSHInto(args[0], port)
 	},
 }

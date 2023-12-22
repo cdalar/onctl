@@ -44,7 +44,7 @@ func RunLocalInit(username, ip, privateKey, initFile string) {
 	fmt.Println("DONE")
 }
 
-func RunInit(username, ip, privateKey, initFile string) {
+func RunInit(username, ip, sshPort, privateKey, initFile string) {
 	fmt.Print("Running Init Script...")
 	log.Println("[DEBUG] initFile: " + initFile)
 	err := SSHCopyFile(username, ip, privateKey, initFile, "./init.sh")
@@ -54,7 +54,7 @@ func RunInit(username, ip, privateKey, initFile string) {
 	}
 
 	log.Println("[DEBUG] running init.sh...")
-	runInitOutput, err := RemoteRun(username, ip, privateKey, "chmod +x init.sh && sudo ./init.sh")
+	runInitOutput, err := RemoteRun(username, ip, sshPort, privateKey, "chmod +x init.sh && sudo ./init.sh")
 	if err != nil {
 		log.Println("Error on init.sh")
 		fmt.Println(runInitOutput)
@@ -63,7 +63,7 @@ func RunInit(username, ip, privateKey, initFile string) {
 
 	log.Println("[DEBUG] init.sh output: " + runInitOutput)
 	if username != "root" {
-		_, err := RemoteRun(username, ip, privateKey, "sudo usermod -aG docker ubuntu")
+		_, err := RemoteRun(username, ip, sshPort, privateKey, "sudo usermod -aG docker ubuntu")
 		if err != nil {
 			log.Println("Error on usermod")
 			log.Fatalln(err)
