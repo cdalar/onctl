@@ -90,7 +90,6 @@ func (p ProviderHetzner) Destroy(server Vm) error {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	log.Println("Server deleted")
 	return nil
 }
 

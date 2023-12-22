@@ -186,7 +186,7 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 
 func (p ProviderAzure) Destroy(server Vm) error {
 	log.Println("[DEBUG] Destroy Server")
-	fmt.Print("Destroying server...")
+	fmt.Print("Destroying", server.Name, "...")
 	resp, err := p.VmClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name, nil)
 	if err != nil {
 		log.Fatalln(err)
@@ -204,7 +204,7 @@ func (p ProviderAzure) Destroy(server Vm) error {
 		fmt.Println("DONE")
 	}
 
-	fmt.Print("Destroying other resources...")
+	fmt.Print("Destroying other resources of", server.Name, "...")
 	nic, err := p.NicClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-nic", nil)
 	if err != nil {
 		log.Fatalln(err)

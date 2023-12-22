@@ -41,6 +41,7 @@ var destroyCmd = &cobra.Command{
 				if err := provider.Destroy(server); err != nil {
 					log.Println(err)
 				}
+				log.Println(server.Name, "deleted.")
 			}
 		default:
 			// Tear down specific server
