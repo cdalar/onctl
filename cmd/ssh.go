@@ -7,6 +7,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	port string
+)
+
+func init() {
+	sshCmd.Flags().StringVarP(&port, "port", "p", "22", "ssh port")
+}
+
 var sshCmd = &cobra.Command{
 	Use:                   "ssh VM_NAME",
 	Short:                 "Spawn an SSH connection to a VM",
@@ -19,6 +27,7 @@ var sshCmd = &cobra.Command{
 			fmt.Println("Please provide a VM id")
 			return
 		}
-		provider.SSHInto(args[0])
+		log.Println("[DEBUG] port: ", port)
+		provider.SSHInto(args[0], port)
 	},
 }

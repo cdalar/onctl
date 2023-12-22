@@ -44,6 +44,7 @@ func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 		Labels: map[string]string{
 			"Owner": "onctl",
 		},
+		UserData: tools.FileToBase64(server.CloudInitFile),
 	})
 	if err != nil {
 		if herr, ok := err.(hcloud.Error); ok {
@@ -89,7 +90,6 @@ func (p ProviderHetzner) Destroy(server Vm) error {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	log.Println("Server deleted")
 	return nil
 }
 
@@ -187,7 +187,7 @@ func (p ProviderHetzner) getServerByServerName(serverName string) Vm {
 	return mapHetznerServer(*s)
 }
 
-func (p ProviderHetzner) SSHInto(serverName string) {
+func (p ProviderHetzner) SSHInto(serverName, port string) {
 	// server, _, err := p.Client.Server().Get(ctx, idOrName)
 	server, _, err := p.Client.Server.GetByName(context.TODO(), serverName)
 	if server == nil {
@@ -209,5 +209,5 @@ func (p ProviderHetzner) SSHInto(serverName string) {
 	}
 
 	ipAddress := server.PublicNet.IPv4.IP
-	tools.SSHIntoVM(ipAddress.String(), "root")
+	tools.SSHIntoVM(ipAddress.String(), "root", port)
 }

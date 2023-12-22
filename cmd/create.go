@@ -11,9 +11,6 @@ import (
 
 	"github.com/cdalar/onctl/internal/cloud"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/ec2"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -27,15 +24,19 @@ var (
 	instanceType  string
 	vmName        string
 	vm            cloud.Vm
+	cloudInitFile string
 )
 
 func init() {
 	createCmd.Flags().StringVarP(&composeFile, "composeFile", "c", "", "Path to docker-compose file")
 	createCmd.Flags().StringVarP(&publicKeyFile, "publicKey", "k", "", "Path to publicKey file (default: ~/.ssh/id_rsa))")
 	createCmd.Flags().StringVarP(&initFile, "initFile", "i", "", "init bash script file")
-	createCmd.Flags().Int64VarP(&exposePort, "port", "p", 80, "port you want to expose to internet")
+	// createCmd.Flags().Int64VarP(&exposePort, "port", "p", 80, "port you want to expose to internet")
 	createCmd.Flags().StringVarP(&instanceType, "type", "t", "", "instance type")
 	createCmd.Flags().StringVarP(&vmName, "name", "n", "", "vm name")
+	createCmd.Flags().StringVarP(&port, "port", "p", "22", "ssh port")
+	createCmd.Flags().StringVar(&cloudInitFile, "cloud-init-file", "", "cloud-init file")
+
 }
 
 var createCmd = &cobra.Command{
@@ -74,10 +75,11 @@ var createCmd = &cobra.Command{
 		}
 		log.Printf("[DEBUG] vmName: %s", vmName)
 		s := cloud.Vm{
-			Name:        vmName,
-			Type:        instanceType,
-			SSHKeyID:    keyID,
-			ExposePorts: []int64{exposePort},
+			Name:          vmName,
+			Type:          instanceType,
+			SSHKeyID:      keyID,
+			SSHPort:       port,
+			CloudInitFile: cloudInitFile,
 		}
 		fmt.Println("Starting server...")
 		vm, err = provider.Deploy(s)
@@ -94,7 +96,7 @@ var createCmd = &cobra.Command{
 		if _, err := os.Stat(publicKeyFile); err != nil {
 			log.Fatalln(publicKeyFile + " Public key file not found")
 		}
-		tools.WaitForCloudInit(viper.GetString(cloudProvider+".vm.username"), vm.IP, string(privateKey))
+		tools.WaitForCloudInit(viper.GetString(cloudProvider+".vm.username"), vm.IP, s.SSHPort, string(privateKey))
 		if initFile != "" {
 			initFileLocal, err := os.Stat(initFile)
 			if err != nil { // file not found in filesystem
@@ -110,27 +112,15 @@ var createCmd = &cobra.Command{
 				}
 				defer tmpfile.Close()
 				initFile = tmpfile.Name()
-			} else {
+			} else { // file found in filesystem
 				initFile = initFileLocal.Name()
 			}
 
-			_, err = tools.RunRemoteBashScript(viper.GetString(cloudProvider+".vm.username"), vm.IP, string(privateKey), initFile)
+			_, err = tools.RunRemoteBashScript(viper.GetString(cloudProvider+".vm.username"), vm.IP, vm.SSHPort, string(privateKey), initFile)
 			if err != nil {
 				log.Fatal(err)
 			}
-			// fmt.Println(output)
 		}
-		// tools.WaitForCloudInit(viper.GetString(cloudProvider+".vm.username"), vm.IP, string(privateKey))
-		// tools.PrepareDocker(username, vm.IP, string(privateKey), initFile)
-
-		// tools.CreateDeployOutputFile(&tools.DeployOutput{
-		// 	Username:   username,
-		// 	PublicIP:   vm.IP,
-		// 	PublicURL:  "http://" + vm.IP,
-		// 	DockerHost: "ssh://" + username + "@" + vm.IP,
-		// })
-
-		// tools.RunDockerCompose(username, cloudServer.IP, string(privateKey), composeFile)
 	},
 }
 
@@ -187,39 +177,3 @@ var createCmd = &cobra.Command{
 // 		PublicURL: "http://" + *instance.PublicIpAddress + ":" + strconv.FormatInt(exposePort, 10),
 // 	})
 // }
-
-// CheckIfInstanceExists checks if an instance with the given name exists
-// and returns the instance ID if it does
-func CheckIfInstanceExists(svc *ec2.EC2, instanceName string) (string, error) {
-	input := &ec2.DescribeInstancesInput{
-		Filters: []*ec2.Filter{
-			{
-				Name:   aws.String("tag:Name"),
-				Values: []*string{aws.String(instanceName)},
-			},
-			{
-				Name:   aws.String("instance-state-name"),
-				Values: []*string{aws.String("running")},
-			},
-		},
-	}
-	result, err := svc.DescribeInstances(input)
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
-		return "", err
-	}
-	if len(result.Reservations) > 0 {
-		log.Println("[DEBUG] Instance Id: " + *result.Reservations[0].Instances[0].InstanceId)
-		return *result.Reservations[0].Instances[0].InstanceId, err
-	}
-	return "", err
-}

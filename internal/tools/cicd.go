@@ -1,10 +1,10 @@
 package tools
 
 import (
-	"encoding/base64"
 	"log"
 	"os"
 	"os/user"
+	"strings"
 )
 
 func GenerateMachineUniqueName() string {
@@ -12,12 +12,30 @@ func GenerateMachineUniqueName() string {
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	workingDir, err := os.Getwd()
+	wd, err := os.Getwd()
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
 
-	stringToHash := "onctl-" + userCurrent.Username + workingDir
+	wd = strings.ReplaceAll(wd, "/", "-")
+	wd = strings.ReplaceAll(wd, "\\", "-")
+	wd = strings.ReplaceAll(wd, " ", "-")
+	userName := strings.ReplaceAll(userCurrent.Username, "\\", "-")
+	stringToHash := userName + wd[len(wd)-10:]
 
-	return base64.StdEncoding.EncodeToString([]byte(stringToHash))[:7]
+	return "onctl-" + stringToHash
+}
+
+func GenerateUserName() string {
+	userCurrent, err := user.Current()
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
+	userName := strings.ReplaceAll(userCurrent.Username, "\\", "-")
+	userName = strings.ReplaceAll(userName, " ", "-")
+	userName = strings.ReplaceAll(userName, "/", "-")
+	userName = strings.ReplaceAll(userName, ".", "-")
+
+	return userName
+
 }
