@@ -10,12 +10,12 @@
 ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/cdalar/onctl?sort=semver)
 <!-- [![Known Vulnerabilities](https://snyk.io/test/github/cdalar/onctl/main/badge.svg)](https://snyk.io/test/github/cdalar/onctl/main) -->
 
-## What parampiper brings 
+## What onctl brings 
 
-- 🌍 Single Source of Truth (SSOT). All your parameters in one place.
-- 📄  Works on a simple JSON file.
-- 🔄 Support several backends (local file, Azure Blob).
-
+- 🌍 Simple intuitive CLI to run VMs in seconds.  
+- ⛅️ Supports multi cloud providers (azure, hetzner, more coming soon...)
+- 🚀 Gives you SSH access with you ssh public key precofigured. So no need to manage username/password
+- ✨ Cloud-init support. Set your own cloud-init file
 
 ## Installation
 
@@ -28,7 +28,7 @@ brew install cdalar/tap/onctl
 ### Linux
 
 ```bash
-curl -sLS https://docs.onctl.com/get.sh | sh 
+curl -sLS https://www.onctl.com/get.sh | bash
 sudo install onctl /usr/local/bin/
 ```
 
@@ -37,3 +37,27 @@ sudo install onctl /usr/local/bin/
 - download windows binary from [releases page](https://github.com/cdalar/onctl/releases)
 - unzip and copy onctl.exe to a location in PATH
 
+# Getting Started
+
+```
+❯ onctl
+onctl is a tool to manage cross platform resources in cloud
+
+Usage:
+  onctl [command]
+
+Available Commands:
+  completion  Generate the autocompletion script for the specified shell
+  create      Create a VM
+  destroy     Destroy VM(s)
+  help        Help about any command
+  init        init onctl environment
+  ls          List VMs
+  ssh         Spawn an SSH connection to a VM
+  version     Print the version number of onctl
+
+Flags:
+  -h, --help   help for onctl
+
+Use "onctl [command] --help" for more information about a command.
+```
