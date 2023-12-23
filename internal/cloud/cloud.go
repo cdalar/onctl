@@ -27,8 +27,6 @@ type Vm struct {
 	SSHKeyID string
 	// SSHPort is the port to connect to the instance
 	SSHPort string
-	// ExposePorts is the list of ports to expose
-	ExposePorts []int64
 	// CloudInit is the cloud-init file
 	CloudInitFile string
 	// CreatedAt is the creation date of the instance

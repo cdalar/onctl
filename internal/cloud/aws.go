@@ -40,15 +40,15 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 	vpcId := provideraws.GetDefaultVpcId(p.Client)
 	log.Println("[DEBUG] VPC ID: ", vpcId)
 
-	securityGroupIds := []*string{}
-	sgIdForSSH := provideraws.CreateSecurityGroupSSH(p.Client, vpcId)
-	securityGroupIds = append(securityGroupIds, sgIdForSSH)
-	for _, port := range server.ExposePorts {
-		sgId := provideraws.CreateSecurityGroupForPort(p.Client, vpcId, port)
-		log.Println("[DEBUG] Security Group ID: ", sgId)
-		securityGroupIds = append(securityGroupIds, sgId)
-	}
-	log.Println("[DEBUG] Security Group Ids: ", securityGroupIds)
+	// securityGroupIds := []*string{}
+	// sgIdForSSH := provideraws.CreateSecurityGroupSSH(p.Client, vpcId)
+	// securityGroupIds = append(securityGroupIds, sgIdForSSH)
+	// for _, port := range server.ExposePorts {
+	// 	sgId := provideraws.CreateSecurityGroupForPort(p.Client, vpcId, port)
+	// 	log.Println("[DEBUG] Security Group ID: ", sgId)
+	// 	securityGroupIds = append(securityGroupIds, sgId)
+	// }
+	// log.Println("[DEBUG] Security Group Ids: ", securityGroupIds)
 	input := &ec2.RunInstancesInput{
 		ImageId:      aws.String(*images[0].ImageId),
 		InstanceType: aws.String(server.Type),
@@ -61,7 +61,7 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 				// SubnetId:                 aws.String(subnetIds[0]),
 				AssociatePublicIpAddress: aws.Bool(true),
 				DeleteOnTermination:      aws.Bool(true),
-				Groups:                   securityGroupIds,
+				// Groups:                   securityGroupIds,
 			},
 		},
 		TagSpecifications: []*ec2.TagSpecification{
