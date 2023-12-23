@@ -3,6 +3,16 @@ repo_url: https://github.com/cdalar/onctl
 theme:
   name: material
   language: en
+  features:
+    - content.code.copy
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  # - Guides:
+  #   - 'Installation': guides/installation.md
+  #   - 'Configuration': guides/configuration.md
+  #   - 'Usage': guides/usage.md
+  #   - 'Development': guides/development.md
 markdown_extensions:
   - admonition
   - pymdownx.inlinehilite
