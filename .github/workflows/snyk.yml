@@ -1,4 +1,4 @@
-name: Snyk Golang Security Scan
+name: Snyk
 
 on: push
 
