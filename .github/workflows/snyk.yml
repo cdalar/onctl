@@ -1,4 +1,4 @@
-name: Snyk
+name: snyk
 
 on: push
 
