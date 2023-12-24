@@ -1,5 +1,11 @@
 name: Snyk Golang Security Scan
+
 on: push
+
+permissions:
+    contents: read
+    security-events: write
+
 jobs:
   security:
     runs-on: ubuntu-latest
