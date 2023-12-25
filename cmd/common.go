@@ -20,11 +20,18 @@ import (
 // TODO decomple viper and use onctlConfig instead
 // var onctlConfig map[string]interface{}
 
-func ReadConfig(filename string) {
+func ReadConfig(cloudProvider string) {
 	dir, err := os.Getwd()
 	if err != nil {
 		log.Println(err)
 	}
+	configFileInfo, err := os.Stat(dir + "/.onctl/" + cloudProvider + ".yaml")
+	if err != nil {
+		// log.Println(err)
+		fmt.Println("No configuration found. Please run `onctl init` first")
+		os.Exit(1)
+	}
+
 	viper.SetConfigName("onctl")
 	viper.AddConfigPath(dir + "/.onctl")
 	err = viper.ReadInConfig()
@@ -32,8 +39,8 @@ func ReadConfig(filename string) {
 		log.Println(err)
 	}
 
-	if _, err := os.Stat(dir + "/.onctl/" + filename + ".yaml"); err == nil {
-		viper.SetConfigName(filename)
+	if configFileInfo != nil {
+		viper.SetConfigName(cloudProvider)
 		err = viper.MergeInConfig()
 		if err != nil {
 			log.Println(err)

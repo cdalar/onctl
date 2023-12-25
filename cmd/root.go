@@ -27,7 +27,6 @@ var (
 
 func checkCloudProvider() {
 	cloudProvider = os.Getenv("ONCTL_CLOUD")
-	fmt.Println("Using: " + cloudProvider)
 	if cloudProvider != "" {
 		if !tools.Contains(cloudProviderList, cloudProvider) {
 			log.Println("Cloud Platform (" + cloudProvider + ") is not Supported\nPlease use one of the following: " + strings.Join(cloudProviderList, ","))
@@ -55,7 +54,7 @@ func Execute() error {
 		checkCloudProvider()
 		ReadConfig(cloudProvider)
 	}
-
+	fmt.Println("Using: " + cloudProvider)
 	switch cloudProvider {
 	case "hetzner":
 		provider = &cloud.ProviderHetzner{
