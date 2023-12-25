@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
@@ -12,6 +15,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/cdalar/onctl/internal/files"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/util/duration"
@@ -116,4 +120,65 @@ func openbrowser(url string) {
 		fmt.Println(err)
 	}
 
+}
+
+func findFile(filename string) (filePath string) {
+	if filename == "" {
+		return ""
+	}
+
+	// Checking file in filesystem
+	_, err := os.Stat(filename)
+	if err == nil { // file found in filesystem
+		return filename
+	} else {
+		log.Println("[DEBUG]", filename, "file not found in fileststem, trying to find in embeded files")
+	}
+
+	// file not found in filesystem, trying to find in embeded files
+	fileContent, err := files.EmbededFiles.ReadFile(filename)
+	if err == nil {
+		log.Println("[DEBUG]", filename, "file found in embeded files")
+		outFile, err := os.CreateTemp("", "onctl")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer outFile.Close()
+		_, err = io.Copy(outFile, bytes.NewReader(fileContent))
+		if err != nil {
+			log.Println(err)
+		}
+		return outFile.Name()
+
+	} else {
+		log.Println("[DEBUG]", filename, "not found in embeded files, trying to find in templates.onctl.com/")
+	}
+
+	// file not found in embeded files, trying to find in templates.onctl.com/
+	if filename[0:4] != "http" {
+		filename = "https://templates.onctl.com/" + filename
+	}
+
+	resp, err := http.Get(filename)
+	if err == nil && resp.StatusCode == 200 {
+		log.Println("[DEBUG]", filename, "file found in templates.onctl.com/")
+
+		defer resp.Body.Close()
+		outFile, err := os.CreateTemp("", "onctl")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer outFile.Close()
+		_, err = io.Copy(outFile, resp.Body)
+		if err != nil {
+			log.Println(err)
+		}
+		filePath = outFile.Name()
+		return filePath
+	} else {
+		log.Println("[DEBUG]", filename, "not found in templates.onctl.com/")
+		fmt.Println("Error: " + filename + " not found in (filesystem, embeded files and templates.onctl.com/)")
+		os.Exit(1)
+	}
+	return ""
 }
