@@ -5,68 +5,107 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/cdalar/onctl/internal/tools"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v5"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resourcegraph/armresourcegraph"
 	"github.com/spf13/viper"
 )
 
 type ProviderAzure struct {
-	VmClient       *armcompute.VirtualMachinesClient
-	NicClient      *armnetwork.InterfacesClient
-	PublicIPClient *armnetwork.PublicIPAddressesClient
-	SSHKeyClient   *armcompute.SSHPublicKeysClient
-	VnetClient     *armnetwork.VirtualNetworksClient
+	ResourceGraphClient *armresourcegraph.Client
+	VmClient            *armcompute.VirtualMachinesClient
+	NicClient           *armnetwork.InterfacesClient
+	PublicIPClient      *armnetwork.PublicIPAddressesClient
+	SSHKeyClient        *armcompute.SSHPublicKeysClient
+	VnetClient          *armnetwork.VirtualNetworksClient
+}
+
+type QueryResponse struct {
+	TotalRecords *int64
+	Data         map[string]interface {
+	}
 }
 
 func (p ProviderAzure) List() (VmList, error) {
-	pager := p.VmClient.NewListAllPager(&armcompute.VirtualMachinesClientListAllOptions{})
-	resp, err := pager.NextPage(context.Background())
+	log.Println("[DEBUG] List Servers")
+	query := `
+		resources
+		| where type =~ 'microsoft.compute/virtualmachines' and resourceGroup =~ '` + viper.GetString("azure.resourceGroup") + `'	
+		| extend nics=array_length(properties.networkProfile.networkInterfaces)
+		| mv-expand nic=properties.networkProfile.networkInterfaces
+		| where nics == 1 or nic.properties.primary =~ 'true' or isempty(nic)
+		| project vmId = id, vmName = name, vmSize=tostring(properties.hardwareProfile.vmSize), nicId = tostring(nic.id), timeCreated = tostring(properties.timeCreated), status = tostring(properties.extended.instanceView.powerState.displayStatus)
+		| join kind=leftouter (
+			resources
+			| where type =~ 'microsoft.network/networkinterfaces'
+			| extend ipConfigsCount=array_length(properties.ipConfigurations)
+			| mv-expand ipconfig=properties.ipConfigurations
+			| where ipConfigsCount == 1 or ipconfig.properties.primary =~ 'true'
+			| project nicId = id, publicIpId = tostring(ipconfig.properties.publicIPAddress.id))
+		on nicId
+		| project-away nicId1
+		| summarize by vmId, vmName, vmSize, nicId, publicIpId, timeCreated, status
+		| join kind=leftouter (
+			resources
+			| where type =~ 'microsoft.network/publicipaddresses'
+			| project publicIpId = id, publicIpAddress = properties.ipAddress)
+		on publicIpId
+		| project-away publicIpId1
+		| order by timeCreated asc	
+	`
+	// Create the query request, Run the query and get the results. Update the VM and subscriptionID details below.
+	resp, err := p.ResourceGraphClient.Resources(context.Background(),
+		armresourcegraph.QueryRequest{
+			Query: to.Ptr(query),
+			Subscriptions: []*string{
+				to.Ptr(viper.GetString("azure.subscriptionId"))},
+			Options: &armresourcegraph.QueryRequestOptions{
+				ResultFormat: to.Ptr(armresourcegraph.ResultFormatObjectArray),
+			},
+		},
+		nil)
 	if err != nil {
-		log.Fatalf("failed to advance page: %v", err)
-		return VmList{}, err
+		log.Fatalf("failed to finish the request: %v", err)
+	} else {
+		// Print the obtained query results
+		log.Printf("[DEBUG] Resources found: " + strconv.FormatInt(*resp.TotalRecords, 10) + "\n")
+		log.Printf("[DEBUG] Results: " + fmt.Sprint(resp.Data) + "\n")
 	}
-	if len(resp.Value) == 0 {
+	if len(strconv.FormatInt(*resp.TotalRecords, 10)) == 0 {
 		return VmList{}, nil
 	}
-	cloudList := make([]Vm, 0, len(resp.Value))
-	for _, server := range resp.Value {
-		var serverIP string
-		for _, nicRef := range server.Properties.NetworkProfile.NetworkInterfaces {
-			nicID, _ := arm.ParseResourceID(*nicRef.ID)
-			nic, _ := p.NicClient.Get(context.Background(), nicID.ResourceGroupName, nicID.Name, nil)
-			for _, ipCfg := range nic.Properties.IPConfigurations {
-				if ipCfg.Properties.PublicIPAddress != nil {
-					publicID, _ := arm.ParseResourceID(*ipCfg.Properties.PublicIPAddress.ID)
-					publicIP, err := p.PublicIPClient.Get(context.Background(), publicID.ResourceGroupName, publicID.Name, &armnetwork.PublicIPAddressesClientGetOptions{Expand: nil})
-					if err != nil {
-						log.Println(err)
-					}
-					serverIP = *publicIP.Properties.IPAddress
-					log.Println("[DEBUG] public IP: ", serverIP)
-					// do something with public IP
-				} else if ipCfg.Properties.PrivateIPAddress != nil {
-					// do something with the private IP
-					serverIP = *ipCfg.Properties.PrivateIPAddress
-					log.Println("[DEBUG] private IP: ", serverIP)
-				}
+	log.Println("[DEBUG] ", resp.Data)
+	cloudList := make([]Vm, 0, len(strconv.FormatInt(*resp.TotalRecords, 10)))
+	if m, ok := resp.Data.([]interface{}); ok {
+		for _, r := range m {
+			items := r.(map[string]interface{})
+			createdAt, err := time.Parse("2006-01-02T15:04:05Z", items["timeCreated"].(string))
+			if err != nil {
+				log.Fatalln(err)
 			}
+			cloudList = append(cloudList, Vm{
+				ID:        filepath.Base(items["vmId"].(string)),
+				Name:      items["vmName"].(string),
+				IP:        items["publicIpAddress"].(string),
+				Type:      items["vmSize"].(string),
+				Status:    items["status"].(string),
+				CreatedAt: createdAt,
+			})
 		}
-
-		cloudList = append(cloudList, mapAzureServer(server, serverIP))
-		log.Println("[DEBUG] server name: " + *server.Name)
 	}
+
 	output := VmList{
 		List: cloudList,
 	}
 	return output, nil
-
 }
 
 func (p ProviderAzure) CreateSSHKey(publicKeyFileName string) (string, error) {
@@ -230,19 +269,6 @@ func (p ProviderAzure) Destroy(server Vm) error {
 
 	return err
 
-}
-
-func mapAzureServer(server *armcompute.VirtualMachine, serverIP string) Vm {
-	vm := Vm{
-		ID:        *server.Properties.VMID,
-		Name:      *server.Name,
-		IP:        serverIP,
-		Type:      string(*server.Properties.HardwareProfile.VMSize),
-		Status:    *server.Properties.ProvisioningState,
-		CreatedAt: *server.Properties.TimeCreated,
-	}
-	log.Println("[DEBUG] ", vm)
-	return vm
 }
 
 func (p ProviderAzure) SSHInto(serverName, port string) {

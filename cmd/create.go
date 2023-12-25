@@ -5,11 +5,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/cdalar/onctl/internal/tools"
-
-	"github.com/cdalar/onctl/internal/files"
-
 	"github.com/cdalar/onctl/internal/cloud"
+	"github.com/cdalar/onctl/internal/files"
+	"github.com/cdalar/onctl/internal/tools"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
