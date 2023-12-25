@@ -67,11 +67,12 @@ func Execute() error {
 		}
 	case "azure":
 		provider = &cloud.ProviderAzure{
-			VmClient:       providerazure.GetVmClient(),
-			NicClient:      providerazure.GetNicClient(),
-			PublicIPClient: providerazure.GetIPClient(),
-			SSHKeyClient:   providerazure.GetSSHKeyClient(),
-			VnetClient:     providerazure.GetVnetClient(),
+			ResourceGraphClient: providerazure.GetResourceGraphClient(),
+			VmClient:            providerazure.GetVmClient(),
+			NicClient:           providerazure.GetNicClient(),
+			PublicIPClient:      providerazure.GetIPClient(),
+			SSHKeyClient:        providerazure.GetSSHKeyClient(),
+			VnetClient:          providerazure.GetVnetClient(),
 		}
 	}
 	return rootCmd.Execute()

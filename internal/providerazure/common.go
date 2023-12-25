@@ -5,10 +5,24 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v5"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resourcegraph/armresourcegraph"
 	"github.com/spf13/viper"
 )
+
+func GetResourceGraphClient() (resourceGraphClient *armresourcegraph.Client) {
+	cred, err := connectionAzure()
+	if err != nil {
+		log.Fatalf("cannot connect to Azure:%+v", err)
+	}
+	resourceGraphClient, err = armresourcegraph.NewClient(cred, nil)
+	if err != nil {
+		return nil
+	}
+
+	return resourceGraphClient
+}
 
 func GetVmClient() (vmClient *armcompute.VirtualMachinesClient) {
 	cred, err := connectionAzure()
