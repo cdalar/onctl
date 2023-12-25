@@ -271,19 +271,6 @@ func (p ProviderAzure) Destroy(server Vm) error {
 
 }
 
-func mapAzureServer(server *armcompute.VirtualMachine, serverIP string) Vm {
-	vm := Vm{
-		ID:        *server.Properties.VMID,
-		Name:      *server.Name,
-		IP:        serverIP,
-		Type:      string(*server.Properties.HardwareProfile.VMSize),
-		Status:    *server.Properties.ProvisioningState,
-		CreatedAt: *server.Properties.TimeCreated,
-	}
-	log.Println("[DEBUG] ", vm)
-	return vm
-}
-
 func (p ProviderAzure) SSHInto(serverName, port string) {
 	s := p.getServerByServerName(serverName)
 	log.Println("[DEBUG] " + s.String())
