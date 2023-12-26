@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	composeFile   string
+	// composeFile   string
 	publicKeyFile string
 	filename      string
 	instanceType  string
@@ -24,13 +24,13 @@ var (
 )
 
 func init() {
-	createCmd.Flags().StringVarP(&composeFile, "composeFile", "c", "", "Path to docker-compose file")
-	createCmd.Flags().StringVarP(&publicKeyFile, "publicKey", "k", "", "Path to publicKey file (default: ~/.ssh/id_rsa))")
-	createCmd.Flags().StringVarP(&filename, "initFile", "i", "", "init bash script file")
+	// createCmd.Flags().StringVarP(&composeFile, "docker-compose", "c", "", "Path to docker-compose file")
+	createCmd.Flags().StringVarP(&publicKeyFile, "public-key", "k", "", "Path to publicKey file (default: ~/.ssh/id_rsa))")
+	createCmd.Flags().StringVarP(&filename, "init", "i", "", "init bash script file")
 	createCmd.Flags().StringVarP(&instanceType, "type", "t", "", "instance type")
 	createCmd.Flags().StringVarP(&vmName, "name", "n", "", "vm name")
 	createCmd.Flags().StringVarP(&port, "port", "p", "22", "ssh port")
-	createCmd.Flags().StringVar(&cloudInitFile, "cloud-init-file", "", "cloud-init file")
+	createCmd.Flags().StringVar(&cloudInitFile, "cloud-init", "", "cloud-init file")
 
 }
 
