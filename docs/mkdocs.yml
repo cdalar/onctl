@@ -8,6 +8,7 @@ theme:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
+  - Templates: templates.md
   # - Guides:
   #   - 'Installation': guides/installation.md
   #   - 'Configuration': guides/configuration.md
