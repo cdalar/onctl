@@ -21,5 +21,10 @@ markdown_extensions:
       custom_checkbox: true
   - pymdownx.superfences
   - pymdownx.tabbed
+  - pymdownx.details
+  - attr_list
   - toc:
       permalink: true
+
+extra_css:
+  - style.css

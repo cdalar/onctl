@@ -1,10 +1,11 @@
 # Templates
 
-## *onctl* can run scripts on virtual machines, 
+## initialize virtual machines
+
 - use --init-file (-i in short) to execute an initialization script 
 - use --cloud-init-file to set cloud-init script on virtual machines startup.  
 
-## bash script on startup
+## bash
 
 1. use your own script. 
 
@@ -37,4 +38,19 @@
     ```
     to use the embeded file. Embeded files can be found under `internal/files/` in repository.
 
-## cloud-init script on startup
+## cloud-init 
+
+check: [cloud-init docs](https://cloudinit.readthedocs.io/en/latest/){target="_blank"}
+
+To set a cloud-init configuration to your virtual machine. Just add `--cloud-init` flag to your command. 
+
+ex. this command will set the ssh port to 443.
+```
+onctl up -i wireguard/vpn.sh --cloud-init cloud-init-ssh-443.config
+```
+
+## precedence on scripts
+1. local file
+1. embeded files
+1. files on [onctl-templates](https://github.com/cdalar/onctl-templates){target="_blank"} repo
+1. as defined on URL (https://example.com)
