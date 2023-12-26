@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	composeFile   string
+	// composeFile   string
 	publicKeyFile string
 	filename      string
 	instanceType  string
