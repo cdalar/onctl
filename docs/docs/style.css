@@ -1,5 +1,4 @@
-article a[href^="http"]::after,
-article a[href^="https://"]::after
+article a[target^="_blank"]::after
 {
   content: "";
   width: 11px;
