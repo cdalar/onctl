@@ -14,8 +14,49 @@
 
 - 🌍 Simple intuitive CLI to run VMs in seconds.  
 - ⛅️ Supports multi cloud providers (azure, hetzner, more coming soon...)
-- 🚀 Gives you SSH access with you ssh public key precofigured. So no need to manage username/password
+- 🚀 Sets your public key and Gives you SSH access with `onctl ssh <vm-name>`
 - ✨ Cloud-init support. Set your own cloud-init file
+
+## Quick Start
+
+initialize project. this will create a `.onctl` directory. check configuration file and set as needed.
+```
+❯ onctl init
+onctl environment initialized
+```
+
+export `ONCTL_CLOUD` to set Cloud Provider. 
+```
+❯ export ONCTL_CLOUD=hetzner
+```
+
+Be sure that credentials for that specific cloud provider is already set. 
+If you already use cloud provider CLI. They're already . ex. `az`, `aws`, `hcloud`
+```
+❯ echo $HCLOUD_TOKEN
+```
+
+Create VM.
+```
+❯ onctl up -n onctl-test
+Using: hetzner
+Creating SSHKey: onctl-42da32a9...
+SSH Key already exists (onctl-42da32a9)
+Starting server...
+Server IP: 168.119.58.112
+Vm started.
+```
+
+Ssh into VM.
+```
+❯ onctl ssh onctl-test
+Using: hetzner
+Welcome to Ubuntu 22.04.3 LTS (GNU/Linux 5.15.0-89-generic x86_64)
+.
+.
+.
+root@onctl-test:~# 
+```
 
 ## Installation
 
@@ -37,7 +78,7 @@ sudo install onctl /usr/local/bin/
 - download windows binary from [releases page](https://github.com/cdalar/onctl/releases)
 - unzip and copy onctl.exe to a location in PATH
 
-# Getting Started
+# Enjoy ✅
 
 ```
 ❯ onctl
