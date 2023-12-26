@@ -1,6 +1,8 @@
 # Onctl
 
-`onctl` is a tool to manage virtual machines in multi-cloud
+`onctl` is a tool to manage virtual machines in multi-cloud. 
+
+Check 🌍 https://onctl.com for detailed documentation
 
 [![build](https://github.com/cdalar/onctl/actions/workflows/build.yml/badge.svg)](https://github.com/cdalar/onctl/actions/workflows/build.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/cdalar/onctl)](https://goreportcard.com/report/github.com/cdalar/onctl)
