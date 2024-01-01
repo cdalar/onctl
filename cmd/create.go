@@ -85,9 +85,12 @@ var createCmd = &cobra.Command{
 			log.Fatalln(publicKeyFile + " Public key file not found")
 		}
 		tools.WaitForCloudInit(viper.GetString(cloudProvider+".vm.username"), vm.IP, s.SSHPort, string(privateKey))
-		_, err = tools.RunRemoteBashScript(viper.GetString(cloudProvider+".vm.username"), vm.IP, s.SSHPort, string(privateKey), filename)
-		if err != nil {
-			log.Fatal(err)
+		if filename != "" {
+			_, err = tools.RunRemoteBashScript(viper.GetString(cloudProvider+".vm.username"), vm.IP, s.SSHPort, string(privateKey), filename)
+			if err != nil {
+				log.Fatal(err)
+			}
+
 		}
 	},
 }
