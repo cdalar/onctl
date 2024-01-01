@@ -29,7 +29,9 @@ func ReadConfig(cloudProvider string) {
 	if err != nil {
 		log.Println(err)
 	}
-	configFileInfo, err := os.Stat(dir + "/.onctl/" + cloudProvider + ".yaml")
+	configFile := dir + "/.onctl/" + cloudProvider + ".yaml"
+	log.Println("[DEBUG] Working Directory: " + configFile)
+	configFileInfo, err := os.Stat(configFile)
 	if err != nil {
 		// log.Println(err)
 		fmt.Println("No configuration found. Please run `onctl init` first")

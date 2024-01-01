@@ -17,10 +17,10 @@ var listCmd = &cobra.Command{
 		var serverList cloud.VmList
 		var err error
 		serverList, err = provider.List()
-		log.Println("[DEBUG] VM List: ", serverList)
 		if err != nil {
 			log.Println(err)
 		}
+		log.Println("[DEBUG] VM List: ", serverList)
 		tmpl := "ID\tNAME\tTYPE\tPUBLIC IP\tSTATE\tAGE\n{{range .List}}{{.ID}}\t{{.Name}}\t{{.Type}}\t{{.IP}}\t{{.Status}}\t{{durationFromCreatedAt .CreatedAt}}\n{{end}}"
 		TabWriter(serverList, tmpl)
 	},
