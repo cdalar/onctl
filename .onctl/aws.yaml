@@ -1,0 +1,5 @@
+aws:
+  location: eu-central-1
+  vm:
+    type: t2.micro
+    username: ubuntu
