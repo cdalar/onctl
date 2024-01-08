@@ -1,6 +1,10 @@
-## onctl - Preview Environments for multi-cloud
+# Onctl
 
-[![Build Status](https://github.com/cdalar/onctl/actions/workflows/build.yml/badge.svg)](https://github.com/cdalar/onctl/actions/workflows/build.yml)
+`onctl` is a tool to manage virtual machines in multi-cloud. 
+
+Check 🌍 https://onctl.com for detailed documentation
+
+[![build](https://github.com/cdalar/onctl/actions/workflows/build.yml/badge.svg)](https://github.com/cdalar/onctl/actions/workflows/build.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/cdalar/onctl)](https://goreportcard.com/report/github.com/cdalar/onctl)
 [![CodeQL](https://github.com/cdalar/onctl/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/cdalar/onctl/actions/workflows/github-code-scanning/codeql)
 [![codecov](https://codecov.io/gh/cdalar/onctl/graph/badge.svg?token=7VU7H1II09)](https://codecov.io/gh/cdalar/onctl)
@@ -8,49 +12,95 @@
 ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/cdalar/onctl?sort=semver)
 <!-- [![Known Vulnerabilities](https://snyk.io/test/github/cdalar/onctl/main/badge.svg)](https://snyk.io/test/github/cdalar/onctl/main) -->
 
-*onctl* was created to dynamically create preview environment based on docker-compose on a single vm. 
+## What onctl brings 
 
-1. Starts a vm on defined cloud (supports aws, hetzer at the moment)
-2. Installs docker package and make necessary adjustments.
+- 🌍 Simple intuitive CLI to run VMs in seconds.  
+- ⛅️ Supports multi cloud providers (azure, hetzner, more coming soon...)
+- 🚀 Sets your public key and Gives you SSH access with `onctl ssh <vm-name>`
+- ✨ Cloud-init support. Set your own cloud-init file
 
-## Getting Started 
+## Quick Start
 
-For MacOS (ARM or Intel) 
-
+initialize project. this will create a `.onctl` directory. check configuration file and set as needed.
 ```
+❯ onctl init
+onctl environment initialized
+```
+
+export `ONCTL_CLOUD` to set Cloud Provider. 
+```
+❯ export ONCTL_CLOUD=hetzner
+```
+
+Be sure that credentials for that specific cloud provider is already set. 
+If you already use cloud provider CLI. They're already . ex. `az`, `aws`, `hcloud`
+```
+❯ echo $HCLOUD_TOKEN
+```
+
+Create VM.
+```
+❯ onctl up -n onctl-test
+Using: hetzner
+Creating SSHKey: onctl-42da32a9...
+SSH Key already exists (onctl-42da32a9)
+Starting server...
+Server IP: 168.119.58.112
+Vm started.
+```
+
+Ssh into VM.
+```
+❯ onctl ssh onctl-test
+Using: hetzner
+Welcome to Ubuntu 22.04.3 LTS (GNU/Linux 5.15.0-89-generic x86_64)
+.
+.
+.
+root@onctl-test:~# 
+```
+
+## Installation
+
+### MacOS
+
+```zsh
 brew install cdalar/tap/onctl
 ```
 
-For Linux (amd64)
+### Linux
 
-```
-wget https://www.github.com/cdalar/onctl/releases/latest/download/onctl-linux-amd64.tar.gz
-tar zxvf onctl-linux-amd64.tar.gz
-sudo mv onctl /usr/local/bin/
-```
-
-## Github Action
-You can use this action to integrate onctl on your pipeline [onctl-action](https://github.com/marketplace/actions/onctl-action). You on every PR you created you can have an ready to check environment.
-
-
-## Example/Template Repository
-
-Please check [onctl-demo](https://github.com/cdalar/onctl-demo) repo for how to use this tool inside github-actions
-
-## Use it on your local machine directly
-
-```
-cd <into your git folder>
-onctl create 
-```
-This should start the vm and make it ready to use. Then;
-Run these to deploy your docker compose app
-
-```
-ssh-keyscan $(jq -r .public_ip onctl-deploy.json) >> ~/.ssh/known_hosts
-cd <project_folder>
-DOCKER_HOST=$(jq -r .docker_host onctl-deploy.json) docker compose up -d --build
+```bash
+curl -sLS https://www.onctl.com/get.sh | bash
+sudo install onctl /usr/local/bin/
 ```
 
-Have fun!
+### Windows 
 
+- download windows binary from [releases page](https://github.com/cdalar/onctl/releases)
+- unzip and copy onctl.exe to a location in PATH
+
+# Enjoy ✅
+
+```
+❯ onctl
+onctl is a tool to manage cross platform resources in cloud
+
+Usage:
+  onctl [command]
+
+Available Commands:
+  completion  Generate the autocompletion script for the specified shell
+  create      Create a VM
+  destroy     Destroy VM(s)
+  help        Help about any command
+  init        init onctl environment
+  ls          List VMs
+  ssh         Spawn an SSH connection to a VM
+  version     Print the version number of onctl
+
+Flags:
+  -h, --help   help for onctl
+
+Use "onctl [command] --help" for more information about a command.
+```

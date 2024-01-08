@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +16,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/cdalar/onctl/internal/files"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/util/duration"
@@ -21,11 +25,20 @@ import (
 // TODO decomple viper and use onctlConfig instead
 // var onctlConfig map[string]interface{}
 
-func ReadConfig(filename string) {
+func ReadConfig(cloudProvider string) {
 	dir, err := os.Getwd()
 	if err != nil {
 		log.Println(err)
 	}
+	configFile := dir + "/.onctl/" + cloudProvider + ".yaml"
+	log.Println("[DEBUG] Working Directory: " + configFile)
+	configFileInfo, err := os.Stat(configFile)
+	if err != nil {
+		// log.Println(err)
+		fmt.Println("No configuration found. Please run `onctl init` first")
+		os.Exit(1)
+	}
+
 	viper.SetConfigName("onctl")
 	viper.AddConfigPath(dir + "/.onctl")
 	err = viper.ReadInConfig()
@@ -33,8 +46,8 @@ func ReadConfig(filename string) {
 		log.Println(err)
 	}
 
-	if _, err := os.Stat(dir + "/.onctl/" + filename + ".yaml"); err == nil {
-		viper.SetConfigName(filename)
+	if configFileInfo != nil {
+		viper.SetConfigName(cloudProvider)
 		err = viper.MergeInConfig()
 		if err != nil {
 			log.Println(err)
@@ -154,7 +167,7 @@ func findFile(filename string) (filePath string) {
 		log.Println("[DEBUG]", filename, "file found in templates.onctl.com/")
 
 		defer resp.Body.Close()
-		outFile, err := os.CreateTemp("", filepath.Base(filename))
+		outFile, err := os.CreateTemp("", "onctl")
 		if err != nil {
 			log.Fatal(err)
 		}

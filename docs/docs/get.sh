@@ -35,12 +35,18 @@ os=$(uname -s)
 case $os in
     Linux)
         os="linux"
+        extension=".tar.gz"
+        unzip_command="tar zxvf"
         ;;
     Darwin)
         os="darwin"
+        extension=".tar.gz"
+        unzip_command="tar zxvf"
         ;;
     CYGWIN*|MINGW32*|MSYS*|MINGW*)
         os="windows"
+        extension=".zip"
+        unzip_command="unzip -o"
         ;;
     *)
         echo "Error: Unsupported operating system: $os"
@@ -53,12 +59,19 @@ echo "System architecture is: $architecture"
 
 # Construct download URL
 # This URL pattern is an example and needs to match the actual pattern used in the releases
-download_url="$GITHUB/$REPO/releases/download/$latest_release/onctl-${os}-${arch}.tar.gz"
+download_url="$GITHUB/$REPO/releases/download/$latest_release/onctl-${os}-${arch}${extension}"
 
 # Download the binary
 echo "Downloading parampiper from $download_url"
-curl -L $download_url -o "onctl-${os}-${arch}-${latest_release}.tar.gz"
+curl -L $download_url -o "onctl-${os}-${arch}-${latest_release}${extension}"
 
-tar zxvf "onctl-${os}-${arch}-${latest_release}.tar.gz" onctl
+# Unzip the binary if on Windows or use tar command if on Linux
+if [ "$os" = "windows" ]; then
+    echo "Unzipping onctl-${os}-${arch}-${latest_release}${extension}"
+    $unzip_command "onctl-${os}-${arch}-${latest_release}${extension}" onctl.exe
+else
+    echo "Extracting onctl-${os}-${arch}-${latest_release}${extension}"
+    $unzip_command "onctl-${os}-${arch}-${latest_release}${extension}" onctl
+fi
 
-echo "Download complete. onctl binary is in the current directory."
+echo "Download and unzip complete. onctl binary is in the current directory."

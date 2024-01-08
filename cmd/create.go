@@ -5,11 +5,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/cdalar/onctl/internal/tools"
-
-	"github.com/cdalar/onctl/internal/files"
-
 	"github.com/cdalar/onctl/internal/cloud"
+	"github.com/cdalar/onctl/internal/tools"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
@@ -17,10 +14,9 @@ import (
 )
 
 var (
-	composeFile   string
+	// composeFile   string
 	publicKeyFile string
-	initFile      string
-	exposePort    int64
+	filename      string
 	instanceType  string
 	vmName        string
 	vm            cloud.Vm
@@ -52,15 +48,6 @@ var createCmd = &cobra.Command{
 		home, err := homedir.Dir()
 		if err != nil {
 			log.Fatal(err)
-		}
-		if initFile != "" {
-			if _, err := os.Stat(initFile); err != nil {
-				log.Println(initFile, "file not found in fileststem, trying to find in embeded files")
-				if _, err = files.EmbededFiles.ReadFile(initFile); err != nil {
-					log.Println(initFile, "file not found in embeded files")
-					os.Exit(1)
-				}
-			}
 		}
 
 		if publicKeyFile == "" {
@@ -117,60 +104,7 @@ var createCmd = &cobra.Command{
 			if err != nil {
 				log.Fatal(err)
 			}
+
 		}
 	},
 }
-
-// func runDocker(instanceId string) {
-// 	instance := provideraws.DescribeInstance(instanceId)
-// 	log.Println("Public IP: " + *instance.PublicIpAddress)
-// 	err := os.WriteFile("ip.txt", []byte(*instance.PublicIpAddress), 0644)
-// 	if err != nil {
-// 		log.Print(err)
-// 	}
-
-// 	log.Println("[DEBUG] composeFile: " + composeFile)
-// 	err = tools.SSHCopyFile("ubuntu", *instance.PublicIpAddress, string(privateKey), composeFile, "/home/ubuntu/docker-compose.yml")
-// 	if err != nil {
-// 		log.Println("Error on copy Compose")
-// 		log.Println(err)
-// 	}
-// log.Println("[DEBUG] initFile: " + initFile)
-// err = tools.SSHCopyFile("ubuntu", *instance.PublicIpAddress, string(privateKey), initFile, "/home/ubuntu/init.sh")
-// if err != nil {
-// 	log.Println("Error on copy Init")
-// 	log.Println(err)
-// }
-
-// 	log.Println("[DEBUG] running init.sh...")
-// 	runInitOutput, err := tools.RemoteRun("ubuntu", *instance.PublicIpAddress, string(privateKey), "chmod +x init.sh && sudo ./init.sh")
-// 	if err != nil {
-// 		log.Println("Error on init.sh")
-// 		fmt.Println(runInitOutput)
-// 		log.Fatal(err)
-// 	}
-// 	fmt.Println(runInitOutput)
-
-// 	// cmdCompose := exec.Command("DOCKER_HOST=ssh://ubuntu@$(cat ip.txt)", "docker", "compose", "up", "-d", "--build")
-// 	// log.Println(*instance.PublicIpAddress)
-// 	// os.Setenv("DOCKER_HOST", "ssh://ubuntu@"+*instance.PublicIpAddress)
-// 	// cmdCompose := exec.Command("docker", "compose", "up", "-d", "--build")
-// 	// cmdCompose := exec.Command("ls", "-al")
-// 	// // cmdCompose := exec.Command("echo", "$ASD")
-// 	// err = cmdCompose.Run()
-// 	// if err != nil {
-// 	// 	log.Println("Run Compose")
-// 	// 	log.Fatal(err)
-// 	// }
-// 	// out, err := cmdCompose.Output()
-// 	// if err != nil {
-// 	// 	log.Fatal(err)
-// 	// }
-// 	// fmt.Println(string(out))
-// 	log.Println("Service configured on:", "http://"+*instance.PublicIpAddress+":"+strconv.FormatInt(exposePort, 10))
-
-// 	tools.CreateDeployOutputFile(&tools.DeployOutput{
-// 		PublicIP:  *instance.PublicIpAddress,
-// 		PublicURL: "http://" + *instance.PublicIpAddress + ":" + strconv.FormatInt(exposePort, 10),
-// 	})
-// }
