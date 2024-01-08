@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/cdalar/onctl/internal/tools"
+	"github.com/spf13/viper"
 
 	"github.com/cdalar/onctl/internal/provideraws"
 
@@ -22,8 +23,8 @@ type ProviderAws struct {
 }
 
 func (p ProviderAws) Deploy(server Vm) (Vm, error) {
-	if server.Type == "##" {
-		server.Type = "t2.micro"
+	if server.Type == "" {
+		server.Type = viper.GetString("aws.vm.type")
 	}
 	images, err := provideraws.GetImages()
 	if err != nil {
@@ -312,5 +313,5 @@ func (p ProviderAws) SSHInto(serverName, port string) {
 	}
 
 	ipAddress := s.IP
-	tools.SSHIntoVM(ipAddress, "ubuntu", port)
+	tools.SSHIntoVM(ipAddress, viper.GetString("aws.vm.username"), port)
 }

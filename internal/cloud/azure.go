@@ -57,6 +57,14 @@ func (p ProviderAzure) List() (VmList, error) {
 					log.Println("[DEBUG] private IP: ", serverIP)
 				}
 			}
+			cloudList = append(cloudList, Vm{
+				ID:        filepath.Base(items["vmId"].(string)),
+				Name:      items["vmName"].(string),
+				IP:        items["publicIpAddress"].(string),
+				Type:      items["vmSize"].(string),
+				Status:    items["status"].(string),
+				CreatedAt: createdAt,
+			})
 		}
 
 		cloudList = append(cloudList, mapAzureServer(server, serverIP))
@@ -77,6 +85,7 @@ func (p ProviderAzure) CreateSSHKey(publicKeyFileName string) (string, error) {
 	if err != nil {
 		log.Println(err)
 	}
+	// Create the SSH Key
 	sshKey, err := p.SSHKeyClient.Create(context.Background(), viper.GetString("azure.resourceGroup"), username, armcompute.SSHPublicKeyResource{
 		Properties: &armcompute.SSHPublicKeyResourceProperties{
 			PublicKey: to.Ptr(string(sshPublicKeyData[:])),
@@ -84,7 +93,7 @@ func (p ProviderAzure) CreateSSHKey(publicKeyFileName string) (string, error) {
 		Location: to.Ptr(viper.GetString("azure.location")),
 	}, nil)
 	if err != nil {
-		log.Println(err)
+		log.Fatalln(err)
 	}
 	return *sshKey.ID, err
 }
@@ -118,7 +127,8 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 	}
 	log.Println("[DEBUG] ", nic)
 
-	poller, err := p.VmClient.BeginCreateOrUpdate(context.Background(), viper.GetString("azure.resourceGroup"), server.Name, armcompute.VirtualMachine{
+	// Create the VM
+	vmDefinition := armcompute.VirtualMachine{
 		Location: to.Ptr(viper.GetString("azure.location")),
 		Properties: &armcompute.VirtualMachineProperties{
 			HardwareProfile: &armcompute.HardwareProfile{
@@ -167,7 +177,15 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 				},
 			},
 		},
-	}, nil)
+	}
+
+	if viper.GetString("azure.vm.priority") == "Spot" {
+		vmDefinition.Properties.Priority = to.Ptr(armcompute.VirtualMachinePriorityTypesSpot)
+		vmDefinition.Properties.EvictionPolicy = to.Ptr(armcompute.VirtualMachineEvictionPolicyTypesDelete)
+		vmDefinition.Properties.BillingProfile = &armcompute.BillingProfile{MaxPrice: to.Ptr(0.1)}
+	}
+
+	poller, err := p.VmClient.BeginCreateOrUpdate(context.Background(), viper.GetString("azure.resourceGroup"), server.Name, vmDefinition, nil)
 	if err != nil {
 		log.Fatalln(err)
 	}

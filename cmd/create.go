@@ -25,6 +25,7 @@ var (
 	vmName        string
 	vm            cloud.Vm
 	cloudInitFile string
+	SSHPort       string
 )
 
 func init() {
@@ -34,8 +35,8 @@ func init() {
 	// createCmd.Flags().Int64VarP(&exposePort, "port", "p", 80, "port you want to expose to internet")
 	createCmd.Flags().StringVarP(&instanceType, "type", "t", "", "instance type")
 	createCmd.Flags().StringVarP(&vmName, "name", "n", "", "vm name")
-	createCmd.Flags().StringVarP(&port, "port", "p", "22", "ssh port")
-	createCmd.Flags().StringVar(&cloudInitFile, "cloud-init-file", "", "cloud-init file")
+	createCmd.Flags().StringVarP(&SSHPort, "ssh-port", "p", "22", "ssh port")
+	createCmd.Flags().StringVar(&cloudInitFile, "cloud-init", "", "cloud-init file")
 
 }
 
@@ -44,6 +45,10 @@ var createCmd = &cobra.Command{
 	Aliases: []string{"start", "up"},
 	Short:   "Create a VM",
 	Run: func(cmd *cobra.Command, args []string) {
+		filename = findFile(filename)
+		cloudInitFile = findFile(cloudInitFile)
+		log.Println("[DEBUG]", "filename: ", filename)
+		log.Println("[DEBUG]", "cloudInitFile: ", cloudInitFile)
 		home, err := homedir.Dir()
 		if err != nil {
 			log.Fatal(err)
@@ -71,16 +76,21 @@ var createCmd = &cobra.Command{
 		}
 		log.Printf("[DEBUG] keyID: %s", keyID)
 		if vmName == "" {
-			vmName = tools.GenerateMachineUniqueName()
+			if viper.GetString(cloudProvider+".vm.name") != "" {
+				vmName = viper.GetString(cloudProvider + ".vm.name")
+			} else {
+				vmName = tools.GenerateMachineUniqueName()
+			}
 		}
 		log.Printf("[DEBUG] vmName: %s", vmName)
 		s := cloud.Vm{
 			Name:          vmName,
 			Type:          instanceType,
 			SSHKeyID:      keyID,
-			SSHPort:       port,
+			SSHPort:       SSHPort,
 			CloudInitFile: cloudInitFile,
 		}
+		log.Println("[DEBUG] s: ", s)
 		fmt.Println("Starting server...")
 		vm, err = provider.Deploy(s)
 		if err != nil {
@@ -96,27 +106,14 @@ var createCmd = &cobra.Command{
 		if _, err := os.Stat(publicKeyFile); err != nil {
 			log.Fatalln(publicKeyFile + " Public key file not found")
 		}
+		log.Println("[DEBUG] waiting for cloud-init")
+		log.Println("[DEBUG] ssh port: ", s.SSHPort)
 		tools.WaitForCloudInit(viper.GetString(cloudProvider+".vm.username"), vm.IP, s.SSHPort, string(privateKey))
-		if initFile != "" {
-			initFileLocal, err := os.Stat(initFile)
-			if err != nil { // file not found in filesystem
-				initFileEmbeded, _ := files.EmbededFiles.ReadFile(initFile)
-				tmpfile, err := os.CreateTemp("", "onctl")
-				if err != nil {
-					log.Fatal(err)
-				}
-				log.Println("[DEBUG] initTmpfile:" + tmpfile.Name())
-				_, err = tmpfile.Write(initFileEmbeded)
-				if err != nil {
-					log.Fatal(err)
-				}
-				defer tmpfile.Close()
-				initFile = tmpfile.Name()
-			} else { // file found in filesystem
-				initFile = initFileLocal.Name()
-			}
-
-			_, err = tools.RunRemoteBashScript(viper.GetString(cloudProvider+".vm.username"), vm.IP, vm.SSHPort, string(privateKey), initFile)
+		log.Println("[DEBUG] cloud-init finished")
+		if filename != "" {
+			log.Println("[DEBUG] filename: ", filename)
+			log.Println("[DEBUG] ssh port: ", s.SSHPort)
+			_, err = tools.RunRemoteBashScript(viper.GetString(cloudProvider+".vm.username"), vm.IP, s.SSHPort, string(privateKey), filename)
 			if err != nil {
 				log.Fatal(err)
 			}

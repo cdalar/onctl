@@ -7,9 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	port string
-)
+var port string
 
 func init() {
 	sshCmd.Flags().StringVarP(&port, "port", "p", "22", "ssh port")
