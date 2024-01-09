@@ -2,5 +2,4 @@ hetzner:
   location: fsn1
   vm:
     type: cpx21
-    name: onctl
     username: root

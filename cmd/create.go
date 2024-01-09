@@ -27,7 +27,7 @@ var (
 
 func init() {
 	createCmd.Flags().StringVarP(&publicKeyFile, "publicKey", "k", "", "Path to publicKey file (default: ~/.ssh/id_rsa))")
-	createCmd.Flags().StringVarP(&initFile, "initFile", "i", "", "init bash script file")
+	createCmd.Flags().StringVarP(&filename, "init", "i", "", "init bash script file")
 	createCmd.Flags().StringVarP(&instanceType, "type", "t", "", "instance type")
 	createCmd.Flags().StringVarP(&vmName, "name", "n", "", "vm name")
 	createCmd.Flags().StringVarP(&SSHPort, "ssh-port", "p", "22", "ssh port")
@@ -62,8 +62,8 @@ var createCmd = &cobra.Command{
 		}
 		log.Printf("[DEBUG] keyID: %s", keyID)
 		if vmName == "" {
-			if viper.GetString(cloudProvider+".vm.name") != "" {
-				vmName = viper.GetString(cloudProvider + ".vm.name")
+			if viper.GetString("vm.name") != "" {
+				vmName = viper.GetString("vm.name")
 			} else {
 				vmName = tools.GenerateMachineUniqueName()
 			}
