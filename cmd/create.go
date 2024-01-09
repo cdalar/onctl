@@ -20,7 +20,6 @@ var (
 	instanceType  string
 	vmName        string
 	vm            cloud.Vm
-	initFile      string
 	cloudInitFile string
 	SSHPort       string
 )
