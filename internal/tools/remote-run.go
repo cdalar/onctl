@@ -59,27 +59,28 @@ func RunRemoteBashScript(username, ip, sshPort, privateKey, bashScript string) (
 		log.Fatalln(err)
 	}
 
-	// Copy bash script or tar.gz to .onctl-init folder
 	fileBaseName := filepath.Base(bashScript)
-	err = SSHCopyFile(username, ip, sshPort, privateKey, bashScript, ".onctl-init/"+fileBaseName)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
 	// Extract tar.gz
 	if slices.Contains([]string{".tgz", ".gz"}, filepath.Ext(bashScript)) {
-		runInitOutput, err = RemoteRun(username, ip, sshPort, privateKey, "cd .onctl-init && tar -xzf "+bashScript)
+		// Copy bash script or tar.gz to .onctl-init folder
+		err = SSHCopyFile(username, ip, sshPort, privateKey, bashScript, ".onctl-init/"+fileBaseName)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		runInitOutput, err = RemoteRun(username, ip, sshPort, privateKey, "cd .onctl-init && tar -xzf "+fileBaseName)
 		if err != nil {
 			fmt.Println(runInitOutput)
 			log.Fatalln(err)
 		}
-		command = "cd .onctl-init && chmod +x init.sh && sudo ./init.sh"
 	} else {
-		command = "cd .onctl-init && chmod +x " + bashScript + " && sudo ./" + bashScript
+		err = SSHCopyFile(username, ip, sshPort, privateKey, bashScript, ".onctl-init/init.sh")
+		if err != nil {
+			log.Fatalln(err)
+		}
 	}
 
 	log.Println("[DEBUG] running init.sh...")
-
+	command = "cd .onctl-init && chmod +x init.sh && sudo ./init.sh"
 	runInitOutput, err = RemoteRun(username, ip, sshPort, privateKey, command)
 	if err != nil {
 		log.Println("Error on init.sh")
