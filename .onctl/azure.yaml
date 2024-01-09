@@ -1,10 +1,11 @@
 azure:
   subscriptionId: 3c110410-a29d-4402-96c4-f82b0feaa895
   resourceGroup: test2
-  location: westeurope
+  location: westeurope # or ex. sweedencentral
   vm:
     username: azureuser
-    type: Standard_D4s_v3
+    type: Standard_D2ads_v5
+    priority: Spot # Spot or Regular
     image: 
       publisher: canonical
       offer:     0001-com-ubuntu-server-jammy

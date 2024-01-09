@@ -21,15 +21,15 @@ var (
 	vmName        string
 	vm            cloud.Vm
 	cloudInitFile string
+	SSHPort       string
 )
 
 func init() {
-	// createCmd.Flags().StringVarP(&composeFile, "docker-compose", "c", "", "Path to docker-compose file")
-	createCmd.Flags().StringVarP(&publicKeyFile, "public-key", "k", "", "Path to publicKey file (default: ~/.ssh/id_rsa))")
+	createCmd.Flags().StringVarP(&publicKeyFile, "publicKey", "k", "", "Path to publicKey file (default: ~/.ssh/id_rsa))")
 	createCmd.Flags().StringVarP(&filename, "init", "i", "", "init bash script file")
 	createCmd.Flags().StringVarP(&instanceType, "type", "t", "", "instance type")
 	createCmd.Flags().StringVarP(&vmName, "name", "n", "", "vm name")
-	createCmd.Flags().StringVarP(&port, "port", "p", "22", "ssh port")
+	createCmd.Flags().StringVarP(&SSHPort, "ssh-port", "p", "22", "ssh port")
 	createCmd.Flags().StringVar(&cloudInitFile, "cloud-init", "", "cloud-init file")
 
 }
@@ -40,7 +40,9 @@ var createCmd = &cobra.Command{
 	Short:   "Create a VM",
 	Run: func(cmd *cobra.Command, args []string) {
 		filename = findFile(filename)
+		cloudInitFile = findFile(cloudInitFile)
 		log.Println("[DEBUG]", "filename: ", filename)
+		log.Println("[DEBUG]", "cloudInitFile: ", cloudInitFile)
 		home, err := homedir.Dir()
 		if err != nil {
 			log.Fatal(err)
@@ -59,16 +61,21 @@ var createCmd = &cobra.Command{
 		}
 		log.Printf("[DEBUG] keyID: %s", keyID)
 		if vmName == "" {
-			vmName = tools.GenerateMachineUniqueName()
+			if viper.GetString("vm.name") != "" {
+				vmName = viper.GetString("vm.name")
+			} else {
+				vmName = tools.GenerateMachineUniqueName()
+			}
 		}
 		log.Printf("[DEBUG] vmName: %s", vmName)
 		s := cloud.Vm{
 			Name:          vmName,
 			Type:          instanceType,
 			SSHKeyID:      keyID,
-			SSHPort:       port,
+			SSHPort:       SSHPort,
 			CloudInitFile: cloudInitFile,
 		}
+		log.Println("[DEBUG] s: ", s)
 		fmt.Println("Starting server...")
 		vm, err = provider.Deploy(s)
 		if err != nil {
@@ -84,8 +91,13 @@ var createCmd = &cobra.Command{
 		if _, err := os.Stat(publicKeyFile); err != nil {
 			log.Fatalln(publicKeyFile + " Public key file not found")
 		}
+		log.Println("[DEBUG] waiting for cloud-init")
+		log.Println("[DEBUG] ssh port: ", s.SSHPort)
 		tools.WaitForCloudInit(viper.GetString(cloudProvider+".vm.username"), vm.IP, s.SSHPort, string(privateKey))
+		log.Println("[DEBUG] cloud-init finished")
 		if filename != "" {
+			log.Println("[DEBUG] filename: ", filename)
+			log.Println("[DEBUG] ssh port: ", s.SSHPort)
 			_, err = tools.RunRemoteBashScript(viper.GetString(cloudProvider+".vm.username"), vm.IP, s.SSHPort, string(privateKey), filename)
 			if err != nil {
 				log.Fatal(err)

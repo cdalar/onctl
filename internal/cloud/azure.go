@@ -116,6 +116,7 @@ func (p ProviderAzure) CreateSSHKey(publicKeyFileName string) (string, error) {
 	if err != nil {
 		log.Println(err)
 	}
+	// Create the SSH Key
 	sshKey, err := p.SSHKeyClient.Create(context.Background(), viper.GetString("azure.resourceGroup"), username, armcompute.SSHPublicKeyResource{
 		Properties: &armcompute.SSHPublicKeyResourceProperties{
 			PublicKey: to.Ptr(string(sshPublicKeyData[:])),
@@ -123,7 +124,7 @@ func (p ProviderAzure) CreateSSHKey(publicKeyFileName string) (string, error) {
 		Location: to.Ptr(viper.GetString("azure.location")),
 	}, nil)
 	if err != nil {
-		log.Println(err)
+		log.Fatalln(err)
 	}
 	return *sshKey.ID, err
 }
@@ -157,7 +158,8 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 	}
 	log.Println("[DEBUG] ", nic)
 
-	poller, err := p.VmClient.BeginCreateOrUpdate(context.Background(), viper.GetString("azure.resourceGroup"), server.Name, armcompute.VirtualMachine{
+	// Create the VM
+	vmDefinition := armcompute.VirtualMachine{
 		Location: to.Ptr(viper.GetString("azure.location")),
 		Properties: &armcompute.VirtualMachineProperties{
 			HardwareProfile: &armcompute.HardwareProfile{
@@ -206,7 +208,15 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 				},
 			},
 		},
-	}, nil)
+	}
+
+	if viper.GetString("azure.vm.priority") == "Spot" {
+		vmDefinition.Properties.Priority = to.Ptr(armcompute.VirtualMachinePriorityTypesSpot)
+		vmDefinition.Properties.EvictionPolicy = to.Ptr(armcompute.VirtualMachineEvictionPolicyTypesDelete)
+		vmDefinition.Properties.BillingProfile = &armcompute.BillingProfile{MaxPrice: to.Ptr(0.1)}
+	}
+
+	poller, err := p.VmClient.BeginCreateOrUpdate(context.Background(), viper.GetString("azure.resourceGroup"), server.Name, vmDefinition, nil)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -225,7 +235,7 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 
 func (p ProviderAzure) Destroy(server Vm) error {
 	log.Println("[DEBUG] Destroy Server")
-	fmt.Print("Destroying ", server.Name, " ...")
+	fmt.Print("Destroying", server.Name, "...")
 	resp, err := p.VmClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name, nil)
 	if err != nil {
 		log.Fatalln(err)
@@ -243,7 +253,7 @@ func (p ProviderAzure) Destroy(server Vm) error {
 		fmt.Println("DONE")
 	}
 
-	fmt.Print("Destroying other resources of ", server.Name, " ...")
+	fmt.Print("Destroying other resources of", server.Name, "...")
 	nic, err := p.NicClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-nic", nil)
 	if err != nil {
 		log.Fatalln(err)

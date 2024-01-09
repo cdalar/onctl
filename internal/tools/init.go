@@ -47,7 +47,7 @@ func RunLocalInit(username, ip, privateKey, initFile string) {
 func RunInit(username, ip, sshPort, privateKey, initFile string) {
 	fmt.Print("Running Init Script...")
 	log.Println("[DEBUG] initFile: " + initFile)
-	err := SSHCopyFile(username, ip, privateKey, initFile, "./init.sh")
+	err := SSHCopyFile(username, ip, sshPort, privateKey, initFile, "./init.sh")
 	if err != nil {
 		log.Println("Error on copy Init")
 		log.Fatalln(err)

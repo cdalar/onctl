@@ -134,7 +134,7 @@ func findFile(filename string) (filePath string) {
 	if err == nil { // file found in filesystem
 		return filename
 	} else {
-		log.Println("[DEBUG]", filename, "file not found in fileststem, trying to find in embeded files")
+		log.Println("[DEBUG]", filename, "file not found in filesystem, trying to find in embeded files")
 	}
 
 	// file not found in filesystem, trying to find in embeded files
