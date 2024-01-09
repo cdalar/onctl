@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/cdalar/onctl/internal/tools"
+	"github.com/spf13/viper"
 
 	"github.com/cdalar/onctl/internal/provideraws"
 
@@ -22,8 +23,8 @@ type ProviderAws struct {
 }
 
 func (p ProviderAws) Deploy(server Vm) (Vm, error) {
-	if server.Type == "##" {
-		server.Type = "t2.micro"
+	if server.Type == "" {
+		server.Type = viper.GetString("aws.vm.type")
 	}
 	images, err := provideraws.GetImages()
 	if err != nil {
@@ -40,15 +41,15 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 	vpcId := provideraws.GetDefaultVpcId(p.Client)
 	log.Println("[DEBUG] VPC ID: ", vpcId)
 
-	securityGroupIds := []*string{}
-	sgIdForSSH := provideraws.CreateSecurityGroupSSH(p.Client, vpcId)
-	securityGroupIds = append(securityGroupIds, sgIdForSSH)
-	for _, port := range server.ExposePorts {
-		sgId := provideraws.CreateSecurityGroupForPort(p.Client, vpcId, port)
-		log.Println("[DEBUG] Security Group ID: ", sgId)
-		securityGroupIds = append(securityGroupIds, sgId)
-	}
-	log.Println("[DEBUG] Security Group Ids: ", securityGroupIds)
+	// securityGroupIds := []*string{}
+	// sgIdForSSH := provideraws.CreateSecurityGroupSSH(p.Client, vpcId)
+	// securityGroupIds = append(securityGroupIds, sgIdForSSH)
+	// for _, port := range server.ExposePorts {
+	// 	sgId := provideraws.CreateSecurityGroupForPort(p.Client, vpcId, port)
+	// 	log.Println("[DEBUG] Security Group ID: ", sgId)
+	// 	securityGroupIds = append(securityGroupIds, sgId)
+	// }
+	// log.Println("[DEBUG] Security Group Ids: ", securityGroupIds)
 	input := &ec2.RunInstancesInput{
 		ImageId:      aws.String(*images[0].ImageId),
 		InstanceType: aws.String(server.Type),
@@ -61,7 +62,7 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 				// SubnetId:                 aws.String(subnetIds[0]),
 				AssociatePublicIpAddress: aws.Bool(true),
 				DeleteOnTermination:      aws.Bool(true),
-				Groups:                   securityGroupIds,
+				// Groups:                   securityGroupIds,
 			},
 		},
 		TagSpecifications: []*ec2.TagSpecification{
@@ -303,7 +304,7 @@ func (p ProviderAws) getServerByServerName(serverName string) Vm {
 	return mapAwsServer(s.Reservations[0].Instances[0])
 }
 
-func (p ProviderAws) SSHInto(serverName string) {
+func (p ProviderAws) SSHInto(serverName, port string) {
 
 	s := p.getServerByServerName(serverName)
 	log.Println("[DEBUG] " + s.String())
@@ -312,5 +313,5 @@ func (p ProviderAws) SSHInto(serverName string) {
 	}
 
 	ipAddress := s.IP
-	tools.SSHIntoVM(ipAddress, "ubuntu")
+	tools.SSHIntoVM(ipAddress, viper.GetString("aws.vm.username"), port)
 }

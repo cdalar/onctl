@@ -10,7 +10,7 @@ import (
 
 	"github.com/cdalar/onctl/internal/tools"
 
-	"github.com/hetznercloud/hcloud-go/hcloud"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/spf13/viper"
 	"golang.org/x/crypto/ssh"
 )
@@ -21,7 +21,7 @@ type ProviderHetzner struct {
 
 func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 
-	sshKeyIDint, err := strconv.Atoi(server.SSHKeyID)
+	sshKeyIDint, err := strconv.ParseInt(server.SSHKeyID, 10, 64)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -44,6 +44,7 @@ func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 		Labels: map[string]string{
 			"Owner": "onctl",
 		},
+		UserData: tools.FileToBase64(server.CloudInitFile),
 	})
 	if err != nil {
 		if herr, ok := err.(hcloud.Error); ok {
@@ -79,7 +80,7 @@ func (p ProviderHetzner) Destroy(server Vm) error {
 		log.Println("[DEBUG] Server found ID: " + s.ID)
 		server.ID = s.ID
 	}
-	id, err := strconv.Atoi(server.ID)
+	id, err := strconv.ParseInt(server.ID, 10, 64)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -89,7 +90,6 @@ func (p ProviderHetzner) Destroy(server Vm) error {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	log.Println("Server deleted")
 	return nil
 }
 
@@ -149,7 +149,7 @@ func (p ProviderHetzner) CreateSSHKey(publicKeyFile string) (keyID string, err e
 				if err != nil {
 					log.Fatalln(err)
 				}
-				log.Println("[DEBUG] SSH Key ID: " + strconv.Itoa(key.ID))
+				log.Println("[DEBUG] SSH Key ID: " + strconv.FormatInt(key.ID, 10))
 				return fmt.Sprint(key.ID), nil
 			default:
 				fmt.Println(herr.Error())
@@ -166,7 +166,7 @@ func (p ProviderHetzner) CreateSSHKey(publicKeyFile string) (keyID string, err e
 // mapHetznerServer gets a hcloud.Server and returns a Vm
 func mapHetznerServer(server hcloud.Server) Vm {
 	return Vm{
-		ID:        strconv.Itoa(server.ID),
+		ID:        strconv.FormatInt(server.ID, 10),
 		Name:      server.Name,
 		IP:        server.PublicNet.IPv4.IP.String(),
 		Type:      server.ServerType.Name,
@@ -187,7 +187,7 @@ func (p ProviderHetzner) getServerByServerName(serverName string) Vm {
 	return mapHetznerServer(*s)
 }
 
-func (p ProviderHetzner) SSHInto(serverName string) {
+func (p ProviderHetzner) SSHInto(serverName, port string) {
 	// server, _, err := p.Client.Server().Get(ctx, idOrName)
 	server, _, err := p.Client.Server.GetByName(context.TODO(), serverName)
 	if server == nil {
@@ -209,5 +209,5 @@ func (p ProviderHetzner) SSHInto(serverName string) {
 	}
 
 	ipAddress := server.PublicNet.IPv4.IP
-	tools.SSHIntoVM(ipAddress.String(), "root")
+	tools.SSHIntoVM(ipAddress.String(), "root", port)
 }

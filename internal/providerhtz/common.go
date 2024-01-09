@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/hetznercloud/hcloud-go/hcloud"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
 func GetClient() *hcloud.Client {

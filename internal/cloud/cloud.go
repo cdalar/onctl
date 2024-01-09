@@ -25,8 +25,10 @@ type Vm struct {
 	Location string
 	// SSHKeyID is the ID of the SSH key
 	SSHKeyID string
-	// ExposePorts is the list of ports to expose
-	ExposePorts []int64
+	// SSHPort is the port to connect to the instance
+	SSHPort string
+	// CloudInit is the cloud-init file
+	CloudInitFile string
 	// CreatedAt is the creation date of the instance
 	CreatedAt time.Time
 }
@@ -51,5 +53,5 @@ type CloudProviderInterface interface {
 	// CreateSSHKey creates a new SSH key
 	CreateSSHKey(publicKeyFile string) (keyID string, err error)
 	// SSHInto connects to a VM
-	SSHInto(serverName string)
+	SSHInto(serverName string, port string)
 }

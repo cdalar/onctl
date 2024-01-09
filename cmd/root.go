@@ -28,13 +28,13 @@ var (
 
 func checkCloudProvider() {
 	cloudProvider = os.Getenv("ONCTL_CLOUD")
-	fmt.Println("Using: " + cloudProvider)
+	// ONCTL_CLOUD is set
 	if cloudProvider != "" {
 		if !tools.Contains(cloudProviderList, cloudProvider) {
 			log.Println("Cloud Platform (" + cloudProvider + ") is not Supported\nPlease use one of the following: " + strings.Join(cloudProviderList, ","))
 			os.Exit(1)
 		}
-	} else {
+	} else { // ONCTL_CLOUD is not set
 		cloudProvider = tools.WhichCloudProvider()
 		if cloudProvider != "none" {
 			err := os.Setenv("ONCTL_CLOUD", cloudProvider)
@@ -56,7 +56,6 @@ func Execute() error {
 		checkCloudProvider()
 		ReadConfig(cloudProvider)
 	}
-
 	switch cloudProvider {
 	case "hetzner":
 		provider = &cloud.ProviderHetzner{
@@ -68,10 +67,12 @@ func Execute() error {
 		}
 	case "azure":
 		provider = &cloud.ProviderAzure{
-			VmClient:       providerazure.GetVmClient(),
-			NicClient:      providerazure.GetNicClient(),
-			PublicIPClient: providerazure.GetIPClient(),
-			SSHKeyClient:   providerazure.GetSSHKeyClient(),
+			ResourceGraphClient: providerazure.GetResourceGraphClient(),
+			VmClient:            providerazure.GetVmClient(),
+			NicClient:           providerazure.GetNicClient(),
+			PublicIPClient:      providerazure.GetIPClient(),
+			SSHKeyClient:        providerazure.GetSSHKeyClient(),
+			VnetClient:          providerazure.GetVnetClient(),
 		}
 	case "oracle":
 		provider = &cloud.ProviderOracle{

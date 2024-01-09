@@ -1,11 +1,18 @@
 azure:
-  resourceGroup: onkube
+  subscriptionId: 00000000-0000-0000-0000-000000000000
+  resourceGroup: test
   location: westeurope
   vm:
     username: azureuser
-    type: Standard_B2ms
+    type: Standard_D4s_v3
     image: 
       publisher: canonical
       offer:     0001-com-ubuntu-server-jammy
       version:   latest
       sku:       22_04-lts-gen2
+    vnet:
+      name: onctl-vnet
+      cidr: 10.1.0.0/16
+      subnet:
+        name: onctl-subnet1
+        cidr: 10.1.1.0/24

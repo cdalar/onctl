@@ -1,17 +1,41 @@
 package tools
 
 import (
+	"encoding/base64"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"time"
 )
 
-func WaitForCloudInit(username, ip string, privateKey string) {
+func FileToBase64(filepath string) string {
+	if filepath == "" {
+		return ""
+	}
+	// Check if file exists
+	if _, err := os.Stat(filepath); err != nil {
+		log.Println("FileToBase64:" + err.Error())
+		log.Println("Setting empty cloud-init file")
+		return ""
+	}
+
+	// Read the file
+	data, err := os.ReadFile(filepath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Encode to base64
+	encoded := base64.StdEncoding.EncodeToString(data)
+	return encoded
+}
+
+// WaitForCloudInit waits for cloud-init to finish
+func WaitForCloudInit(username, ip, sshPort, privateKey string) {
 	var tries int
 	for {
 
-		isOK, err := RemoteRun(username, ip, privateKey, "[ -f /run/cloud-init/result.json ] && echo -n \"OK\"")
+		isOK, err := RemoteRun(username, ip, sshPort, privateKey, "[ -f /run/cloud-init/result.json ] && echo -n \"OK\"")
 		if err != nil {
 			log.Println("[DEBUG] RemoteRun:" + err.Error())
 		}

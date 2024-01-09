@@ -8,7 +8,7 @@ import (
 // const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 const charset = "abcdefghjkmnpqrstuvwxyz23456789" //Some chars i,l,o,1,0 removed
 const charalphabetic = "abcdefghjkmnpqrstuvwxyz"  //Only Alphabetic characters and Some chars i,l,o, removed
-const passwordSet = "abcdefghjkmnpqrstuvwxyz23456789!@#$%^&*()_+"
+const charsetSpecial = "abcdefghjkmnpqrstuvwxyz23456789!@#$%^&*()_+"
 
 var seededRand *rand.Rand = rand.New(
 	rand.NewSource(time.Now().UnixNano()))
@@ -29,5 +29,5 @@ func String(length int) string {
 }
 
 func Password(length int) string {
-	return StringWithCharset(length, passwordSet)
+	return StringWithCharset(length, charsetSpecial)
 }
