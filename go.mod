@@ -9,7 +9,7 @@ require (
 	github.com/hetznercloud/hcloud-go/v2 v2.5.1
 	github.com/manifoldco/promptui v0.9.0
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/oracle/oci-go-sdk v24.3.0+incompatible
+	github.com/oracle/oci-go-sdk/v65 v65.55.1
 	github.com/spf13/cobra v1.8.0
 	k8s.io/apimachinery v0.27.1
 )
@@ -22,6 +22,7 @@ require (
 	github.com/chzyer/readline v1.5.1 // indirect
 	github.com/fatih/color v1.14.1 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
+	github.com/gofrs/flock v0.8.1 // indirect
 	github.com/golang-jwt/jwt/v5 v5.0.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/uuid v1.4.0 // indirect
@@ -42,6 +43,7 @@ require (
 	github.com/prometheus/procfs v0.11.1 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
+	github.com/sony/gobreaker v0.5.0 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.6.0 // indirect

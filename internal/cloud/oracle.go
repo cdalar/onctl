@@ -6,15 +6,16 @@ import (
 	"log"
 
 	"github.com/cdalar/onctl/internal/tools"
+	"github.com/spf13/viper"
 
-	"github.com/oracle/oci-go-sdk/common"
-	"github.com/oracle/oci-go-sdk/core"
-	"github.com/oracle/oci-go-sdk/example/helpers"
+	"github.com/oracle/oci-go-sdk/v65/common"
+	"github.com/oracle/oci-go-sdk/v65/core"
+	"github.com/oracle/oci-go-sdk/v65/example/helpers"
 )
 
 type ProviderOracle struct {
 	Client core.ComputeClient
-	Base   common.BaseClient
+	// Base   common.BaseClient
 }
 
 const (
@@ -69,10 +70,16 @@ func (p ProviderOracle) CreateSSHKey(publicKeyFile string) (keyID string, err er
 	return
 }
 
-func (p ProviderOracle) SSHInto(serverName string) {
+func (p ProviderOracle) SSHInto(serverName, port string) {
+
+	// s := p.getServerByServerName(serverName)
+	// log.Println("[DEBUG] " + s.String())
+	// if s.ID == "" {
+	// 	fmt.Println("Server not found")
+	// }
 
 	ipAddress := "1.1.1.1"
-	tools.SSHIntoVM(ipAddress, "root")
+	tools.SSHIntoVM(ipAddress, viper.GetString("oracle.vm.username"), port)
 }
 
 func CreateOrGetSubnet() core.Subnet {
@@ -233,3 +240,31 @@ func listVcns(ctx context.Context, c core.VirtualNetworkClient) []core.Vcn {
 	helpers.FatalIfError(err)
 	return r.Items
 }
+
+// func (p ProviderOracle) getServerByServerName(serverName string) Vm {
+
+// 	s, err := p.Client.DescribeInstances(&ec2.DescribeInstancesInput{
+// 		Filters: []*ec2.Filter{
+// 			{
+// 				Name:   aws.String("tag:Name"),
+// 				Values: []*string{aws.String(serverName)},
+// 			},
+// 			{
+// 				Name:   aws.String("tag:Owner"),
+// 				Values: []*string{aws.String("onctl")},
+// 			},
+// 			{
+// 				Name:   aws.String("instance-state-name"),
+// 				Values: []*string{aws.String("running")},
+// 			},
+// 		},
+// 	})
+// 	if err != nil {
+// 		log.Fatalln(err)
+// 	}
+// 	if len(s.Reservations) == 0 {
+// 		fmt.Println("No server found with name: " + serverName)
+// 		os.Exit(1)
+// 	}
+// 	return mapAwsServer(s.Reservations[0].Instances[0])
+// }
