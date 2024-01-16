@@ -53,9 +53,15 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 	input := &ec2.RunInstancesInput{
 		ImageId:      aws.String(*images[0].ImageId),
 		InstanceType: aws.String(server.Type),
-		MinCount:     aws.Int64(1),
-		MaxCount:     aws.Int64(1),
-		KeyName:      aws.String(*keyPairs.KeyPairs[0].KeyName),
+		// InstanceMarketOptions: &ec2.InstanceMarketOptionsRequest{
+		// 	MarketType: aws.String("spot"),
+		// 	SpotOptions: &ec2.SpotMarketOptions{
+		// 		MaxPrice: aws.String("0.02"),
+		// 	},
+		// },
+		MinCount: aws.Int64(1),
+		MaxCount: aws.Int64(1),
+		KeyName:  aws.String(*keyPairs.KeyPairs[0].KeyName),
 		NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
 			{
 				DeviceIndex: aws.Int64(0),
@@ -82,7 +88,6 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 		},
 	}
 
-	log.Println("Starting Instance...")
 	descOut, err := p.Client.DescribeInstances(&ec2.DescribeInstancesInput{
 		Filters: []*ec2.Filter{
 			{
@@ -120,7 +125,6 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 		return Vm{}, err
 	}
 	log.Println("[DEBUG] " + result.String())
-	log.Println("Waiting for instance to be ready...")
 	err = p.Client.WaitUntilInstanceRunning(&ec2.DescribeInstancesInput{
 		InstanceIds: []*string{result.Instances[0].InstanceId},
 	})
@@ -135,7 +139,7 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 func (p ProviderAws) Destroy(server Vm) error {
 	if server.ID == "" {
 		log.Println("[DEBUG] Server ID is empty")
-		s := p.getServerByServerName(server.Name)
+		s := p.GetByName(server.Name)
 		if s.ID == "" {
 			log.Println("[DEBUG] Server not found")
 			return nil
@@ -277,7 +281,7 @@ func mapAwsServer(server *ec2.Instance) Vm {
 	}
 }
 
-func (p ProviderAws) getServerByServerName(serverName string) Vm {
+func (p ProviderAws) GetByName(serverName string) Vm {
 	s, err := p.Client.DescribeInstances(&ec2.DescribeInstancesInput{
 		Filters: []*ec2.Filter{
 			{
@@ -306,7 +310,7 @@ func (p ProviderAws) getServerByServerName(serverName string) Vm {
 
 func (p ProviderAws) SSHInto(serverName, port string) {
 
-	s := p.getServerByServerName(serverName)
+	s := p.GetByName(serverName)
 	log.Println("[DEBUG] " + s.String())
 	if s.ID == "" {
 		fmt.Println("Server not found")

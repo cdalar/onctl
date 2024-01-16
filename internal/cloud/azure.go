@@ -282,7 +282,7 @@ func (p ProviderAzure) Destroy(server Vm) error {
 }
 
 func (p ProviderAzure) SSHInto(serverName, port string) {
-	s := p.getServerByServerName(serverName)
+	s := p.GetByName(serverName)
 	log.Println("[DEBUG] " + s.String())
 	if s.ID == "" {
 		fmt.Println("Server not found")
@@ -291,7 +291,7 @@ func (p ProviderAzure) SSHInto(serverName, port string) {
 	tools.SSHIntoVM(s.IP, "azureuser", port)
 }
 
-func (p ProviderAzure) getServerByServerName(serverName string) Vm {
+func (p ProviderAzure) GetByName(serverName string) Vm {
 	vmList, err := p.List()
 	if err != nil {
 		log.Println(err)

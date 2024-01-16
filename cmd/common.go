@@ -184,3 +184,25 @@ func findFile(filename string) (filePath string) {
 	}
 	return ""
 }
+
+func getSSHKeyFilePaths(filename string) (publicKeyFile, privateKeyFile string) {
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		log.Println(err)
+	}
+
+	if filename == "" {
+		publicKeyFile = home + "/.ssh/id_rsa.pub"
+		if _, err := os.Stat(publicKeyFile); err != nil {
+			log.Fatalln(publicKeyFile + " Public key file not found")
+		}
+	}
+
+	privateKeyFile = publicKeyFile[:len(publicKeyFile)-4]
+	if _, err := os.Stat(privateKeyFile); err != nil {
+		log.Fatalln(privateKeyFile + " Private key file not found")
+	}
+
+	return publicKeyFile, privateKeyFile
+}

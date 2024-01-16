@@ -54,4 +54,6 @@ type CloudProviderInterface interface {
 	CreateSSHKey(publicKeyFile string) (keyID string, err error)
 	// SSHInto connects to a VM
 	SSHInto(serverName string, port string)
+	// GetByName gets a VM by name
+	GetByName(serverName string) Vm
 }

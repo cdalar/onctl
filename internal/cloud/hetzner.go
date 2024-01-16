@@ -72,7 +72,7 @@ func (p ProviderHetzner) Destroy(server Vm) error {
 	if server.ID == "" && server.Name != "" {
 		log.Println("[DEBUG] Server ID is empty")
 		log.Println("[DEBUG] Server name: " + server.Name)
-		s := p.getServerByServerName(server.Name)
+		s := p.GetByName(server.Name)
 		if s.ID == "" {
 			log.Println("[DEBUG] Server not found")
 			return nil
@@ -135,7 +135,7 @@ func (p ProviderHetzner) CreateSSHKey(publicKeyFile string) (keyID string, err e
 	// Print the fingerprint
 	log.Println("[DEBUG] SSH Key Fingerpring: " + SSHKeyFingerPrint)
 	log.Println("[DEBUG] SSH Key MD5: " + SSHKeyMD5)
-	fmt.Println("Creating SSHKey: " + "onctl-" + SSHKeyMD5[:8] + "...")
+	// fmt.Println("Creating SSHKey: " + "onctl-" + SSHKeyMD5[:8] + "...")
 	_, _, err = p.Client.SSHKey.Create(context.TODO(), hcloud.SSHKeyCreateOpts{
 		Name:      "onctl-" + SSHKeyMD5[:8],
 		PublicKey: string(publicKey),
@@ -144,7 +144,7 @@ func (p ProviderHetzner) CreateSSHKey(publicKeyFile string) (keyID string, err e
 		if herr, ok := err.(hcloud.Error); ok {
 			switch herr.Code {
 			case hcloud.ErrorCodeUniquenessError:
-				fmt.Println("SSH Key already exists (onctl-" + SSHKeyMD5[:8] + ")")
+				// fmt.Println("SSH Key already exists (onctl-" + SSHKeyMD5[:8] + ")")
 				key, _, err := p.Client.SSHKey.GetByFingerprint(context.TODO(), SSHKeyFingerPrint)
 				if err != nil {
 					log.Fatalln(err)
@@ -159,7 +159,7 @@ func (p ProviderHetzner) CreateSSHKey(publicKeyFile string) (keyID string, err e
 		}
 		log.Fatalln(err)
 	}
-	fmt.Println("DONE")
+	// fmt.Println("DONE")
 	return
 }
 
@@ -175,7 +175,7 @@ func mapHetznerServer(server hcloud.Server) Vm {
 	}
 }
 
-func (p ProviderHetzner) getServerByServerName(serverName string) Vm {
+func (p ProviderHetzner) GetByName(serverName string) Vm {
 	s, _, err := p.Client.Server.GetByName(context.TODO(), serverName)
 	if err != nil {
 		log.Fatalln(err)

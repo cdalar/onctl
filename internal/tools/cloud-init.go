@@ -2,7 +2,6 @@ package tools
 
 import (
 	"encoding/base64"
-	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -40,7 +39,6 @@ func WaitForCloudInit(username, ip, sshPort, privateKey string) {
 			log.Println("[DEBUG] RemoteRun:" + err.Error())
 		}
 		if err == nil {
-			fmt.Println("Vm started.")
 			if isOK == "OK" {
 				break
 			}
