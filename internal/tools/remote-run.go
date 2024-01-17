@@ -8,9 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"time"
 
-	"github.com/cdalar/onctl/internal/rand"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -84,11 +84,11 @@ func RunRemoteBashScript(config *RunRemoteBashScriptConfig) (string, error) {
 		command string
 		dstPath string
 	)
-	randomString := rand.String(5)
+	nowString := strconv.FormatInt(time.Now().Unix(), 10)
 
 	// Create .onctl-init folder
 	if config.IsApply {
-		command = "mkdir -p .onctl-init/apply-" + randomString
+		command = "mkdir -p .onctl-init/apply-" + nowString
 	} else {
 		command = "mkdir -p .onctl-init"
 	}
@@ -114,7 +114,7 @@ func RunRemoteBashScript(config *RunRemoteBashScriptConfig) (string, error) {
 		}
 	} else {
 		if config.IsApply {
-			dstPath = ".onctl-init/apply-" + randomString + "/" + fileBaseName
+			dstPath = ".onctl-init/apply-" + nowString + "/" + fileBaseName
 		} else {
 			dstPath = ".onctl-init/" + fileBaseName
 		}
@@ -136,7 +136,7 @@ func RunRemoteBashScript(config *RunRemoteBashScriptConfig) (string, error) {
 
 	log.Println("[DEBUG] running " + fileBaseName + "...")
 	if config.IsApply {
-		command = "cd .onctl-init/apply-" + randomString + " && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && sudo -E ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
+		command = "cd .onctl-init/apply-" + nowString + " && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && sudo -E ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
 	} else {
 		command = "cd .onctl-init && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && sudo -E ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
 	}
