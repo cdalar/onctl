@@ -16,12 +16,9 @@ func SSHCopyFile(user string, addr string, port string, privateKey string, srcPa
 	}
 	// Authentication
 	config := &ssh.ClientConfig{
-		User: user,
-		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-			// Always accept key.
-			return nil
-		},
-		Timeout: time.Second * 10,
+		User:            user,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         time.Second * 10,
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(key),
 		},
