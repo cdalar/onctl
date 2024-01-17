@@ -18,7 +18,6 @@ var destroyCmd = &cobra.Command{
 	Short:   "Destroy VM(s)",
 	Run: func(cmd *cobra.Command, args []string) {
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
-		// s.Start()                                                   // Start the spinner
 		log.Println("[DEBUG] args: ", args)
 		if len(args) == 0 {
 			fmt.Println("Please provide a VM id or 'all' to destroy all VMs")
@@ -42,10 +41,14 @@ var destroyCmd = &cobra.Command{
 			}
 			log.Println("[DEBUG] Servers: ", servers.List)
 			for _, server := range servers.List {
+				s.Start()
+				s.Suffix = " Destroying VM..."
 				if err := provider.Destroy(server); err != nil {
+					fmt.Println("\033[32m\u2718\033[0m Could not destroy VM: " + server.Name)
 					log.Println(err)
 				}
-				log.Println(server.Name, "deleted.")
+				s.Stop()
+				fmt.Println("\033[32m\u2714\033[0m VM Destroyed: " + server.Name)
 			}
 		default:
 			// Tear down specific server
