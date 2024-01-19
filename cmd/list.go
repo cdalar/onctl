@@ -14,14 +14,22 @@ var listCmd = &cobra.Command{
 	Short:   "List VMs",
 	Run: func(cmd *cobra.Command, args []string) {
 
-		var serverList cloud.VmList
-		var err error
+		var (
+			tmpl       string
+			serverList cloud.VmList
+			err        error
+		)
 		serverList, err = provider.List()
 		if err != nil {
 			log.Println(err)
 		}
 		log.Println("[DEBUG] VM List: ", serverList)
-		tmpl := "ID\tNAME\tLOCATION\tTYPE\tPUBLIC IP\tSTATE\tAGE\tCOST/H\tUSAGE\n{{range .List}}{{.ID}}\t{{.Name}}\t{{.Location}}\t{{.Type}}\t{{.IP}}\t{{.Status}}\t{{durationFromCreatedAt .CreatedAt}}\t{{.Cost.CostPerHour}}{{.Cost.Currency}}\t{{.Cost.AccumulatedCost}}{{.Cost.Currency}}\n{{end}}"
+		switch cloudProvider {
+		case "hetzner":
+			tmpl = "ID\tNAME\tLOCATION\tTYPE\tPUBLIC IP\tSTATE\tAGE\tCOST/H\tUSAGE\n{{range .List}}{{.ID}}\t{{.Name}}\t{{.Location}}\t{{.Type}}\t{{.IP}}\t{{.Status}}\t{{durationFromCreatedAt .CreatedAt}}\t{{.Cost.CostPerHour}}{{.Cost.Currency}}\t{{.Cost.AccumulatedCost}}{{.Cost.Currency}}\n{{end}}"
+		default:
+			tmpl = "ID\tNAME\tLOCATION\tTYPE\tPUBLIC IP\tSTATE\tAGE\n{{range .List}}{{.ID}}\t{{.Name}}\t{{.Location}}\t{{.Type}}\t{{.IP}}\t{{.Status}}\t{{durationFromCreatedAt .CreatedAt}}\n{{end}}"
+		}
 		TabWriter(serverList, tmpl)
 	},
 }

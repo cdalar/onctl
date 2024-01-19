@@ -42,7 +42,7 @@ func (p ProviderAzure) List() (VmList, error) {
 		| extend nics=array_length(properties.networkProfile.networkInterfaces)
 		| mv-expand nic=properties.networkProfile.networkInterfaces
 		| where nics == 1 or nic.properties.primary =~ 'true' or isempty(nic)
-		| project vmId = id, vmName = name, vmSize=tostring(properties.hardwareProfile.vmSize), nicId = tostring(nic.id), timeCreated = tostring(properties.timeCreated), status = tostring(properties.extended.instanceView.powerState.displayStatus)
+		| project vmId = id, vmName = name, vmSize=tostring(properties.hardwareProfile.vmSize), nicId = tostring(nic.id), timeCreated = tostring(properties.timeCreated), status = tostring(properties.extended.instanceView.powerState.displayStatus), location = tostring(location)
 		| join kind=leftouter (
 			resources
 			| where type =~ 'microsoft.network/networkinterfaces'
@@ -52,7 +52,7 @@ func (p ProviderAzure) List() (VmList, error) {
 			| project nicId = id, publicIpId = tostring(ipconfig.properties.publicIPAddress.id))
 		on nicId
 		| project-away nicId1
-		| summarize by vmId, vmName, vmSize, nicId, publicIpId, timeCreated, status
+		| summarize by vmId, vmName, vmSize, nicId, publicIpId, timeCreated, status, location
 		| join kind=leftouter (
 			resources
 			| where type =~ 'microsoft.network/publicipaddresses'
@@ -98,6 +98,13 @@ func (p ProviderAzure) List() (VmList, error) {
 				Type:      items["vmSize"].(string),
 				Status:    items["status"].(string),
 				CreatedAt: createdAt,
+				Location:  items["location"].(string),
+				Cost: CostStruct{
+					Currency:        "N/A",
+					CostPerHour:     0,
+					CostPerMonth:    0,
+					AccumulatedCost: 0,
+				},
 			})
 		}
 	}
