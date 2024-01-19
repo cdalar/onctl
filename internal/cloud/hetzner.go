@@ -5,8 +5,10 @@ import (
 	"crypto/md5"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/cdalar/onctl/internal/tools"
 
@@ -165,6 +167,20 @@ func (p ProviderHetzner) CreateSSHKey(publicKeyFile string) (keyID string, err e
 
 // mapHetznerServer gets a hcloud.Server and returns a Vm
 func mapHetznerServer(server hcloud.Server) Vm {
+	acculumatedCost := 0.0
+	costPerHour := 0.0
+	costPerMonth := 0.0
+	currency := "EUR"
+	for _, p := range server.ServerType.Pricings {
+		if p.Location.Name == server.Datacenter.Location.Name {
+			uptime := time.Now().Sub(server.Created)
+			hourlyGross, _ := strconv.ParseFloat(p.Hourly.Gross, 64) // Convert p.Hourly.Gross to float64
+			acculumatedCost = math.Round(hourlyGross*uptime.Hours()*10000) / 10000
+			costPerHour, _ = strconv.ParseFloat(p.Hourly.Gross, 64)
+			costPerMonth, _ = strconv.ParseFloat(p.Monthly.Gross, 64)
+		}
+	}
+
 	return Vm{
 		ID:        strconv.FormatInt(server.ID, 10),
 		Name:      server.Name,
@@ -172,6 +188,13 @@ func mapHetznerServer(server hcloud.Server) Vm {
 		Type:      server.ServerType.Name,
 		Status:    string(server.Status),
 		CreatedAt: server.Created,
+		Location:  server.Datacenter.Location.Name,
+		Cost: CostStruct{
+			Currency:        currency,
+			CostPerHour:     costPerHour,
+			CostPerMonth:    costPerMonth,
+			AccumulatedCost: acculumatedCost,
+		},
 	}
 }
 

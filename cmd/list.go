@@ -21,7 +21,7 @@ var listCmd = &cobra.Command{
 			log.Println(err)
 		}
 		log.Println("[DEBUG] VM List: ", serverList)
-		tmpl := "ID\tNAME\tTYPE\tPUBLIC IP\tSTATE\tAGE\n{{range .List}}{{.ID}}\t{{.Name}}\t{{.Type}}\t{{.IP}}\t{{.Status}}\t{{durationFromCreatedAt .CreatedAt}}\n{{end}}"
+		tmpl := "ID\tNAME\tLOCATION\tTYPE\tPUBLIC IP\tSTATE\tAGE\tCOST/H\tUSAGE\n{{range .List}}{{.ID}}\t{{.Name}}\t{{.Location}}\t{{.Type}}\t{{.IP}}\t{{.Status}}\t{{durationFromCreatedAt .CreatedAt}}\t{{.Cost.CostPerHour}}{{.Cost.Currency}}\t{{.Cost.AccumulatedCost}}{{.Cost.Currency}}\n{{end}}"
 		TabWriter(serverList, tmpl)
 	},
 }

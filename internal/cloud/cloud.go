@@ -10,6 +10,15 @@ type VmList struct {
 	List []Vm
 }
 
+type Price struct {
+	// Currency is the currency of the price
+	Currency string
+	// Hourly is the hourly price
+	Hourly string
+	// Monthly is the monthly price
+	Monthly string
+}
+
 type Vm struct {
 	// ID is the ID of the instance
 	ID string
@@ -31,6 +40,17 @@ type Vm struct {
 	CloudInitFile string
 	// CreatedAt is the creation date of the instance
 	CreatedAt time.Time
+	// Provider is the cloud provider
+	Provider string
+	// Cost is the cost of the vm
+	Cost CostStruct
+}
+
+type CostStruct struct {
+	Currency        string
+	CostPerHour     float64
+	CostPerMonth    float64
+	AccumulatedCost float64
 }
 
 func (v Vm) String() string {

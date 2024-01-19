@@ -235,7 +235,6 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 
 func (p ProviderAzure) Destroy(server Vm) error {
 	log.Println("[DEBUG] Destroy Server")
-	fmt.Print("Destroying", server.Name, "...")
 	resp, err := p.VmClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name, nil)
 	if err != nil {
 		log.Fatalln(err)
@@ -250,10 +249,9 @@ func (p ProviderAzure) Destroy(server Vm) error {
 	}
 	log.Println("[DEBUG] ", respDone)
 	if resp.Done() {
-		fmt.Println("DONE")
+		log.Println("[DEBUG] DONE")
 	}
 
-	fmt.Print("Destroying other resources of", server.Name, "...")
 	nic, err := p.NicClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-nic", nil)
 	if err != nil {
 		log.Fatalln(err)
@@ -266,7 +264,7 @@ func (p ProviderAzure) Destroy(server Vm) error {
 	}
 	log.Println("[DEBUG] ", nicDone)
 	if nic.Done() {
-		fmt.Println("DONE")
+		log.Println("[DEBUG] DONE")
 	}
 	pip, err := p.PublicIPClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-pip", nil)
 	if err != nil {
@@ -285,7 +283,7 @@ func (p ProviderAzure) SSHInto(serverName, port string) {
 	s := p.GetByName(serverName)
 	log.Println("[DEBUG] " + s.String())
 	if s.ID == "" {
-		fmt.Println("Server not found")
+		log.Fatalln("Server not found")
 	}
 
 	tools.SSHIntoVM(s.IP, "azureuser", port)
@@ -338,7 +336,7 @@ func createVirtualNetwork(ctx context.Context, p *ProviderAzure) (*armnetwork.Vi
 	}
 
 	if pollerResponse.Done() {
-		fmt.Println("DONE")
+		log.Println("[DEBUG] DONE")
 	}
 
 	return &resp.VirtualNetwork, nil
@@ -365,7 +363,7 @@ func createPublicIP(ctx context.Context, p *ProviderAzure, server Vm) (*armnetwo
 		return nil, err
 	}
 	if pollerResponse.Done() {
-		fmt.Println("DONE")
+		log.Println("[DEBUG] DONE")
 	}
 
 	return &resp.PublicIPAddress, err
@@ -402,7 +400,7 @@ func createNic(ctx context.Context, p *ProviderAzure, server Vm, vnet *armnetwor
 		log.Fatalln(err)
 	}
 	if nicResp.Done() {
-		fmt.Println("DONE")
+		log.Println("[DEBUG] DONE")
 	}
 
 	log.Println("[DEBUG] ", nicRespDone)

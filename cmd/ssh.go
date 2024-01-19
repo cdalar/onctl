@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"time"
 
+	"github.com/briandowns/spinner"
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -27,7 +30,9 @@ var sshCmd = &cobra.Command{
 	TraverseChildren:      true,
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
+		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
 		log.Println("[DEBUG] args: ", args)
+
 		if len(args) == 0 {
 			fmt.Println("Please provide a VM id")
 			return
@@ -41,6 +46,8 @@ var sshCmd = &cobra.Command{
 		}
 		vm := provider.GetByName(args[0])
 		if apply != "" {
+			s.Start()
+			s.Suffix = " Applying " + filepath.Base(apply)
 			_, err := tools.RunRemoteBashScript(&tools.RunRemoteBashScriptConfig{
 				Username:   viper.GetString(cloudProvider + ".vm.username"),
 				IPAddress:  vm.IP,
@@ -50,8 +57,13 @@ var sshCmd = &cobra.Command{
 				IsApply:    true,
 			})
 			if err != nil {
+				s.Stop()
+				fmt.Println("\033[32m\u2718\033[0m Could not apply " + apply + " to VM: " + vm.Name)
 				log.Fatal(err)
 			}
+			s.Stop()
+			fmt.Println("\033[32m\u2714\033[0m " + filepath.Base(apply) + " applied to VM: " + vm.Name)
+
 		} else {
 			provider.SSHInto(args[0], port)
 		}

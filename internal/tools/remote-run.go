@@ -146,7 +146,6 @@ func RunRemoteBashScript(config *RunRemoteBashScriptConfig) (string, error) {
 	}
 
 	log.Println("[DEBUG] init.sh output: " + runInitOutput)
-	fmt.Println(runInitOutput)
 	return runInitOutput, err
 
 }

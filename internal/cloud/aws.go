@@ -278,6 +278,13 @@ func mapAwsServer(server *ec2.Instance) Vm {
 		Type:      *server.InstanceType,
 		Status:    *server.State.Name,
 		CreatedAt: *server.LaunchTime,
+		Location:  *server.Placement.AvailabilityZone,
+		Cost: CostStruct{
+			Currency:        "N/A",
+			CostPerHour:     0,
+			CostPerMonth:    0,
+			AccumulatedCost: 0,
+		},
 	}
 }
 
@@ -313,7 +320,7 @@ func (p ProviderAws) SSHInto(serverName, port string) {
 	s := p.GetByName(serverName)
 	log.Println("[DEBUG] " + s.String())
 	if s.ID == "" {
-		fmt.Println("Server not found")
+		log.Fatalln("Server not found")
 	}
 
 	ipAddress := s.IP
