@@ -173,7 +173,7 @@ func mapHetznerServer(server hcloud.Server) Vm {
 	currency := "EUR"
 	for _, p := range server.ServerType.Pricings {
 		if p.Location.Name == server.Datacenter.Location.Name {
-			uptime := time.Now().Sub(server.Created)
+			uptime := time.Since(server.Created)
 			hourlyGross, _ := strconv.ParseFloat(p.Hourly.Gross, 64) // Convert p.Hourly.Gross to float64
 			acculumatedCost = math.Round(hourlyGross*uptime.Hours()*10000) / 10000
 			costPerHour, _ = strconv.ParseFloat(p.Hourly.Gross, 64)
