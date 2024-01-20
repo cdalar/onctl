@@ -75,5 +75,5 @@ type CloudProviderInterface interface {
 	// SSHInto connects to a VM
 	SSHInto(serverName string, port string)
 	// GetByName gets a VM by name
-	GetByName(serverName string) Vm
+	GetByName(serverName string) (Vm, error)
 }

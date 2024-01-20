@@ -139,10 +139,9 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 func (p ProviderAws) Destroy(server Vm) error {
 	if server.ID == "" {
 		log.Println("[DEBUG] Server ID is empty")
-		s := p.GetByName(server.Name)
-		if s.ID == "" {
-			log.Println("[DEBUG] Server not found")
-			return nil
+		s, err := p.GetByName(server.Name)
+		if err != nil || s.ID == "" {
+			log.Fatalln(err)
 		}
 		server.ID = s.ID
 	}
@@ -288,7 +287,7 @@ func mapAwsServer(server *ec2.Instance) Vm {
 	}
 }
 
-func (p ProviderAws) GetByName(serverName string) Vm {
+func (p ProviderAws) GetByName(serverName string) (Vm, error) {
 	s, err := p.Client.DescribeInstances(&ec2.DescribeInstancesInput{
 		Filters: []*ec2.Filter{
 			{
@@ -309,19 +308,20 @@ func (p ProviderAws) GetByName(serverName string) Vm {
 		log.Fatalln(err)
 	}
 	if len(s.Reservations) == 0 {
-		fmt.Println("No server found with name: " + serverName)
-		os.Exit(1)
+		// fmt.Println("No server found with name: " + serverName)
+		// os.Exit(1)
+		return Vm{}, err
 	}
-	return mapAwsServer(s.Reservations[0].Instances[0])
+	return mapAwsServer(s.Reservations[0].Instances[0]), nil
 }
 
 func (p ProviderAws) SSHInto(serverName, port string) {
 
-	s := p.GetByName(serverName)
-	log.Println("[DEBUG] " + s.String())
-	if s.ID == "" {
-		log.Fatalln("Server not found")
+	s, err := p.GetByName(serverName)
+	if err != nil || s.ID == "" {
+		log.Fatalln(err)
 	}
+	log.Println("[DEBUG] " + s.String())
 
 	ipAddress := s.IP
 	tools.SSHIntoVM(ipAddress, viper.GetString("aws.vm.username"), port)

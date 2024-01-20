@@ -44,7 +44,10 @@ var sshCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		vm := provider.GetByName(args[0])
+		vm, err := provider.GetByName(args[0])
+		if err != nil {
+			log.Fatalln(err)
+		}
 		if apply != "" {
 			s.Start()
 			s.Suffix = " Applying " + filepath.Base(apply)

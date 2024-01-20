@@ -287,26 +287,25 @@ func (p ProviderAzure) Destroy(server Vm) error {
 }
 
 func (p ProviderAzure) SSHInto(serverName, port string) {
-	s := p.GetByName(serverName)
-	log.Println("[DEBUG] " + s.String())
-	if s.ID == "" {
-		log.Fatalln("Server not found")
+	s, err := p.GetByName(serverName)
+	if err != nil || s.ID == "" {
+		log.Fatalln(err)
 	}
-
+	log.Println("[DEBUG] " + s.String())
 	tools.SSHIntoVM(s.IP, "azureuser", port)
 }
 
-func (p ProviderAzure) GetByName(serverName string) Vm {
+func (p ProviderAzure) GetByName(serverName string) (Vm, error) {
 	vmList, err := p.List()
 	if err != nil {
-		log.Println(err)
+		return Vm{}, err
 	}
 	for _, vm := range vmList.List {
 		if vm.Name == serverName {
-			return vm
+			return vm, nil
 		}
 	}
-	return Vm{}
+	return Vm{}, nil
 }
 
 func createVirtualNetwork(ctx context.Context, p *ProviderAzure) (*armnetwork.VirtualNetwork, error) {

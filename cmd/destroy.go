@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/briandowns/spinner"
@@ -58,8 +59,9 @@ var destroyCmd = &cobra.Command{
 			s.Suffix = " Destroying VM..."
 			if err := provider.Destroy(cloud.Vm{Name: serverName}); err != nil {
 				s.Stop()
-				fmt.Println("\033[31m\u2718\033[0m Could not destroy VM: " + serverName)
-				log.Println(err)
+				fmt.Println("\033[31m\u2718\033[0m Cannot destroy VM: " + serverName)
+				fmt.Println(err)
+				os.Exit(1)
 			}
 			s.Stop()
 			fmt.Println("\033[32m\u2714\033[0m VM Destroyed: " + serverName)

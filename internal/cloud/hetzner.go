@@ -3,6 +3,7 @@ package cloud
 import (
 	"context"
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -74,10 +75,10 @@ func (p ProviderHetzner) Destroy(server Vm) error {
 	if server.ID == "" && server.Name != "" {
 		log.Println("[DEBUG] Server ID is empty")
 		log.Println("[DEBUG] Server name: " + server.Name)
-		s := p.GetByName(server.Name)
-		if s.ID == "" {
+		s, err := p.GetByName(server.Name)
+		if err != nil || s.ID == "" {
 			log.Println("[DEBUG] Server not found")
-			return nil
+			return err
 		}
 		log.Println("[DEBUG] Server found ID: " + s.ID)
 		server.ID = s.ID
@@ -198,16 +199,15 @@ func mapHetznerServer(server hcloud.Server) Vm {
 	}
 }
 
-func (p ProviderHetzner) GetByName(serverName string) Vm {
+func (p ProviderHetzner) GetByName(serverName string) (Vm, error) {
 	s, _, err := p.Client.Server.GetByName(context.TODO(), serverName)
 	if err != nil {
-		log.Fatalln(err)
+		return Vm{}, err
 	}
 	if s == nil {
-		fmt.Println("No Server found with name: " + serverName)
-		return Vm{}
+		return Vm{}, errors.New("No Server found with name: " + serverName)
 	}
-	return mapHetznerServer(*s)
+	return mapHetznerServer(*s), nil
 }
 
 func (p ProviderHetzner) SSHInto(serverName, port string) {
