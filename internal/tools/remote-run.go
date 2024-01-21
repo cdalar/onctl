@@ -133,9 +133,9 @@ func RunRemoteBashScript(config *RunRemoteBashScriptConfig) (string, error) {
 
 	log.Println("[DEBUG] running " + fileBaseName + "...")
 	if config.IsApply {
-		command = "cd .onctl-init/apply-" + randomString + " && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && sudo -E ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
+		command = "cd .onctl-init/apply-" + randomString + " && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
 	} else {
-		command = "cd .onctl-init && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && sudo -E ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
+		command = "cd .onctl-init && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
 	}
 	log.Println("[DEBUG] command: " + command)
 	runInitOutput, err = RemoteRun(config.Username, config.IPAddress, config.SSHPort, config.PrivateKey, command)
