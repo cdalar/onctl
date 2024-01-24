@@ -210,7 +210,7 @@ func (p ProviderHetzner) GetByName(serverName string) (Vm, error) {
 	return mapHetznerServer(*s), nil
 }
 
-func (p ProviderHetzner) SSHInto(serverName, port string) {
+func (p ProviderHetzner) SSHInto(serverName string, port int) {
 	// server, _, err := p.Client.Server().Get(ctx, idOrName)
 	server, _, err := p.Client.Server.GetByName(context.TODO(), serverName)
 	if server == nil {

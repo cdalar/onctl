@@ -30,7 +30,7 @@ func FileToBase64(filepath string) string {
 }
 
 // WaitForCloudInit waits for cloud-init to finish
-func WaitForCloudInit(username, ip, sshPort, privateKey string) {
+func WaitForCloudInit(username string, ip string, sshPort int, privateKey string) {
 	var tries int
 	for {
 

@@ -286,7 +286,7 @@ func (p ProviderAzure) Destroy(server Vm) error {
 
 }
 
-func (p ProviderAzure) SSHInto(serverName, port string) {
+func (p ProviderAzure) SSHInto(serverName string, port int) {
 	s, err := p.GetByName(serverName)
 	if err != nil || s.ID == "" {
 		log.Fatalln(err)

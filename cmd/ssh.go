@@ -14,12 +14,12 @@ import (
 )
 
 var (
-	port  string
+	port  int
 	apply string
 )
 
 func init() {
-	sshCmd.Flags().StringVarP(&port, "port", "p", "22", "ssh port")
+	sshCmd.Flags().IntVarP(&port, "port", "p", 22, "ssh port")
 	sshCmd.Flags().StringVarP(&apply, "apply", "a", "", "apply script")
 }
 

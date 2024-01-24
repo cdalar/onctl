@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/cdalar/onctl/internal/rand"
@@ -17,14 +18,15 @@ import (
 type RunRemoteBashScriptConfig struct {
 	Username   string
 	IPAddress  string
-	SSHPort    string
+	SSHPort    int
 	PrivateKey string
 	Script     string
+	Vars       []string
 	IsApply    bool
 }
 
 // e.g. output, err := remoteRun("root", "MY_IP", "PRIVATE_KEY", "ls")
-func RemoteRun(user string, addr string, sshPort string, privateKey string, cmd string) (string, error) {
+func RemoteRun(user string, addr string, sshPort int, privateKey string, cmd string) (string, error) {
 	key, err := ssh.ParsePrivateKey([]byte(privateKey))
 	if err != nil {
 		return "", err
@@ -39,7 +41,7 @@ func RemoteRun(user string, addr string, sshPort string, privateKey string, cmd 
 		},
 	}
 	// Connect
-	client, err := ssh.Dial("tcp", net.JoinHostPort(addr, sshPort), config)
+	client, err := ssh.Dial("tcp", net.JoinHostPort(addr, fmt.Sprint(sshPort)), config)
 	if err != nil {
 		return "", err
 	}
@@ -83,6 +85,12 @@ func RunRemoteBashScript(config *RunRemoteBashScriptConfig) (string, error) {
 	)
 	randomString := rand.String(5)
 
+	for _, value := range config.Vars {
+		envs := strings.Split(value, "=")
+		vars_command := envs[0] + "=" + envs[1]
+		command += vars_command + " "
+	}
+	log.Println("[DEBUG] command: " + command)
 	// Create .onctl-init folder
 	if config.IsApply {
 		command = "mkdir -p .onctl-init/apply-" + randomString

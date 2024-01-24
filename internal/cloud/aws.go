@@ -315,7 +315,7 @@ func (p ProviderAws) GetByName(serverName string) (Vm, error) {
 	return mapAwsServer(s.Reservations[0].Instances[0]), nil
 }
 
-func (p ProviderAws) SSHInto(serverName, port string) {
+func (p ProviderAws) SSHInto(serverName string, port int) {
 
 	s, err := p.GetByName(serverName)
 	if err != nil || s.ID == "" {

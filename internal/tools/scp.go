@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"fmt"
 	"net"
 	"os"
 	"time"
@@ -9,7 +10,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-func SSHCopyFile(user string, addr string, port string, privateKey string, srcPath, dstPath string) error {
+func SSHCopyFile(user string, addr string, port int, privateKey string, srcPath, dstPath string) error {
 	key, err := ssh.ParsePrivateKey([]byte(privateKey))
 	if err != nil {
 		return err
@@ -24,7 +25,7 @@ func SSHCopyFile(user string, addr string, port string, privateKey string, srcPa
 		},
 	}
 
-	client, err := ssh.Dial("tcp", net.JoinHostPort(addr, port), config)
+	client, err := ssh.Dial("tcp", net.JoinHostPort(addr, fmt.Sprint(port)), config)
 	if err != nil {
 		return err
 	}

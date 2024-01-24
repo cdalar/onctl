@@ -35,6 +35,9 @@ var destroyCmd = &cobra.Command{
 			}
 		case "all":
 			// Tear down all servers
+			if !yesNo() {
+				os.Exit(0)
+			}
 			log.Println("[DEBUG] Tear down all servers")
 			servers, err := provider.List()
 			if err != nil {

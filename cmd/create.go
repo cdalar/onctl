@@ -18,11 +18,12 @@ var (
 	// composeFile   string
 	publicKeyFile string
 	filename      string
+	vars          []string
 	instanceType  string
 	vmName        string
 	vm            cloud.Vm
 	cloudInitFile string
-	SSHPort       string
+	SSHPort       int
 )
 
 func init() {
@@ -30,9 +31,9 @@ func init() {
 	createCmd.Flags().StringVarP(&filename, "init", "i", "", "init bash script file")
 	createCmd.Flags().StringVarP(&instanceType, "type", "t", "", "instance type")
 	createCmd.Flags().StringVarP(&vmName, "name", "n", "", "vm name")
-	createCmd.Flags().StringVarP(&SSHPort, "ssh-port", "p", "22", "ssh port")
+	createCmd.Flags().IntVarP(&SSHPort, "ssh-port", "p", 22, "ssh port")
 	createCmd.Flags().StringVar(&cloudInitFile, "cloud-init", "", "cloud-init file")
-
+	createCmd.Flags().StringSliceVarP(&vars, "vars", "e", []string{}, "Environment variables passed to the script")
 }
 
 var createCmd = &cobra.Command{
@@ -43,6 +44,7 @@ var createCmd = &cobra.Command{
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
 		filename = findFile(filename)
 		cloudInitFile = findFile(cloudInitFile)
+		log.Println("[DEBUG]", "vars: ", vars)
 		log.Println("[DEBUG]", "filename: ", filename)
 		log.Println("[DEBUG]", "cloudInitFile: ", cloudInitFile)
 
@@ -117,6 +119,8 @@ var createCmd = &cobra.Command{
 				SSHPort:    server.SSHPort,
 				PrivateKey: string(privateKey),
 				Script:     filename,
+				IsApply:    false,
+				Vars:       vars,
 			})
 			if err != nil {
 				log.Fatal(err)
