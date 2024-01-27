@@ -31,6 +31,7 @@ var sshCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
+		apply = findFile(apply)
 		log.Println("[DEBUG] args: ", args)
 
 		if len(args) == 0 {
@@ -51,7 +52,7 @@ var sshCmd = &cobra.Command{
 		if apply != "" {
 			s.Start()
 			s.Suffix = " Applying " + filepath.Base(apply)
-			_, err := tools.RunRemoteBashScript(&tools.RunRemoteBashScriptConfig{
+			_, err := tools.RemoteRunBashScript(&tools.RemoteRunBashScriptConfig{
 				Username:   viper.GetString(cloudProvider + ".vm.username"),
 				IPAddress:  vm.IP,
 				SSHPort:    port,

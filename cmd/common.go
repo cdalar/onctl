@@ -94,7 +94,7 @@ func PrettyPrint(v interface{}) (err error) {
 //lint:ignore U1000 will use this function in the future
 func yesNo() bool {
 	prompt := promptui.Select{
-		Label:     "Select[Yes/No]",
+		Label:     "Please confirm [y/N]",
 		Items:     []string{"Yes", "No"},
 		CursorPos: 1,
 	}

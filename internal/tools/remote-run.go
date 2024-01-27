@@ -15,7 +15,11 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-type RunRemoteBashScriptConfig struct {
+const (
+	REMOTEDIR = ".onctl"
+)
+
+type RemoteRunBashScriptConfig struct {
 	Username   string
 	IPAddress  string
 	SSHPort    int
@@ -25,15 +29,23 @@ type RunRemoteBashScriptConfig struct {
 	IsApply    bool
 }
 
+type RemoteRunConfig struct {
+	Username   string
+	IPAddress  string
+	SSHPort    int
+	PrivateKey string
+	Command    string
+}
+
 // e.g. output, err := remoteRun("root", "MY_IP", "PRIVATE_KEY", "ls")
-func RemoteRun(user string, addr string, sshPort int, privateKey string, cmd string) (string, error) {
-	key, err := ssh.ParsePrivateKey([]byte(privateKey))
+func RemoteRun(remoteRunConfig *RemoteRunConfig) (string, error) {
+	key, err := ssh.ParsePrivateKey([]byte(remoteRunConfig.PrivateKey))
 	if err != nil {
 		return "", err
 	}
 	// Authentication
 	config := &ssh.ClientConfig{
-		User:            user,
+		User:            remoteRunConfig.Username,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         time.Second * 7,
 		Auth: []ssh.AuthMethod{
@@ -41,7 +53,7 @@ func RemoteRun(user string, addr string, sshPort int, privateKey string, cmd str
 		},
 	}
 	// Connect
-	client, err := ssh.Dial("tcp", net.JoinHostPort(addr, fmt.Sprint(sshPort)), config)
+	client, err := ssh.Dial("tcp", net.JoinHostPort(remoteRunConfig.IPAddress, fmt.Sprint(remoteRunConfig.SSHPort)), config)
 	if err != nil {
 		return "", err
 	}
@@ -57,7 +69,7 @@ func RemoteRun(user string, addr string, sshPort int, privateKey string, cmd str
 		return "", err
 	}
 
-	err = session.Run(cmd)
+	err = session.Run(remoteRunConfig.Command)
 	buf := make([]byte, 1024)
 	var returnString string
 	for {
@@ -78,7 +90,7 @@ func RemoteRun(user string, addr string, sshPort int, privateKey string, cmd str
 	return returnString, err
 }
 
-func RunRemoteBashScript(config *RunRemoteBashScriptConfig) (string, error) {
+func RemoteRunBashScript(config *RemoteRunBashScriptConfig) (string, error) {
 	var (
 		command string
 		dstPath string
@@ -91,14 +103,20 @@ func RunRemoteBashScript(config *RunRemoteBashScriptConfig) (string, error) {
 		command += vars_command + " "
 	}
 	log.Println("[DEBUG] command: " + command)
-	// Create .onctl-init folder
+	// Create REMOTEDIR folder
 	if config.IsApply {
-		command = "mkdir -p .onctl-init/apply-" + randomString
+		command = "mkdir -p " + REMOTEDIR + "/apply-" + randomString
 	} else {
-		command = "mkdir -p .onctl-init"
+		command = "mkdir -p " + REMOTEDIR
 	}
 
-	runInitOutput, err := RemoteRun(config.Username, config.IPAddress, config.SSHPort, config.PrivateKey, command)
+	runInitOutput, err := RemoteRun(&RemoteRunConfig{
+		Username:   config.Username,
+		IPAddress:  config.IPAddress,
+		SSHPort:    config.SSHPort,
+		PrivateKey: config.PrivateKey,
+		Command:    command,
+	})
 	if err != nil {
 		fmt.Println(runInitOutput)
 		log.Fatalln(err)
@@ -108,20 +126,26 @@ func RunRemoteBashScript(config *RunRemoteBashScriptConfig) (string, error) {
 	// Extract tar.gz
 	if slices.Contains([]string{".tgz", ".gz"}, filepath.Ext(config.Script)) {
 		// Copy bash script or tar.gz to .onctl-init folder
-		err = SSHCopyFile(config.Username, config.IPAddress, config.SSHPort, config.PrivateKey, config.Script, ".onctl-init/"+fileBaseName)
+		err = SSHCopyFile(config.Username, config.IPAddress, config.SSHPort, config.PrivateKey, config.Script, REMOTEDIR+"/"+fileBaseName)
 		if err != nil {
 			log.Fatalln(err)
 		}
-		runInitOutput, err = RemoteRun(config.Username, config.IPAddress, config.SSHPort, config.PrivateKey, "cd .onctl-init && tar -xzf "+fileBaseName)
+		runInitOutput, err = RemoteRun(&RemoteRunConfig{
+			Username:   config.Username,
+			IPAddress:  config.IPAddress,
+			SSHPort:    config.SSHPort,
+			PrivateKey: config.PrivateKey,
+			Command:    "cd " + REMOTEDIR + " && tar -xzf " + fileBaseName,
+		})
 		if err != nil {
 			fmt.Println(runInitOutput)
 			log.Fatalln(err)
 		}
-	} else {
+	} else { // not tar.gz
 		if config.IsApply {
-			dstPath = ".onctl-init/apply-" + randomString + "/" + fileBaseName
+			dstPath = REMOTEDIR + "/apply-" + randomString + "/" + fileBaseName
 		} else {
-			dstPath = ".onctl-init/" + fileBaseName
+			dstPath = REMOTEDIR + "/" + fileBaseName
 		}
 		// Checking file in filesystem
 		_, err := os.Stat(filepath.Dir(config.Script) + "/.env")
@@ -133,6 +157,7 @@ func RunRemoteBashScript(config *RunRemoteBashScriptConfig) (string, error) {
 			}
 		}
 
+		log.Println("[DEBUG] copying " + config.Script + " to remote...")
 		err = SSHCopyFile(config.Username, config.IPAddress, config.SSHPort, config.PrivateKey, config.Script, dstPath)
 		if err != nil {
 			log.Fatalln(err)
@@ -141,12 +166,18 @@ func RunRemoteBashScript(config *RunRemoteBashScriptConfig) (string, error) {
 
 	log.Println("[DEBUG] running " + fileBaseName + "...")
 	if config.IsApply {
-		command = "cd .onctl-init/apply-" + randomString + " && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
+		command = "cd " + REMOTEDIR + "/apply-" + randomString + " && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
 	} else {
-		command = "cd .onctl-init && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
+		command = "cd " + REMOTEDIR + " && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
 	}
 	log.Println("[DEBUG] command: " + command)
-	runInitOutput, err = RemoteRun(config.Username, config.IPAddress, config.SSHPort, config.PrivateKey, command)
+	runInitOutput, err = RemoteRun(&RemoteRunConfig{
+		Username:   config.Username,
+		IPAddress:  config.IPAddress,
+		SSHPort:    config.SSHPort,
+		PrivateKey: config.PrivateKey,
+		Command:    command,
+	})
 	if err != nil {
 		log.Println("Error on remoteRun")
 		fmt.Println(runInitOutput)

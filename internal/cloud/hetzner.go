@@ -24,6 +24,7 @@ type ProviderHetzner struct {
 
 func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 
+	log.Println("[DEBUG] Deploy server: ", server)
 	sshKeyIDint, err := strconv.ParseInt(server.SSHKeyID, 10, 64)
 	if err != nil {
 		log.Fatalln(err)
