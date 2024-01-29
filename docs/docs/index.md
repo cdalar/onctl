@@ -13,7 +13,7 @@
 ## What onctl brings 
 
 - 🌍 Simple intuitive CLI to run VMs in seconds.  
-- ⛅️ Supports multi cloud providers (azure, hetzner, more coming soon...)
+- ⛅️ Supports multi cloud providers (aws, azure, hetzner, more coming soon...)
 - 🚀 Gives you SSH access with you ssh public key precofigured. So no need to manage username/password
 - ✨ Cloud-init support. Set your own cloud-init file
 

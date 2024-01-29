@@ -22,7 +22,6 @@ import (
 type cmdCreateOptions struct {
 	PublicKeyFile string
 	ApplyFile     string
-	CloudInitFile string
 	DotEnvFile    string
 	Variables     []string
 	Vm            cloud.Vm
@@ -35,11 +34,11 @@ var (
 
 func init() {
 	createCmd.Flags().StringVarP(&opt.PublicKeyFile, "publicKey", "k", "", "Path to publicKey file (default: ~/.ssh/id_rsa))")
-	createCmd.Flags().StringVarP(&opt.ApplyFile, "apply", "a", "", "apply bash script file")
+	createCmd.Flags().StringVarP(&opt.ApplyFile, "apply-file", "a", "", "apply bash script file")
 	createCmd.Flags().StringVarP(&opt.Vm.Type, "type", "t", "", "instance type")
 	createCmd.Flags().StringVarP(&opt.Vm.Name, "name", "n", "", "vm name")
 	createCmd.Flags().IntVarP(&opt.Vm.SSHPort, "ssh-port", "p", 22, "ssh port")
-	createCmd.Flags().StringVar(&opt.CloudInitFile, "cloud-init", "", "cloud-init file")
+	createCmd.Flags().StringVarP(&opt.Vm.CloudInitFile, "cloud-init", "i", "", "cloud-init file")
 	createCmd.Flags().StringVar(&opt.DotEnvFile, "dot-env", "", "dot-env (.env) file")
 	createCmd.Flags().StringSliceVarP(&opt.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
 }
@@ -51,7 +50,7 @@ var createCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
 		opt.ApplyFile = findFile(opt.ApplyFile)
-		opt.CloudInitFile = findFile(opt.CloudInitFile)
+		opt.Vm.CloudInitFile = findFile(opt.Vm.CloudInitFile)
 
 		// BEGIN SSH Key
 		publicKeyFile, privateKeyFile := getSSHKeyFilePaths(opt.PublicKeyFile)
@@ -84,7 +83,6 @@ var createCmd = &cobra.Command{
 		if err != nil {
 			log.Println(err)
 		}
-		// fmt.Println("Server IP: " + vm.IP)
 		s.Restart()
 		s.Suffix = " VM IP: " + vm.IP
 		s.Stop()
@@ -100,9 +98,9 @@ var createCmd = &cobra.Command{
 		log.Println("[DEBUG] waiting for cloud-init")
 		log.Println("[DEBUG] ssh port: ", opt.Vm.SSHPort)
 		s.Stop()
-		fmt.Println("\033[32m\u2714\033[0m VM Started...")
+		fmt.Println("\033[32m\u2714\033[0m VM Starting...")
 		s.Restart()
-		s.Suffix = " Waiting for provider cloud-init..."
+		s.Suffix = " Waiting for VM to be ready..."
 		remote := tools.Remote{
 			Username:   viper.GetString(cloudProvider + ".vm.username"),
 			IPAddress:  vm.IP,
@@ -113,7 +111,7 @@ var createCmd = &cobra.Command{
 		remote.WaitForCloudInit()
 
 		s.Stop()
-		fmt.Println("\033[32m\u2714\033[0m Cloud-init finished...")
+		fmt.Println("\033[32m\u2714\033[0m VM is ready")
 		log.Println("[DEBUG] cloud-init finished")
 		// END Cloud-init
 
