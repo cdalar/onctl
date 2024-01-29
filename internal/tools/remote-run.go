@@ -7,45 +7,47 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"slices"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/cdalar/onctl/internal/rand"
+	"github.com/cdalar/onctl/internal/files"
 	"golang.org/x/crypto/ssh"
 )
 
 const (
-	REMOTEDIR = ".onctl"
+	ONCTLDIR = ".onctl"
 )
 
-type RemoteRunBashScriptConfig struct {
+type Remote struct {
 	Username   string
 	IPAddress  string
 	SSHPort    int
 	PrivateKey string
-	Script     string
-	Vars       []string
-	IsApply    bool
+	Client     *ssh.Client
 }
 
 type RemoteRunConfig struct {
-	Username   string
-	IPAddress  string
-	SSHPort    int
-	PrivateKey string
-	Command    string
+	Command string
+	Vars    []string
 }
 
-// e.g. output, err := remoteRun("root", "MY_IP", "PRIVATE_KEY", "ls")
-func RemoteRun(remoteRunConfig *RemoteRunConfig) (string, error) {
-	key, err := ssh.ParsePrivateKey([]byte(remoteRunConfig.PrivateKey))
+type CopyAndRunRemoteFileConfig struct {
+	File string
+	Vars []string
+}
+
+func (r *Remote) NewSSHConnection() error {
+	if r.Client != nil {
+		return nil
+	}
+	key, err := ssh.ParsePrivateKey([]byte(r.PrivateKey))
 	if err != nil {
-		return "", err
+		return err
 	}
 	// Authentication
 	config := &ssh.ClientConfig{
-		User:            remoteRunConfig.Username,
+		User:            r.Username,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         time.Second * 7,
 		Auth: []ssh.AuthMethod{
@@ -53,13 +55,117 @@ func RemoteRun(remoteRunConfig *RemoteRunConfig) (string, error) {
 		},
 	}
 	// Connect
-	client, err := ssh.Dial("tcp", net.JoinHostPort(remoteRunConfig.IPAddress, fmt.Sprint(remoteRunConfig.SSHPort)), config)
+	r.Client, err = ssh.Dial("tcp", net.JoinHostPort(r.IPAddress, fmt.Sprint(r.SSHPort)), config)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// exists returns whether the given file or directory exists
+func exists(path string) (bool, error) {
+	fmt.Println("Checking if ", path, " exists")
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
+func variablesToEnvVars(vars []string) string {
+	if len(vars) == 0 {
+		return ""
+	}
+
+	var command string
+	for _, value := range vars {
+		envs := strings.Split(value, "=")
+		vars_command := envs[0] + "=" + envs[1]
+		command += vars_command + " "
+	}
+	return command
+}
+func NextApplyDir(path string) (applyDirName string, nextApplyDirError error) {
+	if path == "" {
+		path = "."
+	}
+	if path[:1] == "/" {
+		path = path[1:]
+	}
+
+	dir := path + "/" + ONCTLDIR
+	ok, err := exists(dir)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(ok)
+	fmt.Println(dir)
+	// Check if .onctl dir exists
+	if ok, err := exists(dir); err != nil {
+		log.Fatal(err)
+	} else if !ok { // .onctl dir does not exist
+		// Create .onctl dir
+		fmt.Println("Creating .onctl dir")
+		err := os.Mkdir(dir, 0755)
+		if err != nil {
+			log.Fatal(err)
+		}
+		// Create apply dir
+		applyDirName = dir + "/apply00"
+		err = os.Mkdir(applyDirName, 0755)
+		if err != nil {
+			log.Fatal(err)
+		}
+		return applyDirName, nil
+	} else if ok { // .onctl dir exists
+		fmt.Println("onctl exists; Checking apply dir")
+		files, err := os.ReadDir(dir)
+		if err != nil {
+			log.Fatal(err)
+		}
+		maxNum := -1
+		for _, f := range files {
+			fmt.Println(f.Name())
+			// Extract the number from the directory name
+			dirName := f.Name()
+			numStr := strings.TrimPrefix(dirName, "apply")
+			fmt.Println(numStr)
+			num, err := strconv.Atoi(numStr)
+			if err == nil && num > maxNum {
+				maxNum = num
+			}
+		}
+		applyDirName = path + "/" + ONCTLDIR + "/apply" + fmt.Sprintf("%02d", maxNum+1)
+		// Check if apply dir exists
+		if okApply, err := exists(applyDirName); err != nil {
+			log.Fatal(err)
+		} else if !okApply { // apply dir does not exist
+			// Create apply dir
+			fmt.Println(maxNum)
+			err = os.Mkdir(applyDirName, 0755)
+			if err != nil {
+				log.Fatal(err)
+
+			}
+			return applyDirName, nil
+		}
+	}
+	return "", nil
+}
+
+func (r *Remote) RemoteRun(remoteRunConfig *RemoteRunConfig) (string, error) {
+	log.Println("[DEBUG] remoteRunConfig: ", remoteRunConfig)
+	// Create a new SSH connection
+	err := r.NewSSHConnection()
 	if err != nil {
 		return "", err
 	}
-	defer client.Close()
+
 	// Create a session. It is one session per command.
-	session, err := client.NewSession()
+	session, err := r.Client.NewSession()
 	if err != nil {
 		return "", err
 	}
@@ -69,6 +175,10 @@ func RemoteRun(remoteRunConfig *RemoteRunConfig) (string, error) {
 		return "", err
 	}
 
+	// Set env vars
+	if len(remoteRunConfig.Vars) > 0 {
+		remoteRunConfig.Command = variablesToEnvVars(remoteRunConfig.Vars) + " && " + remoteRunConfig.Command
+	}
 	err = session.Run(remoteRunConfig.Command)
 	buf := make([]byte, 1024)
 	var returnString string
@@ -90,101 +200,44 @@ func RemoteRun(remoteRunConfig *RemoteRunConfig) (string, error) {
 	return returnString, err
 }
 
-func RemoteRunBashScript(config *RemoteRunBashScriptConfig) (string, error) {
-	var (
-		command string
-		dstPath string
-	)
-	randomString := rand.String(5)
-
-	for _, value := range config.Vars {
-		envs := strings.Split(value, "=")
-		vars_command := envs[0] + "=" + envs[1]
-		command += vars_command + " "
-	}
-	log.Println("[DEBUG] command: " + command)
-	// Create REMOTEDIR folder
-	if config.IsApply {
-		command = "mkdir -p " + REMOTEDIR + "/apply-" + randomString
-	} else {
-		command = "mkdir -p " + REMOTEDIR
-	}
-
-	runInitOutput, err := RemoteRun(&RemoteRunConfig{
-		Username:   config.Username,
-		IPAddress:  config.IPAddress,
-		SSHPort:    config.SSHPort,
-		PrivateKey: config.PrivateKey,
-		Command:    command,
-	})
+// creates a new apply dir and copies the file to the remote ex. ~/.onctl/apply01
+// executes the file on the remote
+func (r *Remote) CopyAndRunRemoteFile(config *CopyAndRunRemoteFileConfig) error {
+	log.Println("[DEBUG] CopyAndRunRemoteFile: ", config.File)
+	fileBaseName := filepath.Base(config.File)
+	fileContent, err := files.EmbededFiles.ReadFile("apply_dir.sh")
 	if err != nil {
-		fmt.Println(runInitOutput)
 		log.Fatalln(err)
 	}
-
-	fileBaseName := filepath.Base(config.Script)
-	// Extract tar.gz
-	if slices.Contains([]string{".tgz", ".gz"}, filepath.Ext(config.Script)) {
-		// Copy bash script or tar.gz to .onctl-init folder
-		err = SSHCopyFile(config.Username, config.IPAddress, config.SSHPort, config.PrivateKey, config.Script, REMOTEDIR+"/"+fileBaseName)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		runInitOutput, err = RemoteRun(&RemoteRunConfig{
-			Username:   config.Username,
-			IPAddress:  config.IPAddress,
-			SSHPort:    config.SSHPort,
-			PrivateKey: config.PrivateKey,
-			Command:    "cd " + REMOTEDIR + " && tar -xzf " + fileBaseName,
-		})
-		if err != nil {
-			fmt.Println(runInitOutput)
-			log.Fatalln(err)
-		}
-	} else { // not tar.gz
-		if config.IsApply {
-			dstPath = REMOTEDIR + "/apply-" + randomString + "/" + fileBaseName
-		} else {
-			dstPath = REMOTEDIR + "/" + fileBaseName
-		}
-		// Checking file in filesystem
-		_, err := os.Stat(filepath.Dir(config.Script) + "/.env")
-		if err == nil { // file found in filesystem
-			log.Println("[DEBUG]", ".env file found in filesystem, trying to copy to remote")
-			err = SSHCopyFile(config.Username, config.IPAddress, config.SSHPort, config.PrivateKey, filepath.Dir(config.Script)+"/.env", filepath.Dir(dstPath)+"/.env")
-			if err != nil {
-				log.Fatalln(err)
-			}
-		}
-
-		log.Println("[DEBUG] copying " + config.Script + " to remote...")
-		err = SSHCopyFile(config.Username, config.IPAddress, config.SSHPort, config.PrivateKey, config.Script, dstPath)
-		if err != nil {
-			log.Fatalln(err)
-		}
-	}
-
-	log.Println("[DEBUG] running " + fileBaseName + "...")
-	if config.IsApply {
-		command = "cd " + REMOTEDIR + "/apply-" + randomString + " && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
-	} else {
-		command = "cd " + REMOTEDIR + " && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
-	}
-	log.Println("[DEBUG] command: " + command)
-	runInitOutput, err = RemoteRun(&RemoteRunConfig{
-		Username:   config.Username,
-		IPAddress:  config.IPAddress,
-		SSHPort:    config.SSHPort,
-		PrivateKey: config.PrivateKey,
-		Command:    command,
+	command := string(fileContent)
+	nextApplyDir, err := r.RemoteRun(&RemoteRunConfig{
+		Command: command,
+		Vars:    []string{"ONCTLDIR=" + ONCTLDIR},
 	})
+	log.Println("[DEBUG] nextApplyDir: ", nextApplyDir)
 	if err != nil {
-		log.Println("Error on remoteRun")
-		fmt.Println(runInitOutput)
+		fmt.Println(nextApplyDir)
 		log.Fatalln(err)
 	}
+	dstPath := ONCTLDIR + "/" + nextApplyDir + "/" + fileBaseName
+	log.Println("[DEBUG] dstPath:", dstPath)
+	err = r.SSHCopyFile(config.File, dstPath)
+	if err != nil {
+		log.Println("RemoteRun error: ", err)
+		return err
+	}
+	if len(config.Vars) > 0 {
+		command = "cd " + ONCTLDIR + "/" + nextApplyDir + " && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && " + variablesToEnvVars(config.Vars) + "./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
+	} else {
+		command = "cd " + ONCTLDIR + "/" + nextApplyDir + " && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
+	}
 
-	log.Println("[DEBUG] init.sh output: " + runInitOutput)
-	return runInitOutput, err
-
+	log.Println("[DEBUG] command: ", command)
+	_, err = r.RemoteRun(&RemoteRunConfig{
+		Command: command,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
 }

@@ -21,7 +21,7 @@ import (
 
 type cmdCreateOptions struct {
 	PublicKeyFile string
-	InitFile      string
+	ApplyFile     string
 	CloudInitFile string
 	DotEnvFile    string
 	Variables     []string
@@ -35,7 +35,7 @@ var (
 
 func init() {
 	createCmd.Flags().StringVarP(&opt.PublicKeyFile, "publicKey", "k", "", "Path to publicKey file (default: ~/.ssh/id_rsa))")
-	createCmd.Flags().StringVarP(&opt.InitFile, "init", "i", "", "init bash script file")
+	createCmd.Flags().StringVarP(&opt.ApplyFile, "apply", "a", "", "apply bash script file")
 	createCmd.Flags().StringVarP(&opt.Vm.Type, "type", "t", "", "instance type")
 	createCmd.Flags().StringVarP(&opt.Vm.Name, "name", "n", "", "vm name")
 	createCmd.Flags().IntVarP(&opt.Vm.SSHPort, "ssh-port", "p", 22, "ssh port")
@@ -50,9 +50,10 @@ var createCmd = &cobra.Command{
 	Short:   "Create a VM",
 	Run: func(cmd *cobra.Command, args []string) {
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
-		opt.InitFile = findFile(opt.InitFile)
+		opt.ApplyFile = findFile(opt.ApplyFile)
 		opt.CloudInitFile = findFile(opt.CloudInitFile)
 
+		// BEGIN SSH Key
 		publicKeyFile, privateKeyFile := getSSHKeyFilePaths(opt.PublicKeyFile)
 		s.Start()
 		s.Suffix = " Checking SSH Keys..."
@@ -64,7 +65,9 @@ var createCmd = &cobra.Command{
 		}
 		s.Stop()
 		fmt.Println("\033[32m\u2714\033[0m Checking SSH Keys...")
+		// END SSH Key
 
+		// BEGIN Set VM Name
 		log.Printf("[DEBUG] keyID: %s", opt.Vm.SSHKeyID)
 		if opt.Vm.Name == "" {
 			if viper.GetString("vm.name") != "" {
@@ -75,6 +78,7 @@ var createCmd = &cobra.Command{
 		}
 		s.Restart()
 		s.Suffix = " VM Starting..."
+		// END Set VM Name
 
 		vm, err := provider.Deploy(opt.Vm)
 		if err != nil {
@@ -92,38 +96,38 @@ var createCmd = &cobra.Command{
 			log.Println(err)
 		}
 
+		// BEGIN Cloud-init
 		log.Println("[DEBUG] waiting for cloud-init")
 		log.Println("[DEBUG] ssh port: ", opt.Vm.SSHPort)
 		s.Stop()
 		fmt.Println("\033[32m\u2714\033[0m VM Started...")
 		s.Restart()
 		s.Suffix = " Waiting for provider cloud-init..."
-		tools.WaitForCloudInit(&tools.RemoteRunConfig{
+		remote := tools.Remote{
 			Username:   viper.GetString(cloudProvider + ".vm.username"),
 			IPAddress:  vm.IP,
 			SSHPort:    opt.Vm.SSHPort,
 			PrivateKey: string(privateKey),
-		})
+		}
+
+		remote.WaitForCloudInit()
+
 		s.Stop()
 		fmt.Println("\033[32m\u2714\033[0m Cloud-init finished...")
 		log.Println("[DEBUG] cloud-init finished")
-		if opt.InitFile != "" {
-			s.Restart()
-			s.Suffix = " Running " + opt.InitFile + " on Remote..."
+		// END Cloud-init
 
-			_, err := tools.RemoteRunBashScript(&tools.RemoteRunBashScriptConfig{
-				Username:   viper.GetString(cloudProvider + ".vm.username"),
-				IPAddress:  vm.IP,
-				SSHPort:    opt.Vm.SSHPort,
-				PrivateKey: string(privateKey),
-				Script:     opt.InitFile,
-				IsApply:    false,
-				Vars:       opt.Variables,
+		if opt.ApplyFile != "" {
+			s.Restart()
+			s.Suffix = " Running " + opt.ApplyFile + " on Remote..."
+
+			err = remote.CopyAndRunRemoteFile(&tools.CopyAndRunRemoteFileConfig{
+				File: opt.ApplyFile,
+				Vars: opt.Variables,
 			})
 			if err != nil {
-				log.Fatal(err)
+				log.Println(err)
 			}
-			// fmt.Println(runInitOutput)
 			s.Stop()
 			fmt.Println("\033[32m\u2714\033[0m Remote Run Completed...")
 

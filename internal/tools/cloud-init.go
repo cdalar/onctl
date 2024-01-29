@@ -30,13 +30,15 @@ func FileToBase64(filepath string) string {
 }
 
 // WaitForCloudInit waits for cloud-init to finish
-func WaitForCloudInit(remoteRunConfig *RemoteRunConfig) {
+func (r Remote) WaitForCloudInit() {
 	var tries int
 
-	remoteRunConfig.Command = "[ -f /run/cloud-init/result.json ] && echo -n \"OK\""
+	command := "[ -f /run/cloud-init/result.json ] && echo -n \"OK\""
 	for {
 
-		isOK, err := RemoteRun(remoteRunConfig)
+		isOK, err := r.RemoteRun(&RemoteRunConfig{
+			Command: command,
+		})
 		if err != nil {
 			log.Println("[DEBUG] RemoteRun:" + err.Error())
 		}
@@ -49,7 +51,7 @@ func WaitForCloudInit(remoteRunConfig *RemoteRunConfig) {
 		tries++
 		log.Println("[DEBUG] :" + strconv.Itoa(tries))
 		if tries > 15 {
-			log.Fatalln("Exiting.. Could not connect to IP " + remoteRunConfig.IPAddress + " on port " + strconv.Itoa(remoteRunConfig.SSHPort))
+			log.Fatalln("Exiting.. Could not connect to IP " + r.IPAddress + " on port " + strconv.Itoa(r.SSHPort))
 		}
 	}
 }

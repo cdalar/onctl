@@ -21,6 +21,7 @@ var (
 func init() {
 	sshCmd.Flags().IntVarP(&port, "port", "p", 22, "ssh port")
 	sshCmd.Flags().StringVarP(&apply, "apply", "a", "", "apply script")
+	sshCmd.Flags().StringSliceVarP(&opt.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
 }
 
 var sshCmd = &cobra.Command{
@@ -49,16 +50,20 @@ var sshCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalln(err)
 		}
+		remote := tools.Remote{
+			Username:   viper.GetString(cloudProvider + ".vm.username"),
+			IPAddress:  vm.IP,
+			SSHPort:    port,
+			PrivateKey: string(privateKey),
+		}
+
 		if apply != "" {
 			s.Start()
-			s.Suffix = " Applying " + filepath.Base(apply)
-			_, err := tools.RemoteRunBashScript(&tools.RemoteRunBashScriptConfig{
-				Username:   viper.GetString(cloudProvider + ".vm.username"),
-				IPAddress:  vm.IP,
-				SSHPort:    port,
-				PrivateKey: string(privateKey),
-				Script:     apply,
-				IsApply:    true,
+			s.Suffix = " Applying " + apply
+
+			err = remote.CopyAndRunRemoteFile(&tools.CopyAndRunRemoteFileConfig{
+				File: apply,
+				Vars: opt.Variables,
 			})
 			if err != nil {
 				s.Stop()
