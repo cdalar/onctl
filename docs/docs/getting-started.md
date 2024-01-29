@@ -5,6 +5,7 @@
 ```
 ❯ tree
 .
+├── aws.yaml
 ├── azure.yaml
 ├── hetzner.yaml
 ├── <cloud provider>.yaml
@@ -20,11 +21,15 @@
 1. set `ONCTL_CLOUD` environment variables to the name of the cloud provider. Supported values; 
     - azure
     - hetzner
-    - aws (coming soon)
+    - aws
 1. 
 ```
 export ONCTL_CLOUD=hetzner
 ```
+
+!!! note 
+
+    If you don't set ONCTL_CLOUD environment variable, onctl tool will try to find credentials on your shell and use the first one it finds. 
 
 ## spin up a virtual machine
 1. We're ready. Let's create a Virtual Machine (Instance) 

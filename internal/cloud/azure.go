@@ -42,7 +42,7 @@ func (p ProviderAzure) List() (VmList, error) {
 		| extend nics=array_length(properties.networkProfile.networkInterfaces)
 		| mv-expand nic=properties.networkProfile.networkInterfaces
 		| where nics == 1 or nic.properties.primary =~ 'true' or isempty(nic)
-		| project vmId = id, vmName = name, vmSize=tostring(properties.hardwareProfile.vmSize), nicId = tostring(nic.id), timeCreated = tostring(properties.timeCreated), status = tostring(properties.extended.instanceView.powerState.displayStatus)
+		| project vmId = id, vmName = name, vmSize=tostring(properties.hardwareProfile.vmSize), nicId = tostring(nic.id), timeCreated = tostring(properties.timeCreated), status = tostring(properties.extended.instanceView.powerState.displayStatus), location = tostring(location)
 		| join kind=leftouter (
 			resources
 			| where type =~ 'microsoft.network/networkinterfaces'
@@ -52,7 +52,7 @@ func (p ProviderAzure) List() (VmList, error) {
 			| project nicId = id, publicIpId = tostring(ipconfig.properties.publicIPAddress.id))
 		on nicId
 		| project-away nicId1
-		| summarize by vmId, vmName, vmSize, nicId, publicIpId, timeCreated, status
+		| summarize by vmId, vmName, vmSize, nicId, publicIpId, timeCreated, status, location
 		| join kind=leftouter (
 			resources
 			| where type =~ 'microsoft.network/publicipaddresses'
@@ -98,6 +98,13 @@ func (p ProviderAzure) List() (VmList, error) {
 				Type:      items["vmSize"].(string),
 				Status:    items["status"].(string),
 				CreatedAt: createdAt,
+				Location:  items["location"].(string),
+				Cost: CostStruct{
+					Currency:        "N/A",
+					CostPerHour:     0,
+					CostPerMonth:    0,
+					AccumulatedCost: 0,
+				},
 			})
 		}
 	}
@@ -235,7 +242,6 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 
 func (p ProviderAzure) Destroy(server Vm) error {
 	log.Println("[DEBUG] Destroy Server")
-	fmt.Print("Destroying ", server.Name, "...")
 	resp, err := p.VmClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name, nil)
 	if err != nil {
 		log.Fatalln(err)
@@ -250,10 +256,9 @@ func (p ProviderAzure) Destroy(server Vm) error {
 	}
 	log.Println("[DEBUG] ", respDone)
 	if resp.Done() {
-		fmt.Println("DONE")
+		log.Println("[DEBUG] DONE")
 	}
 
-	fmt.Print("Destroying other resources of ", server.Name, "...")
 	nic, err := p.NicClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-nic", nil)
 	if err != nil {
 		log.Fatalln(err)
@@ -266,7 +271,7 @@ func (p ProviderAzure) Destroy(server Vm) error {
 	}
 	log.Println("[DEBUG] ", nicDone)
 	if nic.Done() {
-		fmt.Println("DONE")
+		log.Println("[DEBUG] DONE")
 	}
 	pip, err := p.PublicIPClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-pip", nil)
 	if err != nil {
@@ -281,27 +286,26 @@ func (p ProviderAzure) Destroy(server Vm) error {
 
 }
 
-func (p ProviderAzure) SSHInto(serverName, port string) {
-	s := p.getServerByServerName(serverName)
-	log.Println("[DEBUG] " + s.String())
-	if s.ID == "" {
-		fmt.Println("Server not found")
+func (p ProviderAzure) SSHInto(serverName string, port int) {
+	s, err := p.GetByName(serverName)
+	if err != nil || s.ID == "" {
+		log.Fatalln(err)
 	}
-
+	log.Println("[DEBUG] " + s.String())
 	tools.SSHIntoVM(s.IP, "azureuser", port)
 }
 
-func (p ProviderAzure) getServerByServerName(serverName string) Vm {
+func (p ProviderAzure) GetByName(serverName string) (Vm, error) {
 	vmList, err := p.List()
 	if err != nil {
-		log.Println(err)
+		return Vm{}, err
 	}
 	for _, vm := range vmList.List {
 		if vm.Name == serverName {
-			return vm
+			return vm, nil
 		}
 	}
-	return Vm{}
+	return Vm{}, nil
 }
 
 func createVirtualNetwork(ctx context.Context, p *ProviderAzure) (*armnetwork.VirtualNetwork, error) {
@@ -338,7 +342,7 @@ func createVirtualNetwork(ctx context.Context, p *ProviderAzure) (*armnetwork.Vi
 	}
 
 	if pollerResponse.Done() {
-		fmt.Println("DONE")
+		log.Println("[DEBUG] DONE")
 	}
 
 	return &resp.VirtualNetwork, nil
@@ -365,7 +369,7 @@ func createPublicIP(ctx context.Context, p *ProviderAzure, server Vm) (*armnetwo
 		return nil, err
 	}
 	if pollerResponse.Done() {
-		fmt.Println("DONE")
+		log.Println("[DEBUG] DONE")
 	}
 
 	return &resp.PublicIPAddress, err
@@ -402,7 +406,7 @@ func createNic(ctx context.Context, p *ProviderAzure, server Vm, vnet *armnetwor
 		log.Fatalln(err)
 	}
 	if nicResp.Done() {
-		fmt.Println("DONE")
+		log.Println("[DEBUG] DONE")
 	}
 
 	log.Println("[DEBUG] ", nicRespDone)

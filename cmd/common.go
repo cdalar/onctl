@@ -94,8 +94,9 @@ func PrettyPrint(v interface{}) (err error) {
 //lint:ignore U1000 will use this function in the future
 func yesNo() bool {
 	prompt := promptui.Select{
-		Label: "Select[Yes/No]",
-		Items: []string{"Yes", "No"},
+		Label:     "Please confirm [y/N]",
+		Items:     []string{"Yes", "No"},
+		CursorPos: 1,
 	}
 	_, result, err := prompt.Run()
 	if err != nil {
@@ -183,4 +184,26 @@ func findFile(filename string) (filePath string) {
 		os.Exit(1)
 	}
 	return ""
+}
+
+func getSSHKeyFilePaths(filename string) (publicKeyFile, privateKeyFile string) {
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		log.Println(err)
+	}
+
+	if filename == "" {
+		publicKeyFile = home + "/.ssh/id_rsa.pub"
+		if _, err := os.Stat(publicKeyFile); err != nil {
+			log.Fatalln(publicKeyFile + " Public key file not found")
+		}
+	}
+
+	privateKeyFile = publicKeyFile[:len(publicKeyFile)-4]
+	if _, err := os.Stat(privateKeyFile); err != nil {
+		log.Fatalln(privateKeyFile + " Private key file not found")
+	}
+
+	return publicKeyFile, privateKeyFile
 }

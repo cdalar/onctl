@@ -53,9 +53,15 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 	input := &ec2.RunInstancesInput{
 		ImageId:      aws.String(*images[0].ImageId),
 		InstanceType: aws.String(server.Type),
-		MinCount:     aws.Int64(1),
-		MaxCount:     aws.Int64(1),
-		KeyName:      aws.String(*keyPairs.KeyPairs[0].KeyName),
+		// InstanceMarketOptions: &ec2.InstanceMarketOptionsRequest{
+		// 	MarketType: aws.String("spot"),
+		// 	SpotOptions: &ec2.SpotMarketOptions{
+		// 		MaxPrice: aws.String("0.02"),
+		// 	},
+		// },
+		MinCount: aws.Int64(1),
+		MaxCount: aws.Int64(1),
+		KeyName:  aws.String(*keyPairs.KeyPairs[0].KeyName),
 		NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
 			{
 				DeviceIndex: aws.Int64(0),
@@ -82,7 +88,6 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 		},
 	}
 
-	log.Println("Starting Instance...")
 	descOut, err := p.Client.DescribeInstances(&ec2.DescribeInstancesInput{
 		Filters: []*ec2.Filter{
 			{
@@ -120,7 +125,6 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 		return Vm{}, err
 	}
 	log.Println("[DEBUG] " + result.String())
-	log.Println("Waiting for instance to be ready...")
 	err = p.Client.WaitUntilInstanceRunning(&ec2.DescribeInstancesInput{
 		InstanceIds: []*string{result.Instances[0].InstanceId},
 	})
@@ -135,10 +139,9 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 func (p ProviderAws) Destroy(server Vm) error {
 	if server.ID == "" {
 		log.Println("[DEBUG] Server ID is empty")
-		s := p.getServerByServerName(server.Name)
-		if s.ID == "" {
-			log.Println("[DEBUG] Server not found")
-			return nil
+		s, err := p.GetByName(server.Name)
+		if err != nil || s.ID == "" {
+			log.Fatalln(err)
 		}
 		server.ID = s.ID
 	}
@@ -274,10 +277,17 @@ func mapAwsServer(server *ec2.Instance) Vm {
 		Type:      *server.InstanceType,
 		Status:    *server.State.Name,
 		CreatedAt: *server.LaunchTime,
+		Location:  *server.Placement.AvailabilityZone,
+		Cost: CostStruct{
+			Currency:        "N/A",
+			CostPerHour:     0,
+			CostPerMonth:    0,
+			AccumulatedCost: 0,
+		},
 	}
 }
 
-func (p ProviderAws) getServerByServerName(serverName string) Vm {
+func (p ProviderAws) GetByName(serverName string) (Vm, error) {
 	s, err := p.Client.DescribeInstances(&ec2.DescribeInstancesInput{
 		Filters: []*ec2.Filter{
 			{
@@ -298,19 +308,20 @@ func (p ProviderAws) getServerByServerName(serverName string) Vm {
 		log.Fatalln(err)
 	}
 	if len(s.Reservations) == 0 {
-		fmt.Println("No server found with name: " + serverName)
-		os.Exit(1)
+		// fmt.Println("No server found with name: " + serverName)
+		// os.Exit(1)
+		return Vm{}, err
 	}
-	return mapAwsServer(s.Reservations[0].Instances[0])
+	return mapAwsServer(s.Reservations[0].Instances[0]), nil
 }
 
-func (p ProviderAws) SSHInto(serverName, port string) {
+func (p ProviderAws) SSHInto(serverName string, port int) {
 
-	s := p.getServerByServerName(serverName)
-	log.Println("[DEBUG] " + s.String())
-	if s.ID == "" {
-		fmt.Println("Server not found")
+	s, err := p.GetByName(serverName)
+	if err != nil || s.ID == "" {
+		log.Fatalln(err)
 	}
+	log.Println("[DEBUG] " + s.String())
 
 	ipAddress := s.IP
 	tools.SSHIntoVM(ipAddress, viper.GetString("aws.vm.username"), port)
