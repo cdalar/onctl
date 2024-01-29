@@ -13,6 +13,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	force bool
+)
+
+func init() {
+	destroyCmd.Flags().BoolVarP(&force, "force", "f", false, "force destroy VM(s) without confirmation")
+}
+
 var destroyCmd = &cobra.Command{
 	Use:     "destroy",
 	Aliases: []string{"down", "delete", "remove", "rm"},
@@ -35,8 +43,10 @@ var destroyCmd = &cobra.Command{
 			}
 		case "all":
 			// Tear down all servers
-			if !yesNo() {
-				os.Exit(0)
+			if !force {
+				if !yesNo() {
+					os.Exit(0)
+				}
 			}
 			log.Println("[DEBUG] Tear down all servers")
 			servers, err := provider.List()

@@ -226,11 +226,9 @@ func (r *Remote) CopyAndRunRemoteFile(config *CopyAndRunRemoteFileConfig) error 
 		log.Println("RemoteRun error: ", err)
 		return err
 	}
-	if len(config.Vars) > 0 {
-		command = "cd " + ONCTLDIR + "/" + nextApplyDir + " && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && " + variablesToEnvVars(config.Vars) + "./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
-	} else {
-		command = "cd " + ONCTLDIR + "/" + nextApplyDir + " && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
-	}
+
+	config.Vars = append(config.Vars, "PUBLIC_IP="+r.IPAddress, "TEST_VAR=TEST123")
+	command = "cd " + ONCTLDIR + "/" + nextApplyDir + " && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && " + variablesToEnvVars(config.Vars) + "sudo -E ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
 
 	log.Println("[DEBUG] command: ", command)
 	_, err = r.RemoteRun(&RemoteRunConfig{
