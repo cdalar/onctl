@@ -8,6 +8,7 @@ import (
 
 	"github.com/briandowns/spinner"
 	"github.com/cdalar/onctl/internal/cloud"
+	"github.com/cdalar/onctl/internal/rand"
 	"github.com/cdalar/onctl/internal/tools"
 
 	"github.com/spf13/cobra"
@@ -72,7 +73,7 @@ var createCmd = &cobra.Command{
 			if viper.GetString("vm.name") != "" {
 				opt.Vm.Name = viper.GetString("vm.name")
 			} else {
-				opt.Vm.Name = tools.GenerateMachineUniqueName()
+				opt.Vm.Name = "onctl-" + rand.String(5)
 			}
 		}
 		s.Restart()

@@ -8,7 +8,6 @@ import (
 
 	"github.com/briandowns/spinner"
 	"github.com/cdalar/onctl/internal/cloud"
-	"github.com/cdalar/onctl/internal/tools"
 
 	"github.com/spf13/cobra"
 )
@@ -34,13 +33,6 @@ var destroyCmd = &cobra.Command{
 		}
 
 		switch args[0] {
-		// TODO: only works on the current directory
-		case "self":
-			serverName := tools.GenerateMachineUniqueName()
-			log.Println("[DEBUG] Tear down self: " + serverName)
-			if err := provider.Destroy(cloud.Vm{Name: serverName}); err != nil {
-				log.Println(err)
-			}
 		case "all":
 			// Tear down all servers
 			if !force {

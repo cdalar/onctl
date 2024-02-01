@@ -149,11 +149,22 @@ func (p ProviderAzure) getSSHKeyPublicData() string {
 func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 	log.Println("[DEBUG] Deploy Server")
 
-	vnet, err := createVirtualNetwork(context.Background(), &p)
-	if err != nil {
-		log.Fatalln(err)
+	var vnet *armnetwork.VirtualNetwork
+	// Create the Vnet
+	if viper.GetString("azure.vm.vnet.create") == "true" {
+		vnet, err := createVirtualNetwork(context.Background(), &p)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		log.Println("[DEBUG] ", vnet)
+	} else { // Get the Vnet
+		vnetResp, err := p.VnetClient.Get(context.Background(), viper.GetString("azure.resourceGroup"), viper.GetString("azure.vm.vnet.name"), nil)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		log.Println("[DEBUG] ", vnet)
+		vnet = &vnetResp.VirtualNetwork
 	}
-	log.Println("[DEBUG] ", vnet)
 	pip, err := createPublicIP(context.Background(), &p, server)
 	if err != nil {
 		log.Fatalln(err)
@@ -259,28 +270,28 @@ func (p ProviderAzure) Destroy(server Vm) error {
 		log.Println("[DEBUG] DONE")
 	}
 
-	nic, err := p.NicClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-nic", nil)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	nicDone, err := nic.PollUntilDone(context.Background(), &runtime.PollUntilDoneOptions{
-		Frequency: time.Duration(3) * time.Second,
-	})
-	if err != nil {
-		log.Fatalln(err)
-	}
-	log.Println("[DEBUG] ", nicDone)
-	if nic.Done() {
-		log.Println("[DEBUG] DONE")
-	}
-	pip, err := p.PublicIPClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-pip", nil)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	if err != nil {
-		log.Fatalln(err)
-	}
-	log.Println("[DEBUG] ", pip)
+	// nic, err := p.NicClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-nic", nil)
+	// if err != nil {
+	// 	log.Fatalln(err)
+	// }
+	// nicDone, err := nic.PollUntilDone(context.Background(), &runtime.PollUntilDoneOptions{
+	// 	Frequency: time.Duration(3) * time.Second,
+	// })
+	// if err != nil {
+	// 	log.Fatalln(err)
+	// }
+	// log.Println("[DEBUG] ", nicDone)
+	// if nic.Done() {
+	// 	log.Println("[DEBUG] DONE")
+	// }
+	// pip, err := p.PublicIPClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-pip", nil)
+	// if err != nil {
+	// 	log.Fatalln(err)
+	// }
+	// if err != nil {
+	// 	log.Fatalln(err)
+	// }
+	// log.Println("[DEBUG] ", pip)
 
 	return err
 
@@ -309,7 +320,6 @@ func (p ProviderAzure) GetByName(serverName string) (Vm, error) {
 }
 
 func createVirtualNetwork(ctx context.Context, p *ProviderAzure) (*armnetwork.VirtualNetwork, error) {
-
 	parameters := armnetwork.VirtualNetwork{
 		Location: to.Ptr(viper.GetString("azure.location")),
 		Properties: &armnetwork.VirtualNetworkPropertiesFormat{
