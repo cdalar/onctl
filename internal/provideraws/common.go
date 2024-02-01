@@ -5,10 +5,7 @@ import (
 
 	"log"
 	"os"
-	"path/filepath"
-	"strings"
 
-	"github.com/cdalar/onctl/internal/rand"
 	"github.com/cdalar/onctl/internal/tools"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -64,81 +61,6 @@ func DefaultRouteTable(svc *ec2.EC2, vpcId *string) *string {
 		}
 	}
 	return result.RouteTables[0].RouteTableId
-}
-
-// CreateKeyPair creates a keypair and saves it to a file
-// Returns the name of the keypair and error if any
-func CreateKeyPair(svc *ec2.EC2) (string, error) {
-
-	var ret string
-	home, err := tools.CreateConfigDirIfNotExist()
-	if err != nil {
-		log.Println(err)
-	}
-	files, err := os.ReadDir(home)
-	if err != nil {
-		log.Println(err)
-	}
-
-	//check if keypair file already exists
-	var keyPairIndex int = -1
-	for k, f := range files {
-		// log.Println(f.Name())
-		if len(f.Name()) > 10 && f.Name()[0:7] == "onkube-" {
-			keyPairName := strings.TrimSuffix(filepath.Base(f.Name()), filepath.Ext(f.Name()))
-			keyPairExists := checkIfKeyPairExists(svc, keyPairName)
-			if keyPairExists {
-				keyPairIndex = k
-				break
-			}
-		}
-	}
-	log.Println("keyPairIndex: ", keyPairIndex)
-	if keyPairIndex != -1 {
-		ret = home + "/" + files[keyPairIndex].Name()
-	}
-
-	if keyPairIndex == -1 {
-		// If keypair does not exist, create it
-		// Create a key pair with the specified name.
-		randomString := rand.String(6)
-		keyPairName := "onkube-kp-" + randomString
-		input := &ec2.CreateKeyPairInput{
-			KeyName: aws.String(keyPairName), // Required
-			TagSpecifications: []*ec2.TagSpecification{
-				{ResourceType: aws.String("key-pair"),
-					Tags: []*ec2.Tag{
-						{
-							Key:   aws.String("Name"),
-							Value: aws.String(keyPairName),
-						},
-					},
-				},
-			},
-		}
-
-		result, err := svc.CreateKeyPair(input)
-		if err != nil {
-			log.Println(err)
-		}
-
-		file, err := os.Create(home + "/" + keyPairName + ".pem")
-		if err != nil {
-			log.Fatal("Cannot create file", err)
-		}
-
-		_, err = file.WriteString(*result.KeyMaterial)
-		if err != nil {
-			log.Println(err)
-		}
-		err = os.Chmod(home+"/"+keyPairName+".pem", 0400)
-		if err != nil {
-			log.Fatal("Cannot change file permissions", err)
-		}
-		log.Println("KeyPair created: ", *result.KeyName)
-		ret = home + "/" + *result.KeyName + ".pem"
-	}
-	return ret, nil
 }
 
 func CreateSecurityGroupSSH(svc *ec2.EC2, vpcId *string) *string {
@@ -491,7 +413,7 @@ func AddSecurityGroupToInstance(svc *ec2.EC2, instanceId *string, securityGroupI
 // CreateSecurityGroupForPort creates a security group for a given port
 // and returns the security group id
 func CreateSecurityGroupForPort(svc *ec2.EC2, vpcId *string, port int64) (groupId *string) {
-	securityGroups := tools.GetSecurityGroups(svc, vpcId)
+	securityGroups := GetSecurityGroups(svc, vpcId)
 	for _, v := range securityGroups {
 		if *v.GroupName == "onkube-sg-"+fmt.Sprint(port) {
 			log.Println("Security Group already exists for port:", port)
@@ -641,4 +563,52 @@ func GetDefaultVpcId(svc *ec2.EC2) (vpcId *string) {
 		return nil
 	}
 	return result.Vpcs[0].VpcId
+}
+
+func GetSecurityGroups(svc *ec2.EC2, vpcId *string) []*ec2.SecurityGroup {
+	sgs, err := svc.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: []*string{vpcId},
+			},
+		},
+	})
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			default:
+				fmt.Println(aerr.Error())
+			}
+		} else {
+			// Print the error, cast err to awserr.Error to get the Code and
+			// Message from an error.
+			fmt.Println(err.Error())
+		}
+	}
+	return sgs.SecurityGroups
+}
+
+func GetSecurityGroupByName(svc *ec2.EC2, name string) []*ec2.SecurityGroup {
+	sgs, err := svc.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("group-name"),
+				Values: []*string{aws.String(name)},
+			},
+		},
+	})
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			default:
+				fmt.Println(aerr.Error())
+			}
+		} else {
+			// Print the error, cast err to awserr.Error to get the Code and
+			// Message from an error.
+			fmt.Println(err.Error())
+		}
+	}
+	return sgs.SecurityGroups
 }

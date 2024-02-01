@@ -8,7 +8,6 @@ require (
 	github.com/briandowns/spinner v1.23.0
 	github.com/hetznercloud/hcloud-go/v2 v2.5.1
 	github.com/manifoldco/promptui v0.9.0
-	github.com/mitchellh/go-homedir v1.1.0
 	github.com/spf13/cobra v1.8.0
 	k8s.io/apimachinery v0.27.1
 )
