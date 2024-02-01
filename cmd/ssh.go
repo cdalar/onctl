@@ -21,6 +21,7 @@ var (
 func init() {
 	sshCmd.Flags().IntVarP(&port, "port", "p", 22, "ssh port")
 	sshCmd.Flags().StringVarP(&apply, "apply", "a", "", "apply script")
+	sshCmd.Flags().StringVar(&opt.DotEnvFile, "dot-env", "", "dot-env (.env) file")
 	sshCmd.Flags().StringSliceVarP(&opt.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
 }
 
@@ -60,6 +61,14 @@ var sshCmd = &cobra.Command{
 		if apply != "" {
 			s.Start()
 			s.Suffix = " Applying " + apply
+
+			if opt.DotEnvFile != "" {
+				dotEnvVars, err := tools.ParseDotEnvFile(opt.DotEnvFile)
+				if err != nil {
+					log.Println(err)
+				}
+				opt.Variables = append(dotEnvVars, opt.Variables...)
+			}
 
 			err = remote.CopyAndRunRemoteFile(&tools.CopyAndRunRemoteFileConfig{
 				File: apply,

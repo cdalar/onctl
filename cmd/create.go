@@ -119,6 +119,14 @@ var createCmd = &cobra.Command{
 			s.Restart()
 			s.Suffix = " Running " + opt.ApplyFile + " on Remote..."
 
+			if opt.DotEnvFile != "" {
+				dotEnvVars, err := tools.ParseDotEnvFile(opt.DotEnvFile)
+				if err != nil {
+					log.Println(err)
+				}
+				opt.Variables = append(dotEnvVars, opt.Variables...)
+			}
+
 			err = remote.CopyAndRunRemoteFile(&tools.CopyAndRunRemoteFileConfig{
 				File: opt.ApplyFile,
 				Vars: opt.Variables,

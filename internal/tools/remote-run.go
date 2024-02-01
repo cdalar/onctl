@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
@@ -73,6 +74,25 @@ func exists(path string) (bool, error) {
 		return false, nil
 	}
 	return false, err
+}
+
+func ParseDotEnvFile(dotEnvFile string) ([]string, error) {
+	var vars []string
+	file, err := os.Open(dotEnvFile)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		line = strings.Trim(line, " ")
+		if strings.HasPrefix(line, "#") || line == "" {
+			continue
+		}
+		vars = append(vars, line)
+	}
+	return vars, nil
 }
 
 func variablesToEnvVars(vars []string) string {
@@ -227,7 +247,7 @@ func (r *Remote) CopyAndRunRemoteFile(config *CopyAndRunRemoteFileConfig) error 
 		return err
 	}
 
-	config.Vars = append(config.Vars, "PUBLIC_IP="+r.IPAddress, "TEST_VAR=TEST123")
+	config.Vars = append(config.Vars, "PUBLIC_IP="+r.IPAddress)
 	command = "cd " + ONCTLDIR + "/" + nextApplyDir + " && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && " + variablesToEnvVars(config.Vars) + "sudo -E ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
 
 	log.Println("[DEBUG] command: ", command)
