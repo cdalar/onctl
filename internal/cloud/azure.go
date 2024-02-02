@@ -270,28 +270,28 @@ func (p ProviderAzure) Destroy(server Vm) error {
 		log.Println("[DEBUG] DONE")
 	}
 
-	// nic, err := p.NicClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-nic", nil)
-	// if err != nil {
-	// 	log.Fatalln(err)
-	// }
-	// nicDone, err := nic.PollUntilDone(context.Background(), &runtime.PollUntilDoneOptions{
-	// 	Frequency: time.Duration(3) * time.Second,
-	// })
-	// if err != nil {
-	// 	log.Fatalln(err)
-	// }
-	// log.Println("[DEBUG] ", nicDone)
-	// if nic.Done() {
-	// 	log.Println("[DEBUG] DONE")
-	// }
-	// pip, err := p.PublicIPClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-pip", nil)
-	// if err != nil {
-	// 	log.Fatalln(err)
-	// }
-	// if err != nil {
-	// 	log.Fatalln(err)
-	// }
-	// log.Println("[DEBUG] ", pip)
+	nic, err := p.NicClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-nic", nil)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	nicDone, err := nic.PollUntilDone(context.Background(), &runtime.PollUntilDoneOptions{
+		Frequency: time.Duration(3) * time.Second,
+	})
+	if err != nil {
+		log.Fatalln(err)
+	}
+	log.Println("[DEBUG] ", nicDone)
+	if nic.Done() {
+		log.Println("[DEBUG] DONE")
+	}
+	pip, err := p.PublicIPClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-pip", nil)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	if err != nil {
+		log.Fatalln(err)
+	}
+	log.Println("[DEBUG] ", pip)
 
 	return err
 
