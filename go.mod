@@ -1,6 +1,8 @@
 module github.com/cdalar/onctl
 
-go 1.20
+go 1.21
+
+toolchain go1.21.5
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.0.0
@@ -9,7 +11,7 @@ require (
 	github.com/hetznercloud/hcloud-go/v2 v2.6.0
 	github.com/manifoldco/promptui v0.9.0
 	github.com/spf13/cobra v1.8.0
-	k8s.io/apimachinery v0.27.1
+	k8s.io/apimachinery v0.29.1
 )
 
 require (
