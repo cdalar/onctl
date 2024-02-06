@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/briandowns/spinner"
@@ -46,16 +47,23 @@ var destroyCmd = &cobra.Command{
 				log.Println(err)
 			}
 			log.Println("[DEBUG] Servers: ", servers.List)
+			var wg sync.WaitGroup
 			for _, server := range servers.List {
-				s.Start()
-				s.Suffix = " Destroying VM..."
-				if err := provider.Destroy(server); err != nil {
-					fmt.Println("\033[32m\u2718\033[0m Could not destroy VM: " + server.Name)
-					log.Println(err)
-				}
-				s.Stop()
-				fmt.Println("\033[32m\u2714\033[0m VM Destroyed: " + server.Name)
+				wg.Add(1)
+				go func(server cloud.Vm) {
+					defer wg.Done()
+					s.Start()
+					s.Suffix = " Destroying VM..."
+					if err := provider.Destroy(server); err != nil {
+						fmt.Println("\033[31m\u2718\033[0m Could not destroy VM: " + server.Name)
+						log.Println(err)
+					}
+					s.Stop()
+					fmt.Println("\033[32m\u2714\033[0m VM Destroyed: " + server.Name)
+				}(server)
 			}
+			wg.Wait()
+			fmt.Println("\033[32m\u2714\033[0m ALL VM(s) are destroyed")
 		default:
 			// Tear down specific server
 			serverName := args[0]
