@@ -338,7 +338,7 @@ func createVirtualNetwork(ctx context.Context, p *ProviderAzure) (*armnetwork.Vi
 			},
 		},
 	}
-	fmt.Print("Creating virtual network...")
+	fmt.Print("[DEBUG] Creating virtual network...")
 	pollerResponse, err := p.VnetClient.BeginCreateOrUpdate(ctx, viper.GetString("azure.resourceGroup"), viper.GetString("azure.vm.vnet.name"), parameters, nil)
 	if err != nil {
 		return nil, err
@@ -366,7 +366,7 @@ func createPublicIP(ctx context.Context, p *ProviderAzure, server Vm) (*armnetwo
 			PublicIPAllocationMethod: to.Ptr(armnetwork.IPAllocationMethodStatic), // Static or Dynamic
 		},
 	}
-	fmt.Print("Creating public IP...")
+	fmt.Print("[DEBUG] Creating public IP...")
 	pollerResponse, err := p.PublicIPClient.BeginCreateOrUpdate(ctx, viper.GetString("azure.resourceGroup"), server.Name+"-pip", parameters, nil)
 	if err != nil {
 		return nil, err
@@ -386,7 +386,7 @@ func createPublicIP(ctx context.Context, p *ProviderAzure, server Vm) (*armnetwo
 }
 
 func createNic(ctx context.Context, p *ProviderAzure, server Vm, vnet *armnetwork.VirtualNetwork, pip *armnetwork.PublicIPAddress) (*armnetwork.Interface, error) {
-	fmt.Print("Creating network interface...")
+	fmt.Print("[DEBUG] Creating network interface...")
 	nicResp, err := p.NicClient.BeginCreateOrUpdate(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-nic", armnetwork.Interface{
 		Location: to.Ptr(viper.GetString("azure.location")),
 		Properties: &armnetwork.InterfacePropertiesFormat{
