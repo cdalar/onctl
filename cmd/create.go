@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/briandowns/spinner"
@@ -35,6 +36,7 @@ var (
 func init() {
 	createCmd.Flags().StringVarP(&opt.PublicKeyFile, "publicKey", "k", "", "Path to publicKey file (default: ~/.ssh/id_rsa))")
 	createCmd.Flags().StringVarP(&opt.ApplyFile, "apply-file", "a", "", "apply bash script file")
+	createCmd.Flags().StringVar(&download, "download", "", "download remote file")
 	createCmd.Flags().StringVarP(&opt.Vm.Type, "type", "t", "", "instance type")
 	createCmd.Flags().StringVarP(&opt.Vm.Name, "name", "n", "", "vm name")
 	createCmd.Flags().IntVarP(&opt.Vm.SSHPort, "ssh-port", "p", 22, "ssh port")
@@ -137,6 +139,19 @@ var createCmd = &cobra.Command{
 			s.Stop()
 			fmt.Println("\033[32m\u2714\033[0m Remote Run Completed...")
 
+		}
+		if download != "" {
+			s.Start()
+			s.Suffix = " Downloading " + download
+			err = remote.DownloadFile(download, filepath.Base(download))
+			if err != nil {
+				s.Stop()
+				fmt.Println("\033[32m\u2718\033[0m Could not download " + download + " from VM: " + vm.Name)
+				log.Fatal(err)
+			}
+			s.Stop()
+			fmt.Println("\033[32m\u2714\033[0m " + download + " downloaded from VM: " + vm.Name)
+			return
 		}
 		s.Suffix = " Vm is Ready..."
 		s.Stop()
