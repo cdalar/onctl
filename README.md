@@ -15,10 +15,12 @@ Check 🌍 https://onctl.com for detailed documentation
 ## What onctl brings 
 
 - 🌍 Simple intuitive CLI to run VMs in seconds.  
-- ⛅️ Supports multi cloud providers (azure, hetzner, more coming soon...)
+- ⛅️ Supports multi cloud providers (aws, azure, hetzner, more coming soon...)
 - 🚀 Sets your public key and Gives you SSH access with `onctl ssh <vm-name>`
-- ✨ Cloud-init support. Set your own cloud-init file
-
+- ✨ Cloud-init support. Set your own cloud-init file `onctl up -n qwe --cloud-init <cloud.init.file>`
+- 🤖 Use ready to use templates to configure your vm. Check [onctl-templates](https://github.com/cdalar/onctl-templates) `onctl up -n qwe -a k3s/k3s-server.sh`
+- 🗂️ Use your custom local or http accessible scripts to configure your vm. `onctl ssh qwe -a <my_local_script.sh>`
+  
 ## Quick Start
 
 initialize project. this will create a `.onctl` directory. check configuration file and set as needed.
