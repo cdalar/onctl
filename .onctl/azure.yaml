@@ -1,6 +1,6 @@
 azure:
-  subscriptionId: 3c110410-a29d-4402-96c4-f82b0feaa895
-  resourceGroup: test2
+  subscriptionId: xxx-xxx-xxx-xxx
+  resourceGroup: test
   location: westeurope # or ex. sweedencentral
   vm:
     username: azureuser
