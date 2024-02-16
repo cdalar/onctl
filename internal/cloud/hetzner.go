@@ -113,7 +113,7 @@ func (p ProviderHetzner) List() (VmList, error) {
 	cloudList := make([]Vm, 0, len(list))
 	for _, server := range list {
 		cloudList = append(cloudList, mapHetznerServer(*server))
-		log.Println("[DEBUG] server name: " + server.Name)
+		log.Println("[DEBUG] server: ", server)
 	}
 	output := VmList{
 		List: cloudList,
@@ -182,11 +182,18 @@ func mapHetznerServer(server hcloud.Server) Vm {
 			costPerMonth, _ = strconv.ParseFloat(p.Monthly.Gross, 64)
 		}
 	}
+	var privateIP string
+	if len(server.PrivateNet) == 0 {
+		privateIP = "N/A"
+	} else {
+		privateIP = server.PrivateNet[0].IP.String()
+	}
 
 	return Vm{
 		ID:        strconv.FormatInt(server.ID, 10),
 		Name:      server.Name,
 		IP:        server.PublicNet.IPv4.IP.String(),
+		PrivateIP: privateIP,
 		Type:      server.ServerType.Name,
 		Status:    string(server.Status),
 		CreatedAt: server.Created,
