@@ -37,29 +37,29 @@ type QueryResponse struct {
 func (p ProviderAzure) List() (VmList, error) {
 	log.Println("[DEBUG] List Servers")
 	query := `
-		resources
-		| where type =~ 'microsoft.compute/virtualmachines' and resourceGroup =~ '` + viper.GetString("azure.resourceGroup") + `'	
-		| extend nics=array_length(properties.networkProfile.networkInterfaces)
-		| mv-expand nic=properties.networkProfile.networkInterfaces
-		| where nics == 1 or nic.properties.primary =~ 'true' or isempty(nic)
-		| project vmId = id, vmName = name, vmSize=tostring(properties.hardwareProfile.vmSize), nicId = tostring(nic.id), timeCreated = tostring(properties.timeCreated), status = tostring(properties.extended.instanceView.powerState.displayStatus), location = tostring(location)
-		| join kind=leftouter (
-			resources
-			| where type =~ 'microsoft.network/networkinterfaces'
-			| extend ipConfigsCount=array_length(properties.ipConfigurations)
-			| mv-expand ipconfig=properties.ipConfigurations
-			| where ipConfigsCount == 1 or ipconfig.properties.primary =~ 'true'
-			| project nicId = id, publicIpId = tostring(ipconfig.properties.publicIPAddress.id))
-		on nicId
-		| project-away nicId1
-		| summarize by vmId, vmName, vmSize, nicId, publicIpId, timeCreated, status, location
-		| join kind=leftouter (
-			resources
-			| where type =~ 'microsoft.network/publicipaddresses'
-			| project publicIpId = id, publicIpAddress = properties.ipAddress)
-		on publicIpId
-		| project-away publicIpId1
-		| order by timeCreated asc	
+	resources
+    | where type =~ 'microsoft.compute/virtualmachines' and resourceGroup =~ '` + viper.GetString("azure.resourceGroup") + `'	
+    | extend nics=array_length(properties.networkProfile.networkInterfaces)
+    | mv-expand nic=properties.networkProfile.networkInterfaces
+    | where nics == 1 or nic.properties.primary =~ 'true' or isempty(nic)
+    | project vmId = id, vmName = name, vmSize=tostring(properties.hardwareProfile.vmSize), nicId = tostring(nic.id), timeCreated = tostring(properties.timeCreated), status = tostring(properties.extended.instanceView.powerState.displayStatus), location = tostring(location)
+    | join kind=leftouter (
+        resources
+        | where type =~ 'microsoft.network/networkinterfaces'
+        | extend ipConfigsCount=array_length(properties.ipConfigurations)
+        | mv-expand ipconfig=properties.ipConfigurations
+        | where ipConfigsCount == 1 or ipconfig.properties.primary =~ 'true'
+        | project nicId = id, publicIpId = tostring(ipconfig.properties.publicIPAddress.id), privateIp = tostring(ipconfig.properties.privateIPAddress))
+    on nicId
+    | project-away nicId1
+    | summarize by vmId, vmName, vmSize, nicId, publicIpId, privateIp, timeCreated, status, location
+    | join kind=leftouter (
+        resources
+        | where type =~ 'microsoft.network/publicipaddresses'
+        | project publicIpId = id, publicIpAddress = properties.ipAddress)
+    on publicIpId
+    | project-away publicIpId1
+    | order by timeCreated asc	
 	`
 	// Create the query request, Run the query and get the results. Update the VM and subscriptionID details below.
 	resp, err := p.ResourceGraphClient.Resources(context.Background(),
@@ -91,10 +91,15 @@ func (p ProviderAzure) List() (VmList, error) {
 			if err != nil {
 				log.Fatalln(err)
 			}
+			if items["publicIpAddress"] == nil {
+				items["publicIpAddress"] = "N/A"
+			}
+
 			cloudList = append(cloudList, Vm{
 				ID:        filepath.Base(items["vmId"].(string)),
 				Name:      items["vmName"].(string),
 				IP:        items["publicIpAddress"].(string),
+				PrivateIP: items["privateIp"].(string),
 				Type:      items["vmSize"].(string),
 				Status:    items["status"].(string),
 				CreatedAt: createdAt,

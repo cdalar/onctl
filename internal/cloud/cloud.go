@@ -26,6 +26,8 @@ type Vm struct {
 	Name string
 	// IP is the public IP of the instance
 	IP string
+	//LocalIP is the local IP of the instance
+	PrivateIP string
 	// Type is the type of the instance
 	Type string
 	// Status is the status of the instance
