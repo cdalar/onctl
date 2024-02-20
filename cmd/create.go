@@ -36,7 +36,6 @@ var (
 func init() {
 	createCmd.Flags().StringVarP(&opt.PublicKeyFile, "publicKey", "k", "", "Path to publicKey file (default: ~/.ssh/id_rsa))")
 	createCmd.Flags().StringVarP(&opt.ApplyFile, "apply-file", "a", "", "apply bash script file")
-	// createCmd.Flags().StringVar(&download, "download", "", "download remote file")
 	createCmd.Flags().StringSliceVarP(&downloadSlice, "download", "d", []string{}, "List of files to download")
 	createCmd.Flags().StringVarP(&opt.Vm.Type, "type", "t", "", "instance type")
 	createCmd.Flags().StringVarP(&opt.Vm.Name, "name", "n", "", "vm name")

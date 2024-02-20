@@ -83,7 +83,6 @@ var sshCmd = &cobra.Command{
 			}
 			s.Stop()
 			fmt.Println("\033[32m\u2714\033[0m " + filepath.Base(apply) + " applied to VM: " + vm.Name)
-			return
 		}
 		// TODO go routines for parallel download
 		if len(downloadSlice) > 0 {
@@ -99,10 +98,9 @@ var sshCmd = &cobra.Command{
 				s.Stop()
 				fmt.Println("\033[32m\u2714\033[0m " + dfile + " downloaded from VM: " + vm.Name)
 			}
-			return
 		}
-
-		provider.SSHInto(args[0], port)
-
+		if apply == "" && len(downloadSlice) == 0 {
+			provider.SSHInto(args[0], port)
+		}
 	},
 }
