@@ -11,7 +11,7 @@ require (
 	github.com/hetznercloud/hcloud-go/v2 v2.6.0
 	github.com/manifoldco/promptui v0.9.0
 	github.com/spf13/cobra v1.8.0
-	k8s.io/apimachinery v0.29.1
+	k8s.io/apimachinery v0.29.2
 )
 
 require (
