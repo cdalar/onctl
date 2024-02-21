@@ -14,15 +14,15 @@ import (
 )
 
 var (
-	port     int
-	apply    string
-	download string
+	port          int
+	apply         string
+	downloadSlice []string
 )
 
 func init() {
 	sshCmd.Flags().IntVarP(&port, "port", "p", 22, "ssh port")
 	sshCmd.Flags().StringVarP(&apply, "apply", "a", "", "apply script")
-	sshCmd.Flags().StringVar(&download, "download", "", "download remote file")
+	sshCmd.Flags().StringSliceVarP(&downloadSlice, "download", "d", []string{}, "List of files to download")
 	sshCmd.Flags().StringVar(&opt.DotEnvFile, "dot-env", "", "dot-env (.env) file")
 	sshCmd.Flags().StringSliceVarP(&opt.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
 }
@@ -83,24 +83,24 @@ var sshCmd = &cobra.Command{
 			}
 			s.Stop()
 			fmt.Println("\033[32m\u2714\033[0m " + filepath.Base(apply) + " applied to VM: " + vm.Name)
-			return
 		}
-
-		if download != "" {
+		// TODO go routines for parallel download
+		if len(downloadSlice) > 0 {
 			s.Start()
-			s.Suffix = " Downloading " + download
-			err = remote.DownloadFile(download, filepath.Base(download))
-			if err != nil {
+			s.Suffix = " Downloading " + fmt.Sprint(len(downloadSlice)) + " files"
+			for _, dfile := range downloadSlice {
+				err = remote.DownloadFile(dfile, filepath.Base(dfile))
+				if err != nil {
+					s.Stop()
+					fmt.Println("\033[32m\u2718\033[0m Could not download " + dfile + " from VM: " + vm.Name)
+					log.Fatal(err)
+				}
 				s.Stop()
-				fmt.Println("\033[32m\u2718\033[0m Could not download " + download + " from VM: " + vm.Name)
-				log.Fatal(err)
+				fmt.Println("\033[32m\u2714\033[0m " + dfile + " downloaded from VM: " + vm.Name)
 			}
-			s.Stop()
-			fmt.Println("\033[32m\u2714\033[0m " + download + " downloaded from VM: " + vm.Name)
-			return
 		}
-
-		provider.SSHInto(args[0], port)
-
+		if apply == "" && len(downloadSlice) == 0 {
+			provider.SSHInto(args[0], port)
+		}
 	},
 }

@@ -1,6 +1,8 @@
 # Onctl
 
-`onctl` is a tool to manage virtual machines in multi-cloud
+`onctl` is a tool to manage virtual machines in multi-cloud. 
+
+Check 🌍 https://onctl.com for detailed documentation
 
 [![build](https://github.com/cdalar/onctl/actions/workflows/build.yml/badge.svg)](https://github.com/cdalar/onctl/actions/workflows/build.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/cdalar/onctl)](https://goreportcard.com/report/github.com/cdalar/onctl)
@@ -14,8 +16,51 @@
 
 - 🌍 Simple intuitive CLI to run VMs in seconds.  
 - ⛅️ Supports multi cloud providers (aws, azure, hetzner, more coming soon...)
-- 🚀 Gives you SSH access with you ssh public key precofigured. So no need to manage username/password
-- ✨ Cloud-init support. Set your own cloud-init file
+- 🚀 Sets your public key and Gives you SSH access with `onctl ssh <vm-name>`
+- ✨ Cloud-init support. Set your own cloud-init file `onctl up -n qwe --cloud-init <cloud.init.file>`
+- 🤖 Use ready to use templates to configure your vm. Check [onctl-templates](https://github.com/cdalar/onctl-templates) `onctl up -n qwe -a k3s/k3s-server.sh`
+- 🗂️ Use your custom local or http accessible scripts to configure your vm. `onctl ssh qwe -a <my_local_script.sh>`
+  
+## Quick Start
+
+initialize project. this will create a `.onctl` directory. check configuration file and set as needed.
+```
+❯ onctl init
+onctl environment initialized
+```
+
+export `ONCTL_CLOUD` to set Cloud Provider. 
+```
+❯ export ONCTL_CLOUD=hetzner
+```
+
+Be sure that credentials for that specific cloud provider is already set. 
+If you already use cloud provider CLI. They're already . ex. `az`, `aws`, `hcloud`
+```
+❯ echo $HCLOUD_TOKEN
+```
+
+Create VM.
+```
+❯ onctl up -n onctl-test
+Using: hetzner
+Creating SSHKey: onctl-42da32a9...
+SSH Key already exists (onctl-42da32a9)
+Starting server...
+Server IP: 168.119.58.112
+Vm started.
+```
+
+Ssh into VM.
+```
+❯ onctl ssh onctl-test
+Using: hetzner
+Welcome to Ubuntu 22.04.3 LTS (GNU/Linux 5.15.0-89-generic x86_64)
+.
+.
+.
+root@onctl-test:~# 
+```
 
 ## Installation
 
@@ -37,7 +82,7 @@ sudo install onctl /usr/local/bin/
 - download windows binary from [releases page](https://github.com/cdalar/onctl/releases)
 - unzip and copy onctl.exe to a location in PATH
 
-# Getting Started
+# Enjoy ✅
 
 ```
 ❯ onctl
