@@ -30,7 +30,7 @@ func FileToBase64(filepath string) string {
 }
 
 // WaitForCloudInit waits for cloud-init to finish
-func (r Remote) WaitForCloudInit() {
+func (r *Remote) WaitForCloudInit() {
 	var tries int
 
 	command := "[ -f /run/cloud-init/result.json ] && echo -n \"OK\""

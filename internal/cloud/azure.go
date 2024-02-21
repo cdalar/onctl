@@ -303,7 +303,7 @@ func (p ProviderAzure) SSHInto(serverName string, port int) {
 		log.Fatalln(err)
 	}
 	log.Println("[DEBUG] " + s.String())
-	tools.SSHIntoVM(s.IP, "azureuser", port)
+	tools.SSHIntoVM(s.IP, viper.GetString("azure.vm.username"), port)
 }
 
 func (p ProviderAzure) GetByName(serverName string) (Vm, error) {
