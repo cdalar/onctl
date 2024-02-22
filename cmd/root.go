@@ -9,6 +9,7 @@ import (
 	"github.com/cdalar/onctl/internal/cloud"
 	"github.com/cdalar/onctl/internal/provideraws"
 	"github.com/cdalar/onctl/internal/providerazure"
+	"github.com/cdalar/onctl/internal/providergcp"
 	"github.com/cdalar/onctl/internal/providerhtz"
 	"github.com/cdalar/onctl/internal/tools"
 
@@ -21,7 +22,7 @@ var (
 		Short: "onctl is a tool to manage cross platform resources in cloud",
 	}
 	cloudProvider     string
-	cloudProviderList = []string{"aws", "hetzner", "azure"}
+	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp"}
 	provider          cloud.CloudProviderInterface
 )
 
@@ -61,6 +62,12 @@ func Execute() error {
 		provider = &cloud.ProviderHetzner{
 			Client: providerhtz.GetClient(),
 		}
+	case "gcp":
+		provider = &cloud.ProviderGcp{
+			Client:      providergcp.GetClient(),
+			GroupClient: providergcp.GetGroupClient(),
+		}
+
 	case "aws":
 		provider = &cloud.ProviderAws{
 			Client: provideraws.GetClient(),
