@@ -140,7 +140,7 @@ func (p ProviderAws) Locations() ([]Location, error) {
 	log.Println("[DEBUG] Get Locations")
 	var locations []Location
 	output, err := p.Client.DescribeRegions(&ec2.DescribeRegionsInput{
-		AllRegions: aws.Bool(true),
+		// AllRegions: aws.Bool(true),
 	})
 	if err != nil {
 		log.Println(err)
