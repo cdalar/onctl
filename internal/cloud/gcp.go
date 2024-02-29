@@ -26,6 +26,11 @@ type ProviderGcp struct {
 	GroupClient *compute.InstanceGroupsClient
 }
 
+func (p ProviderGcp) Locations() ([]Location, error) {
+	log.Println("[DEBUG] Get Locations")
+	return []Location{}, nil
+}
+
 func (p ProviderGcp) List() (VmList, error) {
 	log.Println("[DEBUG] List Servers")
 	cloudList := make([]Vm, 0, 100)

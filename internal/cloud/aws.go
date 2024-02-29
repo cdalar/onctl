@@ -136,6 +136,27 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 	return mapAwsServer(instance), nil
 }
 
+func (p ProviderAws) Locations() ([]Location, error) {
+	log.Println("[DEBUG] Get Locations")
+	var locations []Location
+	output, err := p.Client.DescribeRegions(&ec2.DescribeRegionsInput{
+		AllRegions: aws.Bool(true),
+	})
+	if err != nil {
+		log.Println(err)
+	}
+	log.Println("[DEBUG] " + output.String())
+	for _, region := range output.Regions {
+		log.Println("[DEBUG] " + *region.RegionName)
+		locations = append(locations, Location{
+			Name:     *region.RegionName,
+			Endpoint: *region.Endpoint + ":443",
+		})
+	}
+
+	return locations, nil
+}
+
 func (p ProviderAws) Destroy(server Vm) error {
 	if server.ID == "" {
 		log.Println("[DEBUG] Server ID is empty")

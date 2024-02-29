@@ -6,6 +6,19 @@ import (
 	"time"
 )
 
+type Location struct {
+	// ID
+	ID string
+	// Name is the name of the location
+	Name string
+	// Country is the country of the location
+	Region string
+	// Latency is the latency of the location
+	Latency time.Duration
+	// Endpoint is the endpoint of the location
+	Endpoint string
+}
+
 type VmList struct {
 	List []Vm
 }
@@ -78,4 +91,6 @@ type CloudProviderInterface interface {
 	SSHInto(serverName string, port int)
 	// GetByName gets a VM by name
 	GetByName(serverName string) (Vm, error)
+	// GetLocation gets a location by name
+	Locations() ([]Location, error)
 }

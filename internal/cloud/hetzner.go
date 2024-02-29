@@ -97,6 +97,25 @@ func (p ProviderHetzner) Destroy(server Vm) error {
 	return nil
 }
 
+func (p ProviderHetzner) Locations() ([]Location, error) {
+	log.Println("[DEBUG] Get Locations")
+	list, err := p.Client.Location.All(context.TODO())
+	if err != nil {
+		log.Println(err)
+	}
+	if len(list) == 0 {
+		return []Location{}, nil
+	}
+	locationList := make([]Location, 0, len(list))
+	for _, location := range list {
+		locationList = append(locationList, Location{
+			Name:     location.Name,
+			Endpoint: location.Name + "-speed.hetzner.com:80",
+		})
+	}
+	return locationList, nil
+}
+
 func (p ProviderHetzner) List() (VmList, error) {
 	log.Println("[DEBUG] List Servers")
 	list, _, err := p.Client.Server.List(context.TODO(), hcloud.ServerListOpts{

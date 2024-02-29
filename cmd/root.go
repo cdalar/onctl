@@ -92,4 +92,5 @@ func init() {
 	rootCmd.AddCommand(destroyCmd)
 	rootCmd.AddCommand(sshCmd)
 	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(pingCmd)
 }
