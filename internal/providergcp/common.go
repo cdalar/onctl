@@ -16,6 +16,15 @@ func GetClient() *compute.InstancesClient {
 	return client
 }
 
+func GetRegionsClient() *compute.RegionsClient {
+	ctx := context.Background()
+	client, err := compute.NewRegionsRESTClient(ctx)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return client
+}
+
 func GetGroupClient() *compute.InstanceGroupsClient {
 	ctx := context.Background()
 	client, err := compute.NewInstanceGroupsRESTClient(ctx)

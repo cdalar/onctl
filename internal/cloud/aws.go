@@ -147,7 +147,8 @@ func (p ProviderAws) Locations() ([]Location, error) {
 	}
 	log.Println("[DEBUG] " + output.String())
 	for _, region := range output.Regions {
-		log.Println("[DEBUG] " + *region.RegionName)
+		log.Print("[DEBUG] " + *region.RegionName)
+		log.Println("[DEBUG] " + *region.Endpoint)
 		locations = append(locations, Location{
 			Name:     *region.RegionName,
 			Endpoint: *region.Endpoint + ":443",

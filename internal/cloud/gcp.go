@@ -23,12 +23,32 @@ var (
 
 type ProviderGcp struct {
 	Client      *compute.InstancesClient
+	Regions     *compute.RegionsClient
 	GroupClient *compute.InstanceGroupsClient
 }
 
 func (p ProviderGcp) Locations() ([]Location, error) {
 	log.Println("[DEBUG] Get Locations")
-	return []Location{}, nil
+	regionList := make([]Location, 0, 100)
+	it := p.Regions.List(context.Background(), &computepb.ListRegionsRequest{
+		Project: viper.GetString("gcp.project"),
+	})
+
+	for {
+		resp, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			log.Fatalln(err)
+		}
+		regionList = append(regionList, Location{
+			Name:     *resp.Name,
+			Endpoint: fmt.Sprintf("compute.%s.googleapis.com:443", *resp.Name),
+		})
+		log.Println("[DEBUG] Regions:", resp)
+	}
+	return regionList, nil
 }
 
 func (p ProviderGcp) List() (VmList, error) {
