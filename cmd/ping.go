@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"log"
 	"sort"
 	"sync"
@@ -45,8 +44,9 @@ var pingCmd = &cobra.Command{
 		sort.Slice(list, func(i, j int) bool {
 			return list[i].Latency < list[j].Latency
 		})
-		for _, location := range list {
-			fmt.Println(location.Name, location.Latency)
-		}
+
+		log.Println("[DEBUG] Location List: ", list)
+		tmpl := "LOCATION\tLATENCY\n{{range .}}{{.Name}}\t{{.Latency}}\n{{end}}"
+		TabWriter(list, tmpl)
 	},
 }
