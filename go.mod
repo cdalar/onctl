@@ -7,7 +7,7 @@ toolchain go1.21.5
 require (
 	cloud.google.com/go/compute v1.24.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.0.0
-	github.com/aws/aws-sdk-go v1.50.31
+	github.com/aws/aws-sdk-go v1.50.35
 	github.com/briandowns/spinner v1.23.0
 	github.com/hetznercloud/hcloud-go/v2 v2.6.0
 	github.com/manifoldco/promptui v0.9.0
