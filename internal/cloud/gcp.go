@@ -167,9 +167,10 @@ func mapGcpServer(server *computepb.Instance) Vm {
 	}
 
 	return Vm{
-		ID:   strconv.FormatUint(server.GetId(), 10),
-		Name: server.GetName(),
-		IP:   server.GetNetworkInterfaces()[0].GetAccessConfigs()[0].GetNatIP(),
+		Provider: "gcp",
+		ID:       strconv.FormatUint(server.GetId(), 10),
+		Name:     server.GetName(),
+		IP:       server.GetNetworkInterfaces()[0].GetAccessConfigs()[0].GetNatIP(),
 		// PrivateIP:   server.GetNetworkInterfaces()[0].GetNetworkIP(),
 		Type:      filepath.Base(server.GetMachineType()),
 		Status:    server.GetStatus(),
