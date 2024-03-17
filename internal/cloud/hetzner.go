@@ -190,6 +190,7 @@ func mapHetznerServer(server hcloud.Server) Vm {
 	}
 
 	return Vm{
+		Provider:  "hetzner",
 		ID:        strconv.FormatInt(server.ID, 10),
 		Name:      server.Name,
 		IP:        server.PublicNet.IPv4.IP.String(),

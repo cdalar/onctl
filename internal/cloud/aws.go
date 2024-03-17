@@ -271,6 +271,7 @@ func mapAwsServer(server *ec2.Instance) Vm {
 		server.PublicIpAddress = aws.String("")
 	}
 	return Vm{
+		Provider:  "aws",
 		ID:        *server.InstanceId,
 		Name:      serverName,
 		IP:        *server.PublicIpAddress,
