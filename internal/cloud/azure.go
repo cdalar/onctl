@@ -96,6 +96,7 @@ func (p ProviderAzure) List() (VmList, error) {
 			}
 
 			cloudList = append(cloudList, Vm{
+				Provider:  "azure",
 				ID:        filepath.Base(items["vmId"].(string)),
 				Name:      items["vmName"].(string),
 				IP:        items["publicIpAddress"].(string),
