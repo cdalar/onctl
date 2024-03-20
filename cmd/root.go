@@ -65,6 +65,7 @@ func Execute() error {
 	case "gcp":
 		provider = &cloud.ProviderGcp{
 			Client:      providergcp.GetClient(),
+			Regions:     providergcp.GetRegionsClient(),
 			GroupClient: providergcp.GetGroupClient(),
 		}
 
@@ -92,4 +93,5 @@ func init() {
 	rootCmd.AddCommand(destroyCmd)
 	rootCmd.AddCommand(sshCmd)
 	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(pingCmd)
 }
