@@ -7,6 +7,9 @@
             },
             "cdalar/parampiper": {
               "permissions": "write-all"
+            },
+            "cdalar/onctl-templates": {
+              "permissions": "write-all"
             }
           }
         }

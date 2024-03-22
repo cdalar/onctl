@@ -2,7 +2,6 @@ package tools
 
 import (
 	"encoding/base64"
-	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -31,16 +30,19 @@ func FileToBase64(filepath string) string {
 }
 
 // WaitForCloudInit waits for cloud-init to finish
-func WaitForCloudInit(username, ip, sshPort, privateKey string) {
+func (r *Remote) WaitForCloudInit() {
 	var tries int
+
+	command := "[ -f /run/cloud-init/result.json ] && echo -n \"OK\""
 	for {
 
-		isOK, err := RemoteRun(username, ip, sshPort, privateKey, "[ -f /run/cloud-init/result.json ] && echo -n \"OK\"")
+		isOK, err := r.RemoteRun(&RemoteRunConfig{
+			Command: command,
+		})
 		if err != nil {
 			log.Println("[DEBUG] RemoteRun:" + err.Error())
 		}
 		if err == nil {
-			fmt.Println("Vm started.")
 			if isOK == "OK" {
 				break
 			}
@@ -49,7 +51,7 @@ func WaitForCloudInit(username, ip, sshPort, privateKey string) {
 		tries++
 		log.Println("[DEBUG] :" + strconv.Itoa(tries))
 		if tries > 15 {
-			log.Fatalln("Exiting.. Could not connect to IP " + ip)
+			log.Fatalln("Exiting.. Could not connect to IP " + r.IPAddress + " on port " + strconv.Itoa(r.SSHPort))
 		}
 	}
 }

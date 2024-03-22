@@ -10,6 +10,15 @@ type VmList struct {
 	List []Vm
 }
 
+type Price struct {
+	// Currency is the currency of the price
+	Currency string
+	// Hourly is the hourly price
+	Hourly string
+	// Monthly is the monthly price
+	Monthly string
+}
+
 type Vm struct {
 	// ID is the ID of the instance
 	ID string
@@ -17,6 +26,8 @@ type Vm struct {
 	Name string
 	// IP is the public IP of the instance
 	IP string
+	//LocalIP is the local IP of the instance
+	PrivateIP string
 	// Type is the type of the instance
 	Type string
 	// Status is the status of the instance
@@ -26,11 +37,22 @@ type Vm struct {
 	// SSHKeyID is the ID of the SSH key
 	SSHKeyID string
 	// SSHPort is the port to connect to the instance
-	SSHPort string
+	SSHPort int
 	// CloudInit is the cloud-init file
 	CloudInitFile string
 	// CreatedAt is the creation date of the instance
 	CreatedAt time.Time
+	// Provider is the cloud provider
+	Provider string
+	// Cost is the cost of the vm
+	Cost CostStruct
+}
+
+type CostStruct struct {
+	Currency        string
+	CostPerHour     float64
+	CostPerMonth    float64
+	AccumulatedCost float64
 }
 
 func (v Vm) String() string {
@@ -53,5 +75,7 @@ type CloudProviderInterface interface {
 	// CreateSSHKey creates a new SSH key
 	CreateSSHKey(publicKeyFile string) (keyID string, err error)
 	// SSHInto connects to a VM
-	SSHInto(serverName string, port string)
+	SSHInto(serverName string, port int)
+	// GetByName gets a VM by name
+	GetByName(serverName string) (Vm, error)
 }

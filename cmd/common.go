@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"text/tabwriter"
 	"text/template"
@@ -94,8 +94,9 @@ func PrettyPrint(v interface{}) (err error) {
 //lint:ignore U1000 will use this function in the future
 func yesNo() bool {
 	prompt := promptui.Select{
-		Label: "Select[Yes/No]",
-		Items: []string{"Yes", "No"},
+		Label:     "Please confirm [y/N]",
+		Items:     []string{"Yes", "No"},
+		CursorPos: 1,
 	}
 	_, result, err := prompt.Run()
 	if err != nil {
@@ -141,16 +142,18 @@ func findFile(filename string) (filePath string) {
 	fileContent, err := files.EmbededFiles.ReadFile(filename)
 	if err == nil {
 		log.Println("[DEBUG]", filename, "file found in embeded files")
-		outFile, err := os.CreateTemp("", "onctl")
+
+		dir, err := os.MkdirTemp("", "onctl")
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer outFile.Close()
-		_, err = io.Copy(outFile, bytes.NewReader(fileContent))
-		if err != nil {
-			log.Println(err)
+
+		file := filepath.Join(dir, filename)
+		if err := os.WriteFile(file, fileContent, 0666); err != nil {
+			log.Fatal(err)
 		}
-		return outFile.Name()
+
+		return file
 
 	} else {
 		log.Println("[DEBUG]", filename, "not found in embeded files, trying to find in templates.onctl.com/")
@@ -166,16 +169,21 @@ func findFile(filename string) (filePath string) {
 		log.Println("[DEBUG]", filename, "file found in templates.onctl.com/")
 
 		defer resp.Body.Close()
-		outFile, err := os.CreateTemp("", "onctl")
+		dir, err := os.MkdirTemp("", "onctl")
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer outFile.Close()
-		_, err = io.Copy(outFile, resp.Body)
+
+		fileBaseName := filepath.Base(filename)
+		filePath := filepath.Join(dir, fileBaseName)
+		fileContent, err := io.ReadAll(resp.Body)
 		if err != nil {
-			log.Println(err)
+			log.Fatal(err)
 		}
-		filePath = outFile.Name()
+		if err := os.WriteFile(filePath, fileContent, 0666); err != nil {
+			log.Fatal(err)
+		}
+
 		return filePath
 	} else {
 		log.Println("[DEBUG]", filename, "not found in templates.onctl.com/")
@@ -183,4 +191,26 @@ func findFile(filename string) (filePath string) {
 		os.Exit(1)
 	}
 	return ""
+}
+
+func getSSHKeyFilePaths(filename string) (publicKeyFile, privateKeyFile string) {
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		log.Println(err)
+	}
+
+	if filename == "" {
+		publicKeyFile = home + "/.ssh/id_rsa.pub"
+		if _, err := os.Stat(publicKeyFile); err != nil {
+			log.Fatalln(publicKeyFile + " Public key file not found")
+		}
+	}
+
+	privateKeyFile = publicKeyFile[:len(publicKeyFile)-4]
+	if _, err := os.Stat(privateKeyFile); err != nil {
+		log.Fatalln(privateKeyFile + " Private key file not found")
+	}
+
+	return publicKeyFile, privateKeyFile
 }

@@ -3,10 +3,13 @@ package cloud
 import (
 	"context"
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/cdalar/onctl/internal/tools"
 
@@ -21,6 +24,7 @@ type ProviderHetzner struct {
 
 func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 
+	log.Println("[DEBUG] Deploy server: ", server)
 	sshKeyIDint, err := strconv.ParseInt(server.SSHKeyID, 10, 64)
 	if err != nil {
 		log.Fatalln(err)
@@ -72,10 +76,10 @@ func (p ProviderHetzner) Destroy(server Vm) error {
 	if server.ID == "" && server.Name != "" {
 		log.Println("[DEBUG] Server ID is empty")
 		log.Println("[DEBUG] Server name: " + server.Name)
-		s := p.getServerByServerName(server.Name)
-		if s.ID == "" {
+		s, err := p.GetByName(server.Name)
+		if err != nil || s.ID == "" {
 			log.Println("[DEBUG] Server not found")
-			return nil
+			return err
 		}
 		log.Println("[DEBUG] Server found ID: " + s.ID)
 		server.ID = s.ID
@@ -109,7 +113,7 @@ func (p ProviderHetzner) List() (VmList, error) {
 	cloudList := make([]Vm, 0, len(list))
 	for _, server := range list {
 		cloudList = append(cloudList, mapHetznerServer(*server))
-		log.Println("[DEBUG] server name: " + server.Name)
+		log.Println("[DEBUG] server: ", server)
 	}
 	output := VmList{
 		List: cloudList,
@@ -135,7 +139,7 @@ func (p ProviderHetzner) CreateSSHKey(publicKeyFile string) (keyID string, err e
 	// Print the fingerprint
 	log.Println("[DEBUG] SSH Key Fingerpring: " + SSHKeyFingerPrint)
 	log.Println("[DEBUG] SSH Key MD5: " + SSHKeyMD5)
-	fmt.Println("Creating SSHKey: " + "onctl-" + SSHKeyMD5[:8] + "...")
+	// fmt.Println("Creating SSHKey: " + "onctl-" + SSHKeyMD5[:8] + "...")
 	_, _, err = p.Client.SSHKey.Create(context.TODO(), hcloud.SSHKeyCreateOpts{
 		Name:      "onctl-" + SSHKeyMD5[:8],
 		PublicKey: string(publicKey),
@@ -144,7 +148,7 @@ func (p ProviderHetzner) CreateSSHKey(publicKeyFile string) (keyID string, err e
 		if herr, ok := err.(hcloud.Error); ok {
 			switch herr.Code {
 			case hcloud.ErrorCodeUniquenessError:
-				fmt.Println("SSH Key already exists (onctl-" + SSHKeyMD5[:8] + ")")
+				// fmt.Println("SSH Key already exists (onctl-" + SSHKeyMD5[:8] + ")")
 				key, _, err := p.Client.SSHKey.GetByFingerprint(context.TODO(), SSHKeyFingerPrint)
 				if err != nil {
 					log.Fatalln(err)
@@ -159,35 +163,63 @@ func (p ProviderHetzner) CreateSSHKey(publicKeyFile string) (keyID string, err e
 		}
 		log.Fatalln(err)
 	}
-	fmt.Println("DONE")
+	// fmt.Println("DONE")
 	return
 }
 
 // mapHetznerServer gets a hcloud.Server and returns a Vm
 func mapHetznerServer(server hcloud.Server) Vm {
+	acculumatedCost := 0.0
+	costPerHour := 0.0
+	costPerMonth := 0.0
+	currency := "EUR"
+	for _, p := range server.ServerType.Pricings {
+		if p.Location.Name == server.Datacenter.Location.Name {
+			uptime := time.Since(server.Created)
+			hourlyGross, _ := strconv.ParseFloat(p.Hourly.Gross, 64) // Convert p.Hourly.Gross to float64
+			acculumatedCost = math.Round(hourlyGross*uptime.Hours()*10000) / 10000
+			costPerHour, _ = strconv.ParseFloat(p.Hourly.Gross, 64)
+			costPerMonth, _ = strconv.ParseFloat(p.Monthly.Gross, 64)
+		}
+	}
+	var privateIP string
+	if len(server.PrivateNet) == 0 {
+		privateIP = "N/A"
+	} else {
+		privateIP = server.PrivateNet[0].IP.String()
+	}
+
 	return Vm{
+		Provider:  "hetzner",
 		ID:        strconv.FormatInt(server.ID, 10),
 		Name:      server.Name,
 		IP:        server.PublicNet.IPv4.IP.String(),
+		PrivateIP: privateIP,
 		Type:      server.ServerType.Name,
 		Status:    string(server.Status),
 		CreatedAt: server.Created,
+		Location:  server.Datacenter.Location.Name,
+		Cost: CostStruct{
+			Currency:        currency,
+			CostPerHour:     costPerHour,
+			CostPerMonth:    costPerMonth,
+			AccumulatedCost: acculumatedCost,
+		},
 	}
 }
 
-func (p ProviderHetzner) getServerByServerName(serverName string) Vm {
+func (p ProviderHetzner) GetByName(serverName string) (Vm, error) {
 	s, _, err := p.Client.Server.GetByName(context.TODO(), serverName)
 	if err != nil {
-		log.Fatalln(err)
+		return Vm{}, err
 	}
 	if s == nil {
-		fmt.Println("No Server found with name: " + serverName)
-		return Vm{}
+		return Vm{}, errors.New("No Server found with name: " + serverName)
 	}
-	return mapHetznerServer(*s)
+	return mapHetznerServer(*s), nil
 }
 
-func (p ProviderHetzner) SSHInto(serverName, port string) {
+func (p ProviderHetzner) SSHInto(serverName string, port int) {
 	// server, _, err := p.Client.Server().Get(ctx, idOrName)
 	server, _, err := p.Client.Server.GetByName(context.TODO(), serverName)
 	if server == nil {

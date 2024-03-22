@@ -1,45 +1,66 @@
 package tools
 
 import (
-	"net"
+	"log"
 	"os"
-	"time"
 
 	"github.com/pkg/sftp"
-	"golang.org/x/crypto/ssh"
 )
 
-func SSHCopyFile(user string, addr string, port string, privateKey string, srcPath, dstPath string) error {
-	key, err := ssh.ParsePrivateKey([]byte(privateKey))
+func (r *Remote) DownloadFile(srcPath, dstPath string) error {
+	// Create a new SSH connection
+	err := r.NewSSHConnection()
 	if err != nil {
 		return err
 	}
-	// Authentication
-	config := &ssh.ClientConfig{
-		User:            user,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         time.Second * 10,
-		Auth: []ssh.AuthMethod{
-			ssh.PublicKeys(key),
-		},
-	}
-
-	client, err := ssh.Dial("tcp", net.JoinHostPort(addr, port), config)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
 
 	// open an SFTP session over an existing ssh connection.
-	sftp, err := sftp.NewClient(client)
+	sftp, err := sftp.NewClient(r.Client)
 	if err != nil {
 		return err
 	}
 	defer sftp.Close()
 
 	// Open the source file
+	srcFile, err := sftp.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	// Create the destination file
+	dstFile, err := os.Create(dstPath)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	// write to file
+	if _, err := srcFile.WriteTo(dstFile); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *Remote) SSHCopyFile(srcPath, dstPath string) error {
+	// Create a new SSH connection
+	err := r.NewSSHConnection()
+	if err != nil {
+		return err
+	}
+
+	// open an SFTP session over an existing ssh connection.
+	sftp, err := sftp.NewClient(r.Client)
+	if err != nil {
+		return err
+	}
+	defer sftp.Close()
+
+	// Open the source file
+	log.Println("[DEBUG] srcPath:" + srcPath)
 	srcFile, err := os.Open(srcPath)
 	if err != nil {
+		log.Println(err)
 		return err
 	}
 	defer srcFile.Close()

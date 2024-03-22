@@ -9,8 +9,8 @@ import (
 	"github.com/cdalar/onctl/internal/cloud"
 	"github.com/cdalar/onctl/internal/provideraws"
 	"github.com/cdalar/onctl/internal/providerazure"
+	"github.com/cdalar/onctl/internal/providergcp"
 	"github.com/cdalar/onctl/internal/providerhtz"
-	"github.com/cdalar/onctl/internal/provideroracle"
 	"github.com/cdalar/onctl/internal/tools"
 
 	"github.com/spf13/cobra"
@@ -22,7 +22,7 @@ var (
 		Short: "onctl is a tool to manage cross platform resources in cloud",
 	}
 	cloudProvider     string
-	cloudProviderList = []string{"aws", "hetzner", "azure", "oracle"}
+	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "oracle"}
 	provider          cloud.CloudProviderInterface
 )
 
@@ -54,6 +54,7 @@ func Execute() error {
 	log.Println("[DEBUG] Args: " + strings.Join(os.Args, ","))
 	if len(os.Args) > 1 && os.Args[1] != "init" && os.Args[1] != "version" {
 		checkCloudProvider()
+		log.Println("[DEBUG] Cloud: " + cloudProvider)
 		ReadConfig(cloudProvider)
 	}
 	switch cloudProvider {
@@ -61,6 +62,12 @@ func Execute() error {
 		provider = &cloud.ProviderHetzner{
 			Client: providerhtz.GetClient(),
 		}
+	case "gcp":
+		provider = &cloud.ProviderGcp{
+			Client:      providergcp.GetClient(),
+			GroupClient: providergcp.GetGroupClient(),
+		}
+
 	case "aws":
 		provider = &cloud.ProviderAws{
 			Client: provideraws.GetClient(),
@@ -73,11 +80,6 @@ func Execute() error {
 			PublicIPClient:      providerazure.GetIPClient(),
 			SSHKeyClient:        providerazure.GetSSHKeyClient(),
 			VnetClient:          providerazure.GetVnetClient(),
-		}
-	case "oracle":
-		provider = &cloud.ProviderOracle{
-			Client: provideroracle.GetComputeClient(),
-			// Base:   provideroracle.GetBaseClient(),
 		}
 	}
 	return rootCmd.Execute()

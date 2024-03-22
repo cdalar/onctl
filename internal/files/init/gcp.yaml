@@ -1,0 +1,6 @@
+gcp:
+  project: <project-id>
+  zone: europe-west4-a
+  type: n1-standard-1
+  vm:
+    username: root
