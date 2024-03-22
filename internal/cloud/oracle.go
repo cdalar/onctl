@@ -241,6 +241,10 @@ func listVcns(ctx context.Context, c core.VirtualNetworkClient) []core.Vcn {
 	return r.Items
 }
 
+func (p ProviderOracle) GetByName(serverName string) Vm {
+	return Vm{}
+}
+
 // func (p ProviderOracle) getServerByServerName(serverName string) Vm {
 
 // 	s, err := p.Client.DescribeInstances(&ec2.DescribeInstancesInput{
