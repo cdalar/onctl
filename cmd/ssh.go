@@ -35,7 +35,7 @@ var sshCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
-		apply = findFile(apply)
+		apply = findSingleFile(apply)
 		log.Println("[DEBUG] args: ", args)
 
 		if len(args) == 0 {
