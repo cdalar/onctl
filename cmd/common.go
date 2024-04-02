@@ -125,7 +125,16 @@ func openbrowser(url string) {
 
 }
 
-func findFile(filename string) (filePath string) {
+func findFile(files []string) []string {
+	var filePaths []string
+	for _, file := range files {
+		filePath := findSingleFile(file)
+		filePaths = append(filePaths, filePath)
+	}
+	return filePaths
+}
+
+func findSingleFile(filename string) (filePath string) {
 	if filename == "" {
 		return ""
 	}

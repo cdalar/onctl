@@ -22,7 +22,7 @@ import (
 
 type cmdCreateOptions struct {
 	PublicKeyFile string
-	ApplyFile     string
+	ApplyFile     []string
 	DotEnvFile    string
 	Variables     []string
 	Vm            cloud.Vm
@@ -35,7 +35,7 @@ var (
 
 func init() {
 	createCmd.Flags().StringVarP(&opt.PublicKeyFile, "publicKey", "k", "", "Path to publicKey file (default: ~/.ssh/id_rsa))")
-	createCmd.Flags().StringVarP(&opt.ApplyFile, "apply-file", "a", "", "apply bash script file")
+	createCmd.Flags().StringSliceVarP(&opt.ApplyFile, "apply-file", "a", []string{}, "bash script file(s) to run on remote")
 	createCmd.Flags().StringSliceVarP(&downloadSlice, "download", "d", []string{}, "List of files to download")
 	createCmd.Flags().StringVarP(&opt.Vm.Type, "type", "t", "", "instance type")
 	createCmd.Flags().StringVarP(&opt.Vm.Name, "name", "n", "", "vm name")
@@ -52,7 +52,7 @@ var createCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
 		opt.ApplyFile = findFile(opt.ApplyFile)
-		opt.Vm.CloudInitFile = findFile(opt.Vm.CloudInitFile)
+		opt.Vm.CloudInitFile = findSingleFile(opt.Vm.CloudInitFile)
 
 		// BEGIN SSH Key
 		publicKeyFile, privateKeyFile := getSSHKeyFilePaths(opt.PublicKeyFile)
@@ -117,20 +117,21 @@ var createCmd = &cobra.Command{
 		log.Println("[DEBUG] cloud-init finished")
 		// END Cloud-init
 
-		if opt.ApplyFile != "" {
-			s.Restart()
-			s.Suffix = " Running " + opt.ApplyFile + " on Remote..."
-
-			if opt.DotEnvFile != "" {
-				dotEnvVars, err := tools.ParseDotEnvFile(opt.DotEnvFile)
-				if err != nil {
-					log.Println(err)
-				}
-				opt.Variables = append(dotEnvVars, opt.Variables...)
+		if opt.DotEnvFile != "" {
+			dotEnvVars, err := tools.ParseDotEnvFile(opt.DotEnvFile)
+			if err != nil {
+				log.Println(err)
 			}
+			opt.Variables = append(dotEnvVars, opt.Variables...)
+		}
+
+		// BEGIN Apply File
+		for _, applyFile := range opt.ApplyFile {
+			s.Restart()
+			s.Suffix = " Running " + applyFile + " on Remote..."
 
 			err = remote.CopyAndRunRemoteFile(&tools.CopyAndRunRemoteFileConfig{
-				File: opt.ApplyFile,
+				File: applyFile,
 				Vars: opt.Variables,
 			})
 			if err != nil {
