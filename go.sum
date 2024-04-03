@@ -15,8 +15,8 @@ github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v5 v5.6
 github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v5 v5.6.0/go.mod h1:gZmgV+qBqygoznvqo2J9oKZAFziqhLZ2xE/WVUmzkHA=
 github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/internal/v2 v2.0.0 h1:PTFGRSlMKCQelWwxUyYVEUqseBJVemLyqWJjvMyt0do=
 github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/internal/v2 v2.0.0/go.mod h1:LRr2FzBTQlONPPa5HREE5+RjSCTXl7BwOvYOaWTqCaI=
-github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.1.0 h1:0hndC8rxv2LXHWLNMVMjQrAuOyxNNMEGKDlKCSy9TsE=
-github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.1.0/go.mod h1:N10BjwUyNXtQz7WY6UoQqgli5dG1EtaHiZh8Q8DCfmg=
+github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.1.1 h1:QZY6o3E/KX0QhgQpvat4UxAsXuBIb4efrFtZcqCUTbs=
+github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.1.1/go.mod h1:8gv2PVzO0a+f4aWpe940Ouz0r4ifLj8H+/jxRXgwPxg=
 github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resourcegraph/armresourcegraph v0.9.0 h1:zLzoX5+W2l95UJoVwiyNS4dX8vHyQ6x2xRLoBBL9wMk=
 github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resourcegraph/armresourcegraph v0.9.0/go.mod h1:wVEOJfGTj0oPAUGA1JuRAvz/lxXQsWW16axmHPP47Bk=
 github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources v1.1.1 h1:7CBQ+Ei8SP2c6ydQTGCCrS35bDxgTMfoP2miAwK++OU=
