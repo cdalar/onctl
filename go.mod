@@ -7,7 +7,7 @@ toolchain go1.21.5
 require (
 	cloud.google.com/go/compute v1.25.1
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.1.1
-	github.com/aws/aws-sdk-go v1.51.12
+	github.com/aws/aws-sdk-go v1.51.18
 	github.com/briandowns/spinner v1.23.0
 	github.com/hetznercloud/hcloud-go/v2 v2.7.0
 	github.com/manifoldco/promptui v0.9.0
@@ -65,7 +65,7 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
-	golang.org/x/net v0.22.0 // indirect
+	golang.org/x/net v0.23.0 // indirect
 	golang.org/x/oauth2 v0.18.0 // indirect
 	golang.org/x/sys v0.18.0 // indirect
 	golang.org/x/term v0.18.0 // indirect
