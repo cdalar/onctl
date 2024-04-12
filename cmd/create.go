@@ -113,10 +113,12 @@ var createCmd = &cobra.Command{
 		remote.WaitForCloudInit()
 
 		s.Stop()
-		fmt.Println("\033[32m\u2714\033[0m VM is ready")
+		fmt.Println("\033[32m\u2714\033[0m VM is Ready")
 		log.Println("[DEBUG] cloud-init finished")
 		// END Cloud-init
 
+		s.Restart()
+		s.Suffix = " Configuring VM..."
 		if opt.DotEnvFile != "" {
 			dotEnvVars, err := tools.ParseDotEnvFile(opt.DotEnvFile)
 			if err != nil {
@@ -157,8 +159,7 @@ var createCmd = &cobra.Command{
 			}
 			return
 		}
-		s.Suffix = " Vm is Ready..."
 		s.Stop()
-		fmt.Println("\033[32m\u2714\033[0m Vm is Ready...")
+		fmt.Println("\033[32m\u2714\033[0m VM Configured...")
 	},
 }
