@@ -11,4 +11,3 @@ download_url="$GITHUB/$REPO/releases/download/v0.1.0/onctl-linux"
 # Download the binary
 curl -L $download_url -o "onctl"
 chmod +x onctl
-
