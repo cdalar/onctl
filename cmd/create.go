@@ -156,7 +156,7 @@ var createCmd = &cobra.Command{
 				log.Println(err)
 			}
 			s.Stop()
-			fmt.Println("\033[32m\u2714\033[0m Remote Run Completed...")
+			fmt.Println("\033[32m\u2714\033[0m " + opt.ApplyFile[i] + " ran on Remote")
 
 		}
 		// TODO go routines
