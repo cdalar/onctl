@@ -30,7 +30,6 @@ type cmdCreateOptions struct {
 
 var (
 	opt cmdCreateOptions
-	err error
 )
 
 func init() {
