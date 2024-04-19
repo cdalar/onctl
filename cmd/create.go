@@ -30,7 +30,6 @@ type cmdCreateOptions struct {
 
 var (
 	opt cmdCreateOptions
-	err error
 )
 
 func init() {
@@ -51,7 +50,23 @@ var createCmd = &cobra.Command{
 	Short:   "Create a VM",
 	Run: func(cmd *cobra.Command, args []string) {
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
-		opt.ApplyFile = findFile(opt.ApplyFile)
+		s.Start()
+		s.Suffix = " Checking if vm already exists..."
+		list, err := provider.List()
+		if err != nil {
+			s.Stop()
+			log.Println(err)
+		}
+
+		for _, vm := range list.List {
+			if vm.Name == opt.Vm.Name {
+				s.Stop()
+				fmt.Println("\033[31m\u2718\033[0m VM with name " + opt.Vm.Name + " already exists")
+				os.Exit(1)
+			}
+		}
+
+		applyFileFound := findFile(opt.ApplyFile)
 		opt.Vm.CloudInitFile = findSingleFile(opt.Vm.CloudInitFile)
 
 		// BEGIN SSH Key
@@ -128,9 +143,9 @@ var createCmd = &cobra.Command{
 		}
 
 		// BEGIN Apply File
-		for _, applyFile := range opt.ApplyFile {
+		for i, applyFile := range applyFileFound {
 			s.Restart()
-			s.Suffix = " Running " + applyFile + " on Remote..."
+			s.Suffix = " Running " + opt.ApplyFile[i] + " on Remote..."
 
 			err = remote.CopyAndRunRemoteFile(&tools.CopyAndRunRemoteFileConfig{
 				File: applyFile,
@@ -140,7 +155,7 @@ var createCmd = &cobra.Command{
 				log.Println(err)
 			}
 			s.Stop()
-			fmt.Println("\033[32m\u2714\033[0m Remote Run Completed...")
+			fmt.Println("\033[32m\u2714\033[0m " + opt.ApplyFile[i] + " ran on Remote")
 
 		}
 		// TODO go routines
