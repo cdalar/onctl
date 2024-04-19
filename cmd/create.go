@@ -9,6 +9,7 @@ import (
 
 	"github.com/briandowns/spinner"
 	"github.com/cdalar/onctl/internal/cloud"
+	"github.com/cdalar/onctl/internal/domain"
 	"github.com/cdalar/onctl/internal/tools"
 
 	"github.com/spf13/cobra"
@@ -26,6 +27,7 @@ type cmdCreateOptions struct {
 	DotEnvFile    string
 	Variables     []string
 	Vm            cloud.Vm
+	Domain        string
 }
 
 var (
@@ -41,6 +43,7 @@ func init() {
 	createCmd.Flags().IntVarP(&opt.Vm.SSHPort, "ssh-port", "p", 22, "ssh port")
 	createCmd.Flags().StringVarP(&opt.Vm.CloudInitFile, "cloud-init", "i", "", "cloud-init file")
 	createCmd.Flags().StringVar(&opt.DotEnvFile, "dot-env", "", "dot-env (.env) file")
+	createCmd.Flags().StringVar(&opt.Domain, "domain", "", "request a domain name for the VM")
 	createCmd.Flags().StringSliceVarP(&opt.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
 }
 
@@ -125,8 +128,24 @@ var createCmd = &cobra.Command{
 			PrivateKey: string(privateKey),
 		}
 
-		remote.WaitForCloudInit()
+		// BEGIN Domain
+		if opt.Domain != "" {
+			s.Restart()
+			s.Suffix = " Requesting Domain..."
+			_, err := domain.NewCloudFlareService().SetRecord(&domain.SetRecordRequest{
+				Subdomain: opt.Domain,
+				Ipaddress: vm.IP,
+			})
+			s.Stop()
+			if err != nil {
+				fmt.Println("\033[31m\u2718\033[0m Error on Domain: ")
+				log.Println(err)
+			} else {
+				fmt.Println("\033[32m\u2714\033[0m Domain is ready: ")
+			}
+		}
 
+		remote.WaitForCloudInit()
 		s.Stop()
 		fmt.Println("\033[32m\u2714\033[0m VM is Ready")
 		log.Println("[DEBUG] cloud-init finished")

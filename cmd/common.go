@@ -16,6 +16,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/cdalar/onctl/internal/files"
+	"github.com/gofrs/uuid/v5"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/util/duration"
@@ -23,6 +24,15 @@ import (
 
 // TODO decomple viper and use onctlConfig instead
 // var onctlConfig map[string]interface{}
+
+func GenerateIDToken() uuid.UUID {
+	u1, err := uuid.NewV4()
+	if err != nil {
+		log.Fatalf("failed to generate ID Token: %v", err)
+	}
+	log.Printf("[DEBUG] ID Token generated %v", u1)
+	return u1
+}
 
 func ReadConfig(cloudProvider string) {
 	dir, err := os.Getwd()
