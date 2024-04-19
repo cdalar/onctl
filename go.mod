@@ -9,7 +9,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.1.1
 	github.com/aws/aws-sdk-go v1.51.23
 	github.com/briandowns/spinner v1.23.0
-	github.com/hetznercloud/hcloud-go/v2 v2.7.0
+	github.com/hetznercloud/hcloud-go/v2 v2.7.1
 	github.com/manifoldco/promptui v0.9.0
 	github.com/spf13/cobra v1.8.0
 	google.golang.org/api v0.174.0
@@ -67,7 +67,7 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
-	golang.org/x/net v0.23.0 // indirect
+	golang.org/x/net v0.24.0 // indirect
 	golang.org/x/oauth2 v0.19.0 // indirect
 	golang.org/x/sys v0.19.0 // indirect
 	golang.org/x/term v0.19.0 // indirect
