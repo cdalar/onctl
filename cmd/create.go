@@ -69,6 +69,21 @@ var createCmd = &cobra.Command{
 			}
 		}
 
+		s.Stop()
+		fmt.Println("\033[32m\u2714\033[0m VM does not exist")
+
+		// Check Domain Env
+		if opt.Domain != "" {
+			s.Start()
+			s.Suffix = " --domain flag is set... Checking Domain Env..."
+			err := domain.NewCloudFlareService().CheckEnv()
+			if err != nil {
+				s.Stop()
+				fmt.Println("\033[31m\u2718\033[0m Error on Domain: ", err)
+				os.Exit(1)
+			}
+		}
+
 		applyFileFound := findFile(opt.ApplyFile)
 		opt.Vm.CloudInitFile = findSingleFile(opt.Vm.CloudInitFile)
 
