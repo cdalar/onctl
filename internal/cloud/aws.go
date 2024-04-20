@@ -270,11 +270,15 @@ func mapAwsServer(server *ec2.Instance) Vm {
 	if server.PublicIpAddress == nil {
 		server.PublicIpAddress = aws.String("")
 	}
+	if server.PrivateIpAddress == nil {
+		server.PrivateIpAddress = aws.String("")
+	}
 	return Vm{
 		Provider:  "aws",
 		ID:        *server.InstanceId,
 		Name:      serverName,
 		IP:        *server.PublicIpAddress,
+		PrivateIP: *server.PrivateIpAddress,
 		Type:      *server.InstanceType,
 		Status:    *server.State.Name,
 		CreatedAt: *server.LaunchTime,

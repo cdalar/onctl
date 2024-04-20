@@ -20,13 +20,26 @@ var (
 	rootCmd = &cobra.Command{
 		Use:   "onctl",
 		Short: "onctl is a tool to manage cross platform resources in cloud",
+		Long: `onctl is a tool to manage cross platform resources in cloud
+		This is the logn description`,
+		Example: `  # List all VMs
+  onctl ls
+
+  # Create a VM with docker installed 
+  onctl create -n test -a docker/docker.sh 
+
+  # SSH into a VM
+  onctl ssh test
+
+  # Destroy a VM
+  onctl destroy test`,
 	}
 	cloudProvider     string
 	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp"}
 	provider          cloud.CloudProviderInterface
 )
 
-func checkCloudProvider() {
+func checkCloudProvider() string {
 	cloudProvider = os.Getenv("ONCTL_CLOUD")
 	// ONCTL_CLOUD is set
 	if cloudProvider != "" {
@@ -41,19 +54,20 @@ func checkCloudProvider() {
 			if err != nil {
 				log.Println(err)
 			}
-			return
+			return cloudProvider
 		} else {
 			fmt.Println("No Cloud Provider Set.\nPlease set the ONCTL_CLOUD environment variable to one of the following: " + strings.Join(cloudProviderList, ","))
 			os.Exit(1)
 		}
 	}
+	return cloudProvider
 }
 
 // Execute executes the root command.
 func Execute() error {
 	log.Println("[DEBUG] Args: " + strings.Join(os.Args, ","))
 	if len(os.Args) > 1 && os.Args[1] != "init" && os.Args[1] != "version" {
-		checkCloudProvider()
+		cloudProvider = checkCloudProvider()
 		log.Println("[DEBUG] Cloud: " + cloudProvider)
 		ReadConfig(cloudProvider)
 	}

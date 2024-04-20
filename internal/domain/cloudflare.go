@@ -26,7 +26,6 @@ func NewCloudFlareService() *CloudFlareService {
 
 func (c *CloudFlareService) CheckEnv() error {
 	apiToken := os.Getenv("CLOUDFLARE_API_TOKEN")
-	log.Println("[DEBUG] CLOUDFLARE_API_TOKEN (first 5):", apiToken)
 	if apiToken == "" {
 		// log.Println("CLOUDFLARE_API_TOKEN is not set")
 		return errors.New("CLOUDFLARE_API_TOKEN is not set")
