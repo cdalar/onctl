@@ -61,7 +61,7 @@ var createCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
 		s.Start()
-		s.Suffix = " Checking if vm already exists..."
+		s.Suffix = " Checking vm..."
 		list, err := provider.List()
 		if err != nil {
 			s.Stop()
@@ -71,13 +71,13 @@ var createCmd = &cobra.Command{
 		for _, vm := range list.List {
 			if vm.Name == opt.Vm.Name {
 				s.Stop()
-				fmt.Println("\033[31m\u2718\033[0m VM with name " + opt.Vm.Name + " already exists")
+				fmt.Println("\033[31m\u2718\033[0m VM " + opt.Vm.Name + " exists. Aborting...")
 				os.Exit(1)
 			}
 		}
 
 		s.Stop()
-		fmt.Println("\033[32m\u2714\033[0m VM does not exist")
+		fmt.Println("\033[32m\u2714\033[0m Creating VM...")
 
 		// Check Domain Env
 		if opt.Domain != "" {
