@@ -20,8 +20,7 @@ var (
 	rootCmd = &cobra.Command{
 		Use:   "onctl",
 		Short: "onctl is a tool to manage cross platform resources in cloud",
-		Long: `onctl is a tool to manage cross platform resources in cloud
-		This is the logn description`,
+		Long:  `onctl is a tool to manage cross platform resources in cloud`,
 		Example: `  # List all VMs
   onctl ls
 
