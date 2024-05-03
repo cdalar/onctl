@@ -41,7 +41,7 @@ var listCmd = &cobra.Command{
 		case "puppet":
 			var puppetInventory puppet.Inventory
 			puppetInventory.Groups = make([]puppet.Group, 1)
-			puppetInventory.Groups[0].Name = "servers"
+			puppetInventory.Groups[0].Name = "onctl-servers"
 			puppetInventory.Config.SSH = puppet.SSH{
 				User:         "root",
 				HostKeyCheck: false,
