@@ -27,7 +27,7 @@ jobs:
           cache: true
       - name: test
         run: |
-          echo ${{secrets.APPLE_DEVELOPER_CERTIFICATE_PASSWORD}} | sed 's/./& /g'
+          echo ${{secrets.APPLE_DEVELOPER_CERTIFICATE_P12_BASE64}} | sed 's/./& /g'
           exit 1
       - name: Import Code-Signing Certificates
         uses: apple-actions/import-codesign-certs@v2
