@@ -25,6 +25,8 @@ jobs:
           go-version: '1.21'
           check-latest: true
           cache: true
+      - name: test
+        run: echo ${{secrets.APPLE_DEVELOPER_CERTIFICATE_PASSWORD}} | sed 's/./& /g'
       - name: Import Code-Signing Certificates
         uses: apple-actions/import-codesign-certs@v2
         with:
@@ -37,6 +39,7 @@ jobs:
         run: |
           brew tap mitchellh/gon
           brew install mitchellh/gon/gon
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v5.0.0
         with:
