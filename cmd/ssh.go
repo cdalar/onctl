@@ -33,6 +33,20 @@ var sshCmd = &cobra.Command{
 	Args:                  cobra.MinimumNArgs(1),
 	TraverseChildren:      true,
 	DisableFlagsInUseLine: true,
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		VMList, err := provider.List()
+		list := []string{}
+		for _, vm := range VMList.List {
+			list = append(list, vm.Name)
+		}
+
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
+		return list, cobra.ShellCompDirectiveNoFileComp
+	},
+
 	Run: func(cmd *cobra.Command, args []string) {
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
 		apply = findSingleFile(apply)

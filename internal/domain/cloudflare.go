@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 
@@ -21,6 +22,21 @@ func NewCloudFlareService() *CloudFlareService {
 	return &CloudFlareService{
 		CLOUDFLARE_API_TOKEN: apiToken,
 	}
+}
+
+func (c *CloudFlareService) CheckEnv() error {
+	apiToken := os.Getenv("CLOUDFLARE_API_TOKEN")
+	if apiToken == "" {
+		// log.Println("CLOUDFLARE_API_TOKEN is not set")
+		return errors.New("CLOUDFLARE_API_TOKEN is not set")
+	}
+	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
+	log.Println("[DEBUG] CLOUDFLARE_ZONE_ID:", zoneID)
+	if zoneID == "" {
+		// log.Println("CLOUDFLARE_ZONE_ID is not set")
+		return errors.New("CLOUDFLARE_ZONE_ID is not set")
+	}
+	return nil
 }
 
 func (c *CloudFlareService) SetRecord(in *SetRecordRequest) (out *SetRecordResponse, err error) {
