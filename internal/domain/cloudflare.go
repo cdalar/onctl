@@ -70,12 +70,7 @@ func (c *CloudFlareService) SetRecord(in *SetRecordRequest) (out *SetRecordRespo
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println(dnsRecord)
-	// Print user details
-	// fmt.Println(dnsRecords)
-	// for _, record := range dnsRecords {
-	// 	fmt.Println(record.Name, record.Type, record.Content)
-	// }
+	log.Println("[DEBUG] dnsRecord:", dnsRecord)
 
 	return &SetRecordResponse{}, nil
 }
