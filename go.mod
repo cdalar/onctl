@@ -7,7 +7,7 @@ toolchain go1.21.5
 require (
 	cloud.google.com/go/compute v1.25.1
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.1.1
-	github.com/aws/aws-sdk-go v1.53.12
+	github.com/aws/aws-sdk-go v1.53.13
 	github.com/briandowns/spinner v1.23.0
 	github.com/cloudflare/cloudflare-go v0.96.0
 	github.com/gofrs/uuid/v5 v5.1.0
