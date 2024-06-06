@@ -11,7 +11,7 @@ require (
 	github.com/briandowns/spinner v1.23.0
 	github.com/cloudflare/cloudflare-go v0.96.0
 	github.com/gofrs/uuid/v5 v5.1.0
-	github.com/hetznercloud/hcloud-go/v2 v2.8.0
+	github.com/hetznercloud/hcloud-go/v2 v2.9.0
 	github.com/manifoldco/promptui v0.9.0
 	github.com/spf13/cobra v1.8.0
 	google.golang.org/api v0.183.0
@@ -54,7 +54,7 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.1.0 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
-	github.com/prometheus/client_golang v1.19.0 // indirect
+	github.com/prometheus/client_golang v1.19.1 // indirect
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.48.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
