@@ -8,8 +8,22 @@ import (
 	"syscall"
 )
 
-func SSHIntoVM(ipAddress string, user string, port int) {
-	sshArgs := []string{"-o", "UserKnownHostsFile=/dev/null", "-o", "StrictHostKeyChecking=no", "-l", user, ipAddress, "-p", fmt.Sprint(port)}
+type SSHIntoVMRequest struct {
+	IPAddress      string
+	User           string
+	Port           int
+	PrivateKeyFile string
+}
+
+func SSHIntoVM(request SSHIntoVMRequest) {
+	sshArgs := []string{
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "StrictHostKeyChecking=no",
+		"-i", request.PrivateKeyFile,
+		"-l", request.User,
+		request.IPAddress,
+		"-p", fmt.Sprint(request.Port),
+	}
 	log.Println("[DEBUG] sshArgs: ", sshArgs)
 	// sshCommand := exec.Command("ssh", append(sshArgs, args[1:]...)...)
 	sshCommand := exec.Command("ssh", sshArgs...)

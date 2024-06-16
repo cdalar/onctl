@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"text/tabwriter"
 	"text/template"
 	"time"
@@ -220,13 +221,29 @@ func getSSHKeyFilePaths(filename string) (publicKeyFile, privateKeyFile string) 
 	}
 
 	if filename == "" {
-		publicKeyFile = home + "/.ssh/id_rsa.pub"
-		if _, err := os.Stat(publicKeyFile); err != nil {
-			log.Fatalln(publicKeyFile + " Public key file not found")
+		publicKeyFile = viper.GetString("ssh.publicKey")
+		privateKeyFile = viper.GetString("ssh.privateKey")
+	} else {
+		// check if filename has .pub extension
+		if filename[len(filename)-4:] == ".pub" {
+			publicKeyFile = filename
+			privateKeyFile = filename[:len(filename)-4]
+		} else {
+			privateKeyFile = filename
+			publicKeyFile = filename + ".pub"
 		}
 	}
 
-	privateKeyFile = publicKeyFile[:len(publicKeyFile)-4]
+	// change ~ char with home directory
+	publicKeyFile = strings.Replace(publicKeyFile, "~", home, 1)
+	privateKeyFile = strings.Replace(privateKeyFile, "~", home, 1)
+
+	log.Println("[DEBUG] publicKeyFile: ", publicKeyFile)
+	log.Println("[DEBUG] privateKeyFile: ", privateKeyFile)
+	if _, err := os.Stat(publicKeyFile); err != nil {
+		log.Fatalln(publicKeyFile + " Public key file not found")
+	}
+
 	if _, err := os.Stat(privateKeyFile); err != nil {
 		log.Fatalln(privateKeyFile + " Private key file not found")
 	}
