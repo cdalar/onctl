@@ -1,5 +1,5 @@
 hetzner:
   location: fsn1
   vm:
-    type: cx41
+    type: cx42
     username: root
