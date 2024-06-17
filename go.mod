@@ -52,7 +52,7 @@ require (
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
-	github.com/pelletier/go-toml/v2 v2.1.0 // indirect
+	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/prometheus/client_golang v1.19.1 // indirect
 	github.com/prometheus/client_model v0.5.0 // indirect
@@ -93,7 +93,7 @@ require (
 	github.com/hashicorp/logutils v1.0.0
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/pkg/sftp v1.13.6
-	github.com/spf13/viper v1.18.2
+	github.com/spf13/viper v1.19.0
 	golang.org/x/crypto v0.24.0
 	golang.org/x/text v0.16.0 // indirect
 )
