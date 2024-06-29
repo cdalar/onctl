@@ -1,0 +1,8 @@
+#gcp config
+gcp:
+  project: xxx-xxx-xxx
+  zone: europe-west4-a
+  type: n1-standard-1
+  vm:
+    username: root
+  

@@ -303,13 +303,23 @@ func (p ProviderAzure) Destroy(server Vm) error {
 
 }
 
-func (p ProviderAzure) SSHInto(serverName string, port int) {
+func (p ProviderAzure) SSHInto(serverName string, port int, privateKey string) {
 	s, err := p.GetByName(serverName)
 	if err != nil || s.ID == "" {
 		log.Fatalln(err)
 	}
 	log.Println("[DEBUG] " + s.String())
-	tools.SSHIntoVM(s.IP, viper.GetString("azure.vm.username"), port)
+
+	if privateKey == "" {
+		privateKey = viper.GetString("ssh.privateKey")
+	}
+	tools.SSHIntoVM(tools.SSHIntoVMRequest{
+		IPAddress:      s.IP,
+		User:           viper.GetString("azure.vm.username"),
+		Port:           port,
+		PrivateKeyFile: privateKey,
+	})
+
 }
 
 func (p ProviderAzure) GetByName(serverName string) (Vm, error) {

@@ -320,7 +320,7 @@ func (p ProviderAws) GetByName(serverName string) (Vm, error) {
 	return mapAwsServer(s.Reservations[0].Instances[0]), nil
 }
 
-func (p ProviderAws) SSHInto(serverName string, port int) {
+func (p ProviderAws) SSHInto(serverName string, port int, privateKey string) {
 
 	s, err := p.GetByName(serverName)
 	if err != nil || s.ID == "" {
@@ -328,6 +328,13 @@ func (p ProviderAws) SSHInto(serverName string, port int) {
 	}
 	log.Println("[DEBUG] " + s.String())
 
-	ipAddress := s.IP
-	tools.SSHIntoVM(ipAddress, viper.GetString("aws.vm.username"), port)
+	if privateKey == "" {
+		privateKey = viper.GetString("ssh.privateKey")
+	}
+	tools.SSHIntoVM(tools.SSHIntoVMRequest{
+		IPAddress:      s.IP,
+		User:           viper.GetString("aws.vm.username"),
+		Port:           port,
+		PrivateKeyFile: privateKey,
+	})
 }

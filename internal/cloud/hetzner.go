@@ -148,7 +148,7 @@ func (p ProviderHetzner) CreateSSHKey(publicKeyFile string) (keyID string, err e
 		if herr, ok := err.(hcloud.Error); ok {
 			switch herr.Code {
 			case hcloud.ErrorCodeUniquenessError:
-				fmt.Println("SSH Key already exists (onctl-" + SSHKeyMD5[:8] + ")")
+				log.Println("[DEBUG] SSH Key already exists (onctl-" + SSHKeyMD5[:8] + ")")
 				key, _, err := p.Client.SSHKey.GetByFingerprint(context.TODO(), SSHKeyFingerPrint)
 				if err != nil {
 					log.Fatalln(err)
@@ -219,8 +219,7 @@ func (p ProviderHetzner) GetByName(serverName string) (Vm, error) {
 	return mapHetznerServer(*s), nil
 }
 
-func (p ProviderHetzner) SSHInto(serverName string, port int) {
-	// server, _, err := p.Client.Server().Get(ctx, idOrName)
+func (p ProviderHetzner) SSHInto(serverName string, port int, privateKey string) {
 	server, _, err := p.Client.Server.GetByName(context.TODO(), serverName)
 	if server == nil {
 		fmt.Println("No Server found with name: " + serverName)
@@ -240,6 +239,13 @@ func (p ProviderHetzner) SSHInto(serverName string, port int) {
 		}
 	}
 
-	ipAddress := server.PublicNet.IPv4.IP
-	tools.SSHIntoVM(ipAddress.String(), "root", port)
+	if privateKey == "" {
+		privateKey = viper.GetString("ssh.privateKey")
+	}
+	tools.SSHIntoVM(tools.SSHIntoVMRequest{
+		IPAddress:      server.PublicNet.IPv4.IP.String(),
+		User:           viper.GetString("hetzner.vm.username"),
+		Port:           port,
+		PrivateKeyFile: privateKey,
+	})
 }

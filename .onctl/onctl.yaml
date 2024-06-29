@@ -1,9 +1,7 @@
 vm:
   name: onctl-vm
-  initFile: init.sh
-docker:
-  compose: internal/files/docker-compose.yml
-service:
-  port: 80
-local:
+ssh:
+  # publicKey: ~/.ssh/id_ed25519.pub
+  # privateKey: ~/.ssh/id_ed25519
   publicKey: ~/.ssh/id_rsa.pub
+  privateKey: ~/.ssh/id_rsa

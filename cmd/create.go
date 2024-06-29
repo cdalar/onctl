@@ -96,6 +96,9 @@ var createCmd = &cobra.Command{
 
 		// BEGIN SSH Key
 		publicKeyFile, privateKeyFile := getSSHKeyFilePaths(opt.PublicKeyFile)
+		log.Println("[DEBUG] publicKeyFile: ", publicKeyFile)
+		log.Println("[DEBUG] privateKeyFile: ", privateKeyFile)
+		fmt.Println("\033[32m\u2714\033[0m Using Public Key:", publicKeyFile)
 		s.Start()
 		s.Suffix = " Checking SSH Keys..."
 		opt.Vm.SSHKeyID, err = provider.CreateSSHKey(publicKeyFile)
@@ -105,7 +108,7 @@ var createCmd = &cobra.Command{
 			log.Fatalln(err)
 		}
 		s.Stop()
-		fmt.Println("\033[32m\u2714\033[0m Checking SSH Keys...")
+		fmt.Println("\033[32m\u2714\033[0m Checking SSH Keys... ")
 		// END SSH Key
 
 		// BEGIN Set VM Name

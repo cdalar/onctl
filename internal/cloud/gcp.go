@@ -151,12 +151,20 @@ func (p ProviderGcp) Deploy(server Vm) (Vm, error) {
 	return p.GetByName(server.Name)
 }
 
-func (p ProviderGcp) SSHInto(serverName string, port int) {
+func (p ProviderGcp) SSHInto(serverName string, port int, privateKey string) {
 	server, err := p.GetByName(serverName)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	tools.SSHIntoVM(server.IP, viper.GetString("gcp.vm.username"), port)
+	if privateKey == "" {
+		privateKey = viper.GetString("ssh.privateKey")
+	}
+	tools.SSHIntoVM(tools.SSHIntoVMRequest{
+		IPAddress:      server.IP,
+		User:           viper.GetString("gcp.vm.username"),
+		Port:           port,
+		PrivateKeyFile: privateKey,
+	})
 }
 
 // mapGcpServer maps a GCP server to a Vm struct
