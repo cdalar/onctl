@@ -303,6 +303,11 @@ func (p ProviderAzure) Destroy(server Vm) error {
 
 }
 
+func (p ProviderAzure) Locations() ([]Location, error) {
+	log.Println("[DEBUG] Get Locations")
+	return []Location{}, nil
+}
+
 func (p ProviderAzure) SSHInto(serverName string, port int) {
 	s, err := p.GetByName(serverName)
 	if err != nil || s.ID == "" {
