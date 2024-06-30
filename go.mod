@@ -1,7 +1,6 @@
 module github.com/cdalar/onctl
 
 go 1.22
-
 toolchain go1.22.4
 
 require (
@@ -16,7 +15,7 @@ require (
 	github.com/spf13/cobra v1.8.1
 	google.golang.org/api v0.183.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/apimachinery v0.29.3
+	k8s.io/apimachinery v0.30.2
 )
 
 require (
