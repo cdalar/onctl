@@ -2,6 +2,8 @@ module github.com/cdalar/onctl
 
 go 1.22
 
+toolchain go1.22.4
+
 require (
 	cloud.google.com/go/compute v1.27.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.1.1
