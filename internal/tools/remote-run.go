@@ -103,7 +103,7 @@ func variablesToEnvVars(vars []string) string {
 	var command string
 	for _, value := range vars {
 		envs := strings.Split(value, "=")
-		vars_command := envs[0] + "=" + envs[1]
+		vars_command := envs[0] + "=" + strconv.Quote(envs[1])
 		command += vars_command + " "
 	}
 	return command
