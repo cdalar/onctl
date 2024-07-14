@@ -9,7 +9,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.1.1
 	github.com/aws/aws-sdk-go v1.54.10
 	github.com/briandowns/spinner v1.23.1
-	github.com/cloudflare/cloudflare-go v0.96.0
+	github.com/cloudflare/cloudflare-go v0.99.0
 	github.com/gofrs/uuid/v5 v5.2.0
 	github.com/hetznercloud/hcloud-go/v2 v2.9.0
 	github.com/manifoldco/promptui v0.9.0
@@ -33,7 +33,7 @@ require (
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/goccy/go-json v0.10.2 // indirect
+	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
