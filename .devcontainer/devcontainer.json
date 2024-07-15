@@ -2,18 +2,21 @@
     "customizations": {
         "codespaces": {
           "repositories": {
-            "cdalar/argocd-demo": {
-                "permissions": "write-all"
-            },
             "cdalar/parampiper": {
               "permissions": "write-all"
             },
             "cdalar/onctl-templates": {
               "permissions": "write-all"
-            }
+            },
+            "cdalar/workspace": {
+              "permissions": "write-all"
+            },
+            "cdalar/kw-pv-policy": {
+              "permissions": "write-all"
+            },
           }
         }
       },
-    "image":"mcr.microsoft.com/devcontainers/universal:2"
-    // "build": { "dockerfile": "Dockerfile" },
+    // "image":"mcr.microsoft.com/devcontainers/universal:2"
+    "build": { "dockerfile": "Dockerfile" }
 }
