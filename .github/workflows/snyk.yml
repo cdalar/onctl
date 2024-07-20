@@ -9,7 +9,7 @@ permissions:
 jobs:
   security:
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
+    # if: github.actor != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@master
       - name: Run Snyk to check for vulnerabilities
@@ -18,9 +18,9 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          command: test
+          # command: test
           args: --severity-threshold=high --sarif-file-output=snyk.sarif
-      # - name: Upload result to GitHub Code Scanning
-      #   uses: github/codeql-action/upload-sarif@v3
-      #   with:
-      #     sarif_file: snyk.sarif
+      - name: Upload result to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: snyk.sarif
