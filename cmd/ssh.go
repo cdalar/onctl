@@ -17,9 +17,11 @@ var (
 	port          int
 	apply         string
 	downloadSlice []string
+	key           string
 )
 
 func init() {
+	sshCmd.Flags().StringVarP(&key, "key", "k", "", "Path to privateKey file (default: ~/.ssh/id_rsa))")
 	sshCmd.Flags().IntVarP(&port, "port", "p", 22, "ssh port")
 	sshCmd.Flags().StringVarP(&apply, "apply", "a", "", "apply script")
 	sshCmd.Flags().StringSliceVarP(&downloadSlice, "download", "d", []string{}, "List of files to download")
@@ -58,7 +60,10 @@ var sshCmd = &cobra.Command{
 		}
 		log.Println("[DEBUG] port: ", port)
 		log.Println("[DEBUG] filename: ", apply)
-		_, privateKeyFile := getSSHKeyFilePaths("")
+		log.Println("[DEBUG] key: ", key)
+		_, privateKeyFile := getSSHKeyFilePaths(key)
+		log.Println("[DEBUG] privateKeyFile: ", privateKeyFile)
+
 		privateKey, err := os.ReadFile(privateKeyFile)
 		if err != nil {
 			log.Fatal(err)
@@ -114,7 +119,7 @@ var sshCmd = &cobra.Command{
 			}
 		}
 		if apply == "" && len(downloadSlice) == 0 {
-			provider.SSHInto(args[0], port)
+			provider.SSHInto(args[0], port, privateKeyFile)
 		}
 	},
 }
