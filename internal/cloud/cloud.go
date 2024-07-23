@@ -79,3 +79,50 @@ type CloudProviderInterface interface {
 	// GetByName gets a VM by name
 	GetByName(serverName string) (Vm, error)
 }
+
+type NetworkManager interface {
+	// NetworkCreate creates a network
+	// NetworkCreate(Network) (Network, error)
+	// // NetworkDelete deletes a network
+	// NetworkDelete()
+	// // NetworkList lists all networks
+	List() ([]Network, error)
+	// // NetworkAttach attaches a network to a VM
+	// NetworkAttach()
+	// // NetworkDetach detaches a network from a VM
+	// NetworkDetach()
+}
+
+type Network struct {
+	// ID is the ID of the network
+	ID string
+	// Name is the name of the network
+	Name string
+	// CIDR is the CIDR of the network
+	CIDR string
+	// Type is the type of the network
+	Type string
+	// Status is the status of the network
+	Status string
+	// Location is the location of the network
+	Location string
+	// CreatedAt is the creation date of the network
+	CreatedAt time.Time
+	// Provider is the cloud provider
+	Provider string
+	// Servers is the number of servers in the network
+	Servers int
+}
+
+type StorageManager interface {
+	// StorageCreate creates a storage
+	StorageCreate()
+	// StorageDelete deletes a storage
+	StorageDelete()
+	// StorageList lists all storages
+	StorageList()
+	// StorageAttach attaches a storage to a VM
+	StorageAttach()
+	// StorageDetach detaches a storage from a VM
+	StorageDetach()
+}

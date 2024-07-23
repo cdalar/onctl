@@ -22,6 +22,30 @@ type ProviderHetzner struct {
 	Client *hcloud.Client
 }
 
+type NetworkProviderHetzner struct {
+	Client *hcloud.Client
+}
+
+func (n NetworkProviderHetzner) List() ([]Network, error) {
+	networkList, _, err := n.Client.Network.List(context.TODO(), hcloud.NetworkListOpts{
+		ListOpts: hcloud.ListOpts{
+			LabelSelector: "Owner=onctl",
+		},
+	})
+	if err != nil {
+		log.Println(err)
+	}
+	if len(networkList) == 0 {
+		return nil, nil
+	}
+	cloudList := make([]Network, 0, len(networkList))
+	for _, network := range networkList {
+		cloudList = append(cloudList, mapHetznerNetwork(*network))
+		log.Println("[DEBUG] network: ", network)
+	}
+	return cloudList, nil
+}
+
 func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 
 	log.Println("[DEBUG] Deploy server: ", server)
@@ -165,6 +189,17 @@ func (p ProviderHetzner) CreateSSHKey(publicKeyFile string) (keyID string, err e
 	}
 	// fmt.Println("DONE")
 	return fmt.Sprint(hkey.ID), nil
+}
+
+func mapHetznerNetwork(network hcloud.Network) Network {
+	return Network{
+		Provider:  "hetzner",
+		ID:        strconv.FormatInt(network.ID, 10),
+		Name:      network.Name,
+		CIDR:      network.IPRange.String(),
+		CreatedAt: network.Created,
+		Servers:   len(network.Servers),
+	}
 }
 
 // mapHetznerServer gets a hcloud.Server and returns a Vm
