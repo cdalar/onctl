@@ -110,4 +110,5 @@ func init() {
 	rootCmd.AddCommand(sshCmd)
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(networkCmd)
+	rootCmd.AddCommand(vmCmd)
 }

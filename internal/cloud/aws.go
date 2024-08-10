@@ -22,6 +22,11 @@ type ProviderAws struct {
 	Client *ec2.EC2
 }
 
+func (p ProviderAws) AttachNetwork(vm Vm, network Network) error {
+	log.Println("[DEBUG] Attaching network: ", network)
+	return nil
+}
+
 func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 	if server.Type == "" {
 		server.Type = viper.GetString("aws.vm.type")

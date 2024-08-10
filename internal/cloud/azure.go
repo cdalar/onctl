@@ -34,6 +34,11 @@ type QueryResponse struct {
 	}
 }
 
+func (p ProviderAzure) AttachNetwork(vm Vm, network Network) error {
+	log.Println("[DEBUG] Attaching network: ", network)
+	return nil
+}
+
 func (p ProviderAzure) List() (VmList, error) {
 	log.Println("[DEBUG] List Servers")
 	query := `

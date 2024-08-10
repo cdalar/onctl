@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net"
 	"os"
 	"strconv"
 	"time"
@@ -24,6 +25,17 @@ type ProviderHetzner struct {
 
 type NetworkProviderHetzner struct {
 	Client *hcloud.Client
+}
+
+func (n NetworkProviderHetzner) GetByName(networkName string) (Network, error) {
+	s, _, err := n.Client.Network.GetByName(context.TODO(), networkName)
+	if err != nil {
+		return Network{}, err
+	}
+	if s == nil {
+		return Network{}, errors.New("No Network found with name: " + networkName)
+	}
+	return mapHetznerNetwork(*s), nil
 }
 
 func (n NetworkProviderHetzner) List() ([]Network, error) {
@@ -44,6 +56,79 @@ func (n NetworkProviderHetzner) List() ([]Network, error) {
 		log.Println("[DEBUG] network: ", network)
 	}
 	return cloudList, nil
+}
+
+func (n NetworkProviderHetzner) Delete(network Network) error {
+	log.Println("[DEBUG] Deleting network: ", network)
+
+	networkId, err := strconv.ParseInt(network.ID, 10, 64)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	resp, err := n.Client.Network.Delete(context.TODO(), &hcloud.Network{
+		ID: networkId,
+	})
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	log.Println("[DEBUG] ", resp)
+	return nil
+}
+
+func (n NetworkProviderHetzner) Create(network Network) (Network, error) {
+	_, ipNet, err := net.ParseCIDR(network.CIDR)
+	log.Println("[DEBUG] ipNet.IP:", ipNet.IP.String())
+	log.Println("[DEBUG] ipNet.Mask:", ipNet.Mask.String())
+	if err != nil {
+		log.Fatalln(err)
+	}
+	net, resp, err := n.Client.Network.Create(context.TODO(), hcloud.NetworkCreateOpts{
+		Name:    network.Name,
+		IPRange: ipNet,
+		Labels: map[string]string{
+			"Owner": "onctl",
+		},
+	})
+	log.Println("[DEBUG] response:", resp)
+	if err != nil {
+		log.Println(err)
+		return Network{}, err
+	}
+	log.Println("[DEBUG] ", net)
+	return mapHetznerNetwork(*net), nil
+}
+
+func (p ProviderHetzner) AttachNetwork(vm Vm, network Network) error {
+	log.Println("[DEBUG] Attaching network: ", network)
+	vm, err := p.GetByName(vm.Name)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	networkId, err := strconv.ParseInt(network.ID, 10, 64)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	serverId, err := strconv.ParseInt(vm.ID, 10, 64)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	action, _, err := p.Client.Server.AttachToNetwork(context.TODO(), &hcloud.Server{
+		ID: serverId,
+	}, hcloud.ServerAttachToNetworkOpts{
+		Network: &hcloud.Network{
+			ID: networkId,
+		},
+	})
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	log.Println("[DEBUG] ", action)
+	return nil
 }
 
 func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {

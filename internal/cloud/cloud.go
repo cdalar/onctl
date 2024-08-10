@@ -78,19 +78,21 @@ type CloudProviderInterface interface {
 	SSHInto(serverName string, port int, privateKey string)
 	// GetByName gets a VM by name
 	GetByName(serverName string) (Vm, error)
+	// AttachNetwork attaches a network to a VM
+	AttachNetwork(vm Vm, network Network) error
+	// DetachNetwork detaches a network from a VM
+	// DetachNetwork(vm Vm, network Network) error
 }
 
 type NetworkManager interface {
-	// NetworkCreate creates a network
-	// NetworkCreate(Network) (Network, error)
-	// // NetworkDelete deletes a network
-	// NetworkDelete()
-	// // NetworkList lists all networks
+	// Create creates a network
+	Create(Network) (Network, error)
+	// Delete deletes a network
+	Delete(Network) error
+	// List lists all networks
 	List() ([]Network, error)
-	// // NetworkAttach attaches a network to a VM
-	// NetworkAttach()
-	// // NetworkDetach detaches a network from a VM
-	// NetworkDetach()
+	// GetByName gets a network by name
+	GetByName(networkName string) (Network, error)
 }
 
 type Network struct {
