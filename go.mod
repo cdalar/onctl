@@ -9,7 +9,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.2.0
 	github.com/aws/aws-sdk-go v1.55.0
 	github.com/briandowns/spinner v1.23.1
-	github.com/cloudflare/cloudflare-go v0.99.0
+	github.com/cloudflare/cloudflare-go v0.101.0
 	github.com/gofrs/uuid/v5 v5.3.0
 	github.com/hetznercloud/hcloud-go/v2 v2.13.1
 	github.com/manifoldco/promptui v0.9.0
@@ -42,8 +42,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
 	github.com/googleapis/gax-go/v2 v2.12.5 // indirect
-	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
-	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/kr/fs v0.1.0 // indirect
