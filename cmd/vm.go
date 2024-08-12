@@ -15,10 +15,10 @@ var (
 func init() {
 	vmCmd.AddCommand(vmNetworkAttachCmd)
 	vmNetworkAttachCmd.Flags().StringVar(&vmOpts.Name, "vm", "", "name of vm")
-	vmNetworkAttachCmd.Flags().StringVarP(&nOpt.Name, "network", "n", "", "Name for the network")
+	vmNetworkAttachCmd.Flags().StringVarP(&nOpts.Name, "network", "n", "", "Name for the network")
 	vmCmd.AddCommand(vmNetworkDetachCmd)
 	vmNetworkDetachCmd.Flags().StringVar(&vmOpts.Name, "vm", "", "name of vm")
-	vmNetworkDetachCmd.Flags().StringVarP(&nOpt.Name, "network", "n", "", "Name for the network")
+	vmNetworkDetachCmd.Flags().StringVarP(&nOpts.Name, "network", "n", "", "Name for the network")
 }
 
 var vmCmd = &cobra.Command{
@@ -33,17 +33,20 @@ var vmNetworkAttachCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Do network creation
 		log.Println("[DEBUG] Attaching network")
-		vm, err := provider.GetByName(args[0])
+		vm, err := provider.GetByName(vmOpts.Name)
 		if err != nil {
 			log.Println(err)
 		}
 		log.Println("[DEBUG] VM: ", vm)
-		net, err := networkManager.GetByName(args[1])
+		net, err := networkManager.GetByName(nOpts.Name)
 		if err != nil {
 			log.Println(err)
 		}
 		log.Println("[DEBUG] Network: ", net)
-		provider.AttachNetwork(vm, net)
+		err = provider.AttachNetwork(vm, net)
+		if err != nil {
+			log.Println(err)
+		}
 	},
 }
 
@@ -53,16 +56,19 @@ var vmNetworkDetachCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Do network creation
 		log.Println("[DEBUG] Detaching network")
-		vm, err := provider.GetByName(args[0])
+		vm, err := provider.GetByName(vmOpts.Name)
 		if err != nil {
 			log.Println(err)
 		}
 		log.Println("[DEBUG] VM: ", vm)
-		net, err := networkManager.GetByName(args[1])
+		net, err := networkManager.GetByName(nOpts.Name)
 		if err != nil {
 			log.Println(err)
 		}
 		log.Println("[DEBUG] Network: ", net)
-		provider.DetachNetwork(vm, net)
+		err = provider.DetachNetwork(vm, net)
+		if err != nil {
+			log.Println(err)
+		}
 	},
 }
