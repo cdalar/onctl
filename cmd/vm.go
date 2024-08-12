@@ -16,8 +16,9 @@ func init() {
 	vmCmd.AddCommand(vmNetworkAttachCmd)
 	vmNetworkAttachCmd.Flags().StringVar(&vmOpts.Name, "vm", "", "name of vm")
 	vmNetworkAttachCmd.Flags().StringVarP(&nOpt.Name, "network", "n", "", "Name for the network")
-	// networkCmd.AddCommand(vmNetworkDeattachCmd)
-
+	vmCmd.AddCommand(vmNetworkDetachCmd)
+	vmNetworkDetachCmd.Flags().StringVar(&vmOpts.Name, "vm", "", "name of vm")
+	vmNetworkDetachCmd.Flags().StringVarP(&nOpt.Name, "network", "n", "", "Name for the network")
 }
 
 var vmCmd = &cobra.Command{
@@ -43,5 +44,25 @@ var vmNetworkAttachCmd = &cobra.Command{
 		}
 		log.Println("[DEBUG] Network: ", net)
 		provider.AttachNetwork(vm, net)
+	},
+}
+
+var vmNetworkDetachCmd = &cobra.Command{
+	Use:   "detach",
+	Short: "Detach a network",
+	Run: func(cmd *cobra.Command, args []string) {
+		// Do network creation
+		log.Println("[DEBUG] Detaching network")
+		vm, err := provider.GetByName(args[0])
+		if err != nil {
+			log.Println(err)
+		}
+		log.Println("[DEBUG] VM: ", vm)
+		net, err := networkManager.GetByName(args[1])
+		if err != nil {
+			log.Println(err)
+		}
+		log.Println("[DEBUG] Network: ", net)
+		provider.DetachNetwork(vm, net)
 	},
 }

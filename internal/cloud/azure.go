@@ -39,6 +39,11 @@ func (p ProviderAzure) AttachNetwork(vm Vm, network Network) error {
 	return nil
 }
 
+func (p ProviderAzure) DetachNetwork(vm Vm, network Network) error {
+	log.Println("[DEBUG] Detaching network: ", network)
+	return nil
+}
+
 func (p ProviderAzure) List() (VmList, error) {
 	log.Println("[DEBUG] List Servers")
 	query := `

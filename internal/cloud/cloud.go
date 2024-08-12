@@ -81,7 +81,7 @@ type CloudProviderInterface interface {
 	// AttachNetwork attaches a network to a VM
 	AttachNetwork(vm Vm, network Network) error
 	// DetachNetwork detaches a network from a VM
-	// DetachNetwork(vm Vm, network Network) error
+	DetachNetwork(vm Vm, network Network) error
 }
 
 type NetworkManager interface {

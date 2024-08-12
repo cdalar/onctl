@@ -96,7 +96,55 @@ func (n NetworkProviderHetzner) Create(network Network) (Network, error) {
 		return Network{}, err
 	}
 	log.Println("[DEBUG] ", net)
+
+	subnet, resp, err := n.Client.Network.AddSubnet(context.TODO(), net, hcloud.NetworkAddSubnetOpts{
+		Subnet: hcloud.NetworkSubnet{
+			Type:        hcloud.NetworkSubnetTypeCloud,
+			IPRange:     ipNet,
+			NetworkZone: hcloud.NetworkZoneEUCentral, //TODO: make this configurable based on vm location ex. fsn1
+		},
+	})
+	log.Println("[DEBUG] zone:", viper.GetString("hetzner.location"))
+	if err != nil {
+		log.Println("Add Subnet:", err)
+		return Network{}, err
+	}
+	log.Println("[DEBUG] subnet:", subnet)
+	log.Println("[DEBUG] subnet resp:", resp)
+
 	return mapHetznerNetwork(*net), nil
+}
+
+func (p ProviderHetzner) DetachNetwork(vm Vm, network Network) error {
+	log.Println("[DEBUG] Detaching network: ", network)
+	vm, err := p.GetByName(vm.Name)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	networkId, err := strconv.ParseInt(network.ID, 10, 64)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	serverId, err := strconv.ParseInt(vm.ID, 10, 64)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	action, _, err := p.Client.Server.DetachFromNetwork(context.TODO(), &hcloud.Server{
+		ID: serverId,
+	}, hcloud.ServerDetachFromNetworkOpts{
+		Network: &hcloud.Network{
+			ID: networkId,
+		},
+	})
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	log.Println("[DEBUG] ", action)
+	return nil
 }
 
 func (p ProviderHetzner) AttachNetwork(vm Vm, network Network) error {

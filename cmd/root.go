@@ -89,6 +89,9 @@ func Execute() error {
 		provider = &cloud.ProviderAws{
 			Client: provideraws.GetClient(),
 		}
+		networkManager = &cloud.NetworkProviderAws{
+			Client: provideraws.GetClient(),
+		}
 	case "azure":
 		provider = &cloud.ProviderAzure{
 			ResourceGraphClient: providerazure.GetResourceGraphClient(),

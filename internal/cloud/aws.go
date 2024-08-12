@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"strconv"
 
@@ -22,8 +23,140 @@ type ProviderAws struct {
 	Client *ec2.EC2
 }
 
+type NetworkProviderAws struct {
+	Client *ec2.EC2
+}
+
+func (n NetworkProviderAws) Create(netw Network) (Network, error) {
+	_, ipNet, err := net.ParseCIDR(netw.CIDR)
+	log.Println("[DEBUG] ipNet.IP:", ipNet.IP.String())
+	log.Println("[DEBUG] ipNet.Mask:", ipNet.Mask.String())
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	network, err := n.Client.CreateVpc(&ec2.CreateVpcInput{
+		CidrBlock: aws.String(netw.CIDR),
+	})
+	if err != nil {
+		log.Println(err)
+	}
+	_, err = n.Client.CreateTags(&ec2.CreateTagsInput{
+		Resources: []*string{network.Vpc.VpcId},
+		Tags: []*ec2.Tag{
+			{
+				Key:   aws.String("Name"),
+				Value: aws.String(netw.Name),
+			},
+		},
+	})
+	if err != nil {
+		log.Println(err)
+	}
+	subnet, err := n.Client.CreateSubnet(&ec2.CreateSubnetInput{
+		CidrBlock: aws.String(netw.CIDR),
+		VpcId:     network.Vpc.VpcId,
+	})
+	if err != nil {
+		log.Println(err)
+	}
+	log.Println("[DEBUG] Subnet: ", subnet)
+	return mapAwsNetwork(network.Vpc), nil
+}
+
+func (n NetworkProviderAws) Delete(net Network) error {
+	log.Println("[DEBUG] Deleting network.ID: ", net.ID)
+	result, err := n.Client.DescribeSubnets(&ec2.DescribeSubnetsInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: []*string{aws.String(net.ID)},
+			},
+		},
+	})
+	if err != nil {
+		log.Fatalf("Failed to describe subnets for VPC %s: %v", net.ID, err)
+	}
+
+	for _, subnet := range result.Subnets {
+		_, err := n.Client.DeleteSubnet(&ec2.DeleteSubnetInput{
+			SubnetId: subnet.SubnetId,
+		})
+		if err != nil {
+			log.Fatalf("Failed to delete subnet %s: %v", *subnet.SubnetId, err)
+		}
+	}
+
+	resp, err := n.Client.DeleteVpc(&ec2.DeleteVpcInput{
+		VpcId: aws.String(net.ID),
+	})
+
+	if err != nil {
+		log.Println(err)
+	}
+	log.Println("[DEBUG] " + resp.String())
+	return nil
+}
+
+func (n NetworkProviderAws) GetByName(networkName string) (Network, error) {
+	networkList, err := n.Client.DescribeVpcs(&ec2.DescribeVpcsInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("tag:Name"),
+				Values: []*string{aws.String(networkName)},
+			},
+		},
+	})
+	if err != nil {
+		log.Println(err)
+	}
+	if len(networkList.Vpcs) == 0 {
+		return Network{}, nil
+	} else if len(networkList.Vpcs) > 1 {
+		log.Fatalln("Multiple networks found with the same name")
+	}
+	return mapAwsNetwork(networkList.Vpcs[0]), nil
+}
+
+func (n NetworkProviderAws) List() ([]Network, error) {
+	networkList, err := n.Client.DescribeVpcs(&ec2.DescribeVpcsInput{})
+	if err != nil {
+		log.Println(err)
+	}
+	if len(networkList.Vpcs) == 0 {
+		return nil, nil
+	}
+	cloudList := make([]Network, 0, len(networkList.Vpcs))
+	for _, network := range networkList.Vpcs {
+		cloudList = append(cloudList, mapAwsNetwork(network))
+		log.Println("[DEBUG] network: ", network)
+	}
+	return cloudList, nil
+}
+
+func mapAwsNetwork(network *ec2.Vpc) Network {
+	var networkName = ""
+
+	for _, tag := range network.Tags {
+		if *tag.Key == "Name" {
+			networkName = *tag.Value
+		}
+	}
+	return Network{
+		Provider: "aws",
+		ID:       *network.VpcId,
+		Name:     networkName,
+		CIDR:     *network.CidrBlock,
+	}
+}
+
 func (p ProviderAws) AttachNetwork(vm Vm, network Network) error {
 	log.Println("[DEBUG] Attaching network: ", network)
+	return nil
+}
+
+func (p ProviderAws) DetachNetwork(vm Vm, network Network) error {
+	log.Println("[DEBUG] Detaching network: ", network)
 	return nil
 }
 
