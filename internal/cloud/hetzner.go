@@ -35,7 +35,7 @@ func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 			Name: viper.GetString("hetzner.location"),
 		},
 		Image: &hcloud.Image{
-			Name: "ubuntu-22.04",
+			Name: viper.GetString("hetzner.vm.image"),
 		},
 		ServerType: &hcloud.ServerType{
 			Name: viper.GetString("hetzner.vm.type"),
