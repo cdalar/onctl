@@ -16,7 +16,7 @@ require (
 	github.com/spf13/cobra v1.8.1
 	google.golang.org/api v0.192.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/apimachinery v0.30.3
+	k8s.io/apimachinery v0.31.0
 )
 
 require (
