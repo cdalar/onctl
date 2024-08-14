@@ -9,7 +9,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.2.0
 	github.com/aws/aws-sdk-go v1.55.5
 	github.com/briandowns/spinner v1.23.1
-	github.com/cloudflare/cloudflare-go v0.101.0
+	github.com/cloudflare/cloudflare-go v0.102.0
 	github.com/gofrs/uuid/v5 v5.3.0
 	github.com/hetznercloud/hcloud-go/v2 v2.13.1
 	github.com/manifoldco/promptui v0.9.0
@@ -69,7 +69,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
-	golang.org/x/net v0.27.0 // indirect
+	golang.org/x/net v0.28.0 // indirect
 	golang.org/x/oauth2 v0.22.0 // indirect
 	golang.org/x/sys v0.23.0 // indirect
 	golang.org/x/term v0.23.0 // indirect
