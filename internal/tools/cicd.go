@@ -15,7 +15,7 @@ func GenerateMachineUniqueName() string {
 func GenerateUserName() string {
 	userCurrent, err := user.Current()
 	if err != nil {
-		log.Fatalf(err.Error())
+		log.Fatalf("%s", err.Error())
 	}
 	userName := strings.ReplaceAll(userCurrent.Username, "\\", "-")
 	userName = strings.ReplaceAll(userName, " ", "-")
