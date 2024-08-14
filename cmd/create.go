@@ -170,7 +170,7 @@ var createCmd = &cobra.Command{
 			}
 		}
 
-		remote.WaitForCloudInit()
+		remote.WaitForCloudInit(viper.GetString("vm.cloud-init.timeout"))
 		s.Stop()
 		fmt.Println("\033[32m\u2714\033[0m VM is Ready")
 		log.Println("[DEBUG] cloud-init finished")
