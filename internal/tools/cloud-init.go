@@ -30,28 +30,34 @@ func FileToBase64(filepath string) string {
 }
 
 // WaitForCloudInit waits for cloud-init to finish
-func (r *Remote) WaitForCloudInit() {
-	var tries int
-
+func (r *Remote) WaitForCloudInit(timeout string) {
+	log.Println("[DEBUG] Waiting for cloud-init to finish timeout:", timeout)
 	command := "[ -f /run/cloud-init/result.json ] && echo -n \"OK\""
-	for {
 
-		isOK, err := r.RemoteRun(&RemoteRunConfig{
-			Command: command,
-		})
-		if err != nil {
-			log.Println("[DEBUG] RemoteRun:" + err.Error())
-		}
-		if err == nil {
-			if isOK == "OK" {
-				break
+	// Parse the timeout string into a time.Duration
+	duration, err := time.ParseDuration(timeout)
+	if err != nil {
+		log.Fatalf("Invalid timeout value: %v", err)
+	}
+
+	timer := time.After(duration)
+
+	for {
+		select {
+		case <-timer:
+			log.Fatalln("Exiting.. Timeout reached while waiting for cloud-init to finish on IP " + r.IPAddress + " on port " + strconv.Itoa(r.SSHPort))
+			return
+		default:
+			isOK, err := r.RemoteRun(&RemoteRunConfig{
+				Command: command,
+			})
+			if err != nil {
+				log.Println("[DEBUG] RemoteRun:" + err.Error())
 			}
-		}
-		time.Sleep(3 * time.Second)
-		tries++
-		log.Println("[DEBUG] :" + strconv.Itoa(tries))
-		if tries > 15 {
-			log.Fatalln("Exiting.. Could not connect to IP " + r.IPAddress + " on port " + strconv.Itoa(r.SSHPort))
+			if err == nil && isOK == "OK" {
+				return
+			}
+			time.Sleep(3 * time.Second)
 		}
 	}
 }
