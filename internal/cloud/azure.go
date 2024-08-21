@@ -86,8 +86,8 @@ func (p ProviderAzure) List() (VmList, error) {
 		log.Fatalf("failed to finish the request: %v", err)
 	} else {
 		// Print the obtained query results
-		log.Printf("[DEBUG] Resources found: " + strconv.FormatInt(*resp.TotalRecords, 10) + "\n")
-		log.Printf("[DEBUG] Results: " + fmt.Sprint(resp.Data) + "\n")
+		log.Printf("[DEBUG] Resources found: %d\n", *resp.TotalRecords)
+		log.Printf("[DEBUG] Results: %v\n", resp.Data)
 	}
 	if len(strconv.FormatInt(*resp.TotalRecords, 10)) == 0 {
 		return VmList{}, nil

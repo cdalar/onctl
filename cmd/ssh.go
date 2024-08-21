@@ -77,6 +77,7 @@ var sshCmd = &cobra.Command{
 			IPAddress:  vm.IP,
 			SSHPort:    port,
 			PrivateKey: string(privateKey),
+			Spinner:    s,
 		}
 
 		if apply != "" {
@@ -106,7 +107,7 @@ var sshCmd = &cobra.Command{
 		// TODO go routines for parallel download
 		if len(downloadSlice) > 0 {
 			s.Start()
-			s.Suffix = " Downloading " + fmt.Sprint(len(downloadSlice)) + " files"
+			s.Suffix = " Downloading " + fmt.Sprint(len(downloadSlice)) + " file(s)"
 			for _, dfile := range downloadSlice {
 				err = remote.DownloadFile(dfile, filepath.Base(dfile))
 				if err != nil {

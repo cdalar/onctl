@@ -143,14 +143,13 @@ var createCmd = &cobra.Command{
 		log.Println("[DEBUG] waiting for cloud-init")
 		log.Println("[DEBUG] ssh port: ", opt.Vm.SSHPort)
 		s.Stop()
-		fmt.Println("\033[32m\u2714\033[0m VM Starting...")
-		s.Restart()
-		s.Suffix = " Waiting for VM to be ready..."
+		// fmt.Println("\033[32m\u2714\033[0m VM Starting...")
 		remote := tools.Remote{
 			Username:   viper.GetString(cloudProvider + ".vm.username"),
 			IPAddress:  vm.IP,
 			SSHPort:    opt.Vm.SSHPort,
 			PrivateKey: string(privateKey),
+			Spinner:    s,
 		}
 
 		// BEGIN Domain
@@ -170,7 +169,9 @@ var createCmd = &cobra.Command{
 			}
 		}
 
-		remote.WaitForCloudInit()
+		s.Restart()
+		s.Suffix = " Waiting for VM to be ready..."
+		remote.WaitForCloudInit(viper.GetString("vm.cloud-init.timeout"))
 		s.Stop()
 		fmt.Println("\033[32m\u2714\033[0m VM is Ready")
 		log.Println("[DEBUG] cloud-init finished")
@@ -205,7 +206,7 @@ var createCmd = &cobra.Command{
 		// TODO go routines
 		if len(downloadSlice) > 0 {
 			s.Start()
-			s.Suffix = " Downloading " + fmt.Sprint(len(downloadSlice)) + " files"
+			s.Suffix = " Downloading " + fmt.Sprint(len(downloadSlice)) + " file(s)"
 			for _, dfile := range downloadSlice {
 				err = remote.DownloadFile(dfile, filepath.Base(dfile))
 				if err != nil {

@@ -12,8 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/briandowns/spinner"
 	"github.com/cdalar/onctl/internal/files"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/term"
 )
 
 const (
@@ -25,6 +27,8 @@ type Remote struct {
 	IPAddress  string
 	SSHPort    int
 	PrivateKey string
+	Passphrase string
+	Spinner    *spinner.Spinner
 	Client     *ssh.Client
 }
 
@@ -38,13 +42,54 @@ type CopyAndRunRemoteFileConfig struct {
 	Vars []string
 }
 
+func (r *Remote) ReadPassphrase() (string, error) {
+	// fmt.Println("Error: Passphrase is missing for the private key")
+	fmt.Print("Enter passphrase for private key:")
+
+	// Turn off input echoing
+	bytePassphrase, err := term.ReadPassword(int(os.Stdin.Fd()))
+	if err != nil {
+		return "", err
+	}
+	fmt.Println() // Print a newline after the password input
+	r.Passphrase = string(bytePassphrase)
+	return string(bytePassphrase), nil
+}
+
 func (r *Remote) NewSSHConnection() error {
+	var (
+		key ssh.Signer
+		err error
+	)
 	if r.Client != nil {
 		return nil
 	}
-	key, err := ssh.ParsePrivateKey([]byte(r.PrivateKey))
+	if r.Passphrase != "" {
+		key, err = ssh.ParsePrivateKeyWithPassphrase([]byte(r.PrivateKey), []byte(r.Passphrase))
+	} else {
+		key, err = ssh.ParsePrivateKey([]byte(r.PrivateKey))
+	}
 	if err != nil {
-		return err
+		if _, ok := err.(*ssh.PassphraseMissingError); ok {
+			// fmt.Println("Error: Passphrase is missing for the private key")
+			if r.Spinner != nil {
+				r.Spinner.Stop()
+			}
+			passphrase, err := r.ReadPassphrase()
+			if r.Spinner != nil {
+				r.Spinner.Restart()
+			}
+			if err != nil {
+				log.Fatalln("Error reading passphrase: ", err)
+			}
+			key, err = ssh.ParsePrivateKeyWithPassphrase([]byte(r.PrivateKey), []byte(passphrase))
+			if err != nil {
+				log.Fatalln("Error parsing private key: ", err)
+			}
+		} else {
+			log.Fatalln("Error parsing private key: ", err)
+			return err
+		}
 	}
 	// Authentication
 	config := &ssh.ClientConfig{
