@@ -9,7 +9,7 @@ permissions:
 jobs:
   security:
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
+    # if: github.actor != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@v4
       - name: Run Snyk to check for vulnerabilities
