@@ -24,6 +24,8 @@ func init() {
 	networkCmd.AddCommand(networkDeleteCmd)
 	networkCreateCmd.Flags().StringVar(&nOpt.CIDR, "cidr", "", "CIDR for the network ex. 10.0.0.0/16 ")
 	networkCreateCmd.Flags().StringVarP(&nOpt.Name, "name", "n", "", "Name for the network")
+	networkCreateCmd.MarkFlagRequired("cidr")
+	networkCreateCmd.MarkFlagRequired("name")
 }
 
 var networkCmd = &cobra.Command{
@@ -34,9 +36,10 @@ var networkCmd = &cobra.Command{
 }
 
 var networkCreateCmd = &cobra.Command{
-	Use:   "create",
-	Short: "Create a network",
-	Long:  `Create a network`,
+	Use:     "create",
+	Aliases: []string{"new", "add", "up"},
+	Short:   "Create a network",
+	Long:    `Create a network`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Do network creation
 		log.Println("[DEBUG] Creating network")
