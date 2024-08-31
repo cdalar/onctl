@@ -12,14 +12,7 @@
     ```
     onctl up -a scripts/init.sh 
     ```
-    to use the file `scripts/init.sh`
-
-1. use an embeded script.
-
-    ```
-    onctl up -a docker.sh
-    ```
-    to use the embeded file. Embeded files can be found under `internal/files/` in github repository.
+    to use the file `scripts/init.sh` in your current directory.
 
 1. use onctl-templates repo. 
 
