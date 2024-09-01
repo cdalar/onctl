@@ -134,3 +134,45 @@ KEY4=VALUE=123
 		t.Fatalf("Expected error for invalid line, got nil")
 	}
 }
+func Test_exists(t *testing.T) {
+	// Test with an existing file
+	existingFile := "existing_file.txt"
+	_, err := os.Create(existingFile)
+	if err != nil {
+		t.Fatalf("Failed to create existing file: %v", err)
+	}
+	defer os.Remove(existingFile)
+
+	ex, err := exists(existingFile)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if !ex {
+		t.Errorf("Expected file to exist, but it doesn't")
+	}
+
+	// Test with a non-existing file
+	ex, err = exists("non_existing_file.txt")
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if ex {
+		t.Errorf("Expected file to not exist, but it does")
+	}
+
+	// Test with a directory
+	existingDir := "existing_dir"
+	err = os.Mkdir(existingDir, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create existing directory: %v", err)
+	}
+	defer os.Remove(existingDir)
+
+	ex, err = exists(existingDir)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if !ex {
+		t.Errorf("Expected directory to exist, but it doesn't")
+	}
+}
