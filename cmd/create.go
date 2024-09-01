@@ -53,7 +53,7 @@ Environment Variables:
 
 var createCmd = &cobra.Command{
 	Use:     "create",
-	Aliases: []string{"start", "up"},
+	Aliases: []string{"start", "up", "run"},
 	Short:   "Create a VM",
 	Long:    `Create a VM with the specified options and run the cloud-init file on the remote.`,
 	Example: `  # Create a VM with docker installed and set ssh on port 443

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"errors"
+
 	"github.com/briandowns/spinner"
 	"github.com/cdalar/onctl/internal/files"
 	"golang.org/x/crypto/ssh"
@@ -121,6 +123,29 @@ func exists(path string) (bool, error) {
 	return false, err
 }
 
+// ParseEnvLine parses a line in the format KEY=VALUE and returns the key and value.
+func ParseEnvLine(line string) (string, string, error) {
+	parts := strings.SplitN(line, "=", 2)
+	if len(parts) != 2 {
+		return "", "", errors.New("invalid line: " + line)
+	}
+
+	key := parts[0]
+	value := parts[1]
+
+	// Check for additional '=' in the value part
+	if strings.Contains(value, "=") {
+		return "", "", errors.New("invalid line: " + line)
+	}
+
+	// Remove surrounding quotes from value if present
+	if len(value) > 1 && ((value[0] == '\'' && value[len(value)-1] == '\'') || (value[0] == '"' && value[len(value)-1] == '"')) {
+		value = value[1 : len(value)-1]
+	}
+
+	return key, value, nil
+}
+
 func ParseDotEnvFile(dotEnvFile string) ([]string, error) {
 	var vars []string
 	file, err := os.Open(dotEnvFile)
@@ -128,15 +153,27 @@ func ParseDotEnvFile(dotEnvFile string) ([]string, error) {
 		return nil, err
 	}
 	defer file.Close()
+
 	scanner := bufio.NewScanner(file)
+
 	for scanner.Scan() {
-		line := scanner.Text()
-		line = strings.Trim(line, " ")
+		line := strings.TrimSpace(scanner.Text())
 		if strings.HasPrefix(line, "#") || line == "" {
 			continue
 		}
-		vars = append(vars, line)
+
+		key, value, err := ParseEnvLine(line)
+		if err != nil {
+			return nil, err
+		}
+
+		vars = append(vars, fmt.Sprintf("%s=%s", key, value))
 	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
 	return vars, nil
 }
 
