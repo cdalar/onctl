@@ -133,6 +133,12 @@ KEY4=VALUE=123
 	if err == nil {
 		t.Fatalf("Expected error for invalid line, got nil")
 	}
+
+	// Test with a non-existing file
+	_, err = ParseDotEnvFile("non_existing_file.txt")
+	if err == nil {
+		t.Fatalf("Expected error for non-existing file, got nil")
+	}
 }
 func Test_exists(t *testing.T) {
 	// Test with an existing file
