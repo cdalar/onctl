@@ -26,3 +26,24 @@ func Test_String(t *testing.T) {
 		t.Errorf("%s is starting numeric char", str3)
 	}
 }
+func Test_Password(t *testing.T) {
+	password := Password(10)
+	if len(password) != 10 {
+		t.Errorf("%s is not 10 chars", password)
+	}
+	password2 := Password(10)
+	if password == password2 {
+		t.Errorf("%s == %s", password, password2)
+	}
+
+	password = Password(6)
+	if len(password) != 6 {
+		t.Errorf("%s is not 6 chars", password)
+	}
+
+	const specialset = "!@#$%^&*()_+"
+	password3 := Password(7)
+	if !strings.ContainsAny(password3, specialset) {
+		t.Errorf("%s does not contain any special characters", password3)
+	}
+}
