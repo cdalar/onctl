@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net"
 	"os"
@@ -115,12 +116,12 @@ func exists(path string) (bool, error) {
 	fmt.Println("Checking if ", path, " exists")
 	_, err := os.Stat(path)
 	if err == nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
 		return true, nil
 	}
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return false, err
+	return true, nil
 }
 
 // ParseEnvLine parses a line in the format KEY=VALUE and returns the key and value.
