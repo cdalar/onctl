@@ -115,7 +115,7 @@ func (r *Remote) NewSSHConnection() error {
 func exists(path string) (bool, error) {
 	fmt.Println("Checking if ", path, " exists")
 	_, err := os.Stat(path)
-	if err == nil {
+	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
 		}

@@ -46,11 +46,7 @@ func Test_ParseEnvLine(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		println(test.line)
 		key, value, err := ParseEnvLine(test.line)
-
-		fmt.Printf("Expected key: %s (len: %d, hex: %x)\n", test.expectedKey, len(test.expectedKey), test.expectedKey)
-		fmt.Printf("Returned key: %s (len: %d, hex: %x)\n", key, len(key), key)
 
 		if key != test.expectedKey {
 			t.Errorf("Expected key: %s, got: %s", test.expectedKey, key)
@@ -180,5 +176,35 @@ func Test_exists(t *testing.T) {
 	}
 	if !ex {
 		t.Errorf("Expected directory to exist, but it doesn't")
+	}
+}
+func Test_variablesToEnvVars(t *testing.T) {
+	tests := []struct {
+		vars     []string
+		expected string
+	}{
+		{
+			vars:     []string{"KEY1=VALUE1", "KEY2=VALUE2"},
+			expected: "KEY1=\"VALUE1\" KEY2=\"VALUE2\" ",
+		},
+		{
+			vars:     []string{"KEY1=VALUE1", "KEY2='VALUE2'"},
+			expected: "KEY1=\"VALUE1\" KEY2=\"'VALUE2'\" ",
+		},
+		{
+			vars:     []string{"KEY1=VALUE1", "KEY2=VALUE2", "KEY3=VALUE3"},
+			expected: "KEY1=\"VALUE1\" KEY2=\"VALUE2\" KEY3=\"VALUE3\" ",
+		},
+		{
+			vars:     []string{},
+			expected: "",
+		},
+	}
+
+	for _, test := range tests {
+		result := variablesToEnvVars(test.vars)
+		if result != test.expected {
+			t.Errorf("Expected: %s, got: %s", test.expected, result)
+		}
 	}
 }
