@@ -9,7 +9,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.2.0
 	github.com/aws/aws-sdk-go v1.55.5
 	github.com/briandowns/spinner v1.23.1
-	github.com/cloudflare/cloudflare-go v0.103.0
+	github.com/cloudflare/cloudflare-go v0.104.0
 	github.com/gofrs/uuid/v5 v5.3.0
 	github.com/hetznercloud/hcloud-go/v2 v2.13.1
 	github.com/manifoldco/promptui v0.9.0
