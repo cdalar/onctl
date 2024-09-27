@@ -49,8 +49,8 @@ github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMn
 github.com/chzyer/test v1.0.0 h1:p3BQDXSxOhOG0P9z6/hGnII4LGiEPOYBhs8asl/fC04=
 github.com/chzyer/test v1.0.0/go.mod h1:2JlltgoNkt4TW/z9V/IzDdFaMTM2JPIi26O1pF38GC8=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
-github.com/cloudflare/cloudflare-go v0.103.0 h1:XXKzgXeUbAo7UTtM4T5wuD2bJPBtNZv7TlZAEy5QI4k=
-github.com/cloudflare/cloudflare-go v0.103.0/go.mod h1:0DrjT4g8wgYFYIxhlqR8xi8dNWfyHFGilUkU3+XV8h0=
+github.com/cloudflare/cloudflare-go v0.106.0 h1:q41gC5Wc1nfi0D1ZhSHokWcd9mGMbqC7RE7qiP+qE00=
+github.com/cloudflare/cloudflare-go v0.106.0/go.mod h1:pfUQ4PIG4ISI0/Mmc21Bp86UnFU0ktmPf3iTgbSL+cM=
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
 github.com/cpuguy83/go-md2man/v2 v2.0.4/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46tRHOmNcaadrF8o=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
