@@ -13,7 +13,7 @@
             },
             "cdalar/kw-pv-policy": {
               "permissions": "write-all"
-            },
+            }
           }
         }
       },
