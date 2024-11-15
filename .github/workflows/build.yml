@@ -77,7 +77,7 @@ jobs:
 
       - name: Upload Coverage
         if: ${{ !inputs.skipTests }}
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         continue-on-error: true
         with:
           token: ${{secrets.CODECOV_TOKEN}}
