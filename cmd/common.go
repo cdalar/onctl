@@ -17,6 +17,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/cdalar/onctl/internal/files"
+	"github.com/cdalar/onctl/internal/tools"
 	"github.com/gofrs/uuid/v5"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/viper"
@@ -249,4 +250,27 @@ func getSSHKeyFilePaths(filename string) (publicKeyFile, privateKeyFile string) 
 	}
 
 	return publicKeyFile, privateKeyFile
+}
+
+func ProcessDownloadSlice(downloadSlice []string, remote tools.Remote) {
+	if len(downloadSlice) > 0 {
+		for _, dfile := range downloadSlice {
+			var remoteFile, localFile string
+			// Split by colon to determine if a rename is required
+			if strings.Contains(dfile, ":") {
+				parts := strings.SplitN(dfile, ":", 2)
+				remoteFile = parts[0]
+				localFile = parts[1]
+			} else {
+				remoteFile = dfile
+				localFile = filepath.Base(dfile)
+			}
+			log.Printf("[DEBUG] Downloading file: %s", remoteFile)
+			log.Printf("[DEBUG] Writing file to: %s", localFile)
+			err := remote.DownloadFile(remoteFile, localFile)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+	}
 }
