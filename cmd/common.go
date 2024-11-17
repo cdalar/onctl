@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"text/template"
 	"time"
@@ -254,23 +255,31 @@ func getSSHKeyFilePaths(filename string) (publicKeyFile, privateKeyFile string) 
 
 func ProcessDownloadSlice(downloadSlice []string, remote tools.Remote) {
 	if len(downloadSlice) > 0 {
+		var wg sync.WaitGroup
 		for _, dfile := range downloadSlice {
-			var remoteFile, localFile string
-			// Split by colon to determine if a rename is required
-			if strings.Contains(dfile, ":") {
-				parts := strings.SplitN(dfile, ":", 2)
-				remoteFile = parts[0]
-				localFile = parts[1]
-			} else {
-				remoteFile = dfile
-				localFile = filepath.Base(dfile)
-			}
-			log.Printf("[DEBUG] Downloading file: %s", remoteFile)
-			log.Printf("[DEBUG] Writing file to: %s", localFile)
-			err := remote.DownloadFile(remoteFile, localFile)
-			if err != nil {
-				log.Fatal(err)
-			}
+			wg.Add(1)
+			go func(dfile string) {
+				defer wg.Done()
+
+				var remoteFile, localFile string
+				// Split by colon to determine if a rename is required
+				if strings.Contains(dfile, ":") {
+					parts := strings.SplitN(dfile, ":", 2)
+					remoteFile = parts[0]
+					localFile = parts[1]
+				} else {
+					remoteFile = dfile
+					localFile = filepath.Base(dfile)
+				}
+
+				log.Printf("Downloading file: %s -> %s", remoteFile, localFile)
+
+				err := remote.DownloadFile(remoteFile, localFile)
+				if err != nil {
+					log.Printf("[ERROR] Failed to download %s: %v", remoteFile, err)
+				}
+			}(dfile)
 		}
+		wg.Wait() // Wait for all goroutines to finish
 	}
 }
