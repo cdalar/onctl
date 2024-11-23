@@ -35,36 +35,52 @@ func GenerateIDToken() uuid.UUID {
 	return u1
 }
 
-func ReadConfig(cloudProvider string) {
+func ReadConfig(cloudProvider string) error {
+	// Check current working directory
 	dir, err := os.Getwd()
 	if err != nil {
-		log.Println(err)
+		return fmt.Errorf("failed to get working directory: %v", err)
 	}
-	configFile := dir + "/.onctl/" + cloudProvider + ".yaml"
-	log.Println("[DEBUG] Working Directory: " + configFile)
-	configFileInfo, err := os.Stat(configFile)
+
+	localConfigPath := filepath.Join(dir, ".onctl")
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		// log.Println(err)
-		fmt.Println("No configuration found. Please run `onctl init` first")
-		os.Exit(1)
+		return fmt.Errorf("failed to get home directory: %v", err)
+	}
+	homeConfigPath := filepath.Join(homeDir, ".onctl")
+
+	// Determine which directory to use
+	var configDir string
+	if _, err := os.Stat(localConfigPath); err == nil {
+		configDir = localConfigPath
+	} else if _, err := os.Stat(homeConfigPath); err == nil {
+		configDir = homeConfigPath
+	} else {
+		return fmt.Errorf("no configuration directory found in current directory or home directory. Please run `onctl init` first")
 	}
 
-	viper.SetConfigName("onctl")
-	viper.AddConfigPath(dir + "/.onctl")
-	err = viper.ReadInConfig()
-	if err != nil {
-		log.Println(err)
+	// Set paths for general and cloud provider-specific config
+	configFile := filepath.Join(configDir, cloudProvider+".yaml")
+	log.Println("[DEBUG] Config File Path:", configFile)
+
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		return fmt.Errorf("no configuration file found for %s in %s", cloudProvider, configDir)
 	}
 
-	if configFileInfo != nil {
-		viper.SetConfigName(cloudProvider)
-		err = viper.MergeInConfig()
-		if err != nil {
-			log.Println(err)
-		}
+	viper.SetConfigName("onctl") // General config
+	viper.AddConfigPath(configDir)
+
+	if err := viper.ReadInConfig(); err != nil {
+		log.Printf("Failed to read general config: %v", err)
 	}
 
-	log.Println("[DEBUG]", viper.AllSettings())
+	viper.SetConfigName(cloudProvider) // Specific config
+	if err := viper.MergeInConfig(); err != nil {
+		log.Printf("Failed to merge cloud provider config: %v", err)
+	}
+
+	log.Println("[DEBUG] Loaded Settings:", viper.AllSettings())
+	return nil
 }
 
 func getNameFromTags(tags []*ec2.Tag) string {
