@@ -107,7 +107,7 @@ func TestTabWriter(t *testing.T) {
 	os.Stdout = os.Stderr
 
 	// Validate the output
-	expected := "John\t30\n"
+	expected := "John   30\n"
 	if output != expected {
 		t.Errorf("expected %q, got %q", expected, output)
 	}
