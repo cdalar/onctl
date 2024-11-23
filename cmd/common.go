@@ -49,12 +49,16 @@ func ReadConfig(cloudProvider string) error {
 	}
 	homeConfigPath := filepath.Join(homeDir, ".onctl")
 
+	log.Println("[DEBUG] Local Config Path:", localConfigPath)
+	log.Println("[DEBUG] Home Config Path:", homeConfigPath)
 	// Determine which directory to use
 	var configDir string
 	if _, err := os.Stat(localConfigPath); err == nil {
 		configDir = localConfigPath
+		log.Println("[DEBUG] Using local config directory")
 	} else if _, err := os.Stat(homeConfigPath); err == nil {
 		configDir = homeConfigPath
+		log.Println("[DEBUG] Using home config directory")
 	} else {
 		return fmt.Errorf("no configuration directory found in current directory or home directory. Please run `onctl init` first")
 	}
