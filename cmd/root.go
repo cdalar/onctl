@@ -11,6 +11,7 @@ import (
 	"github.com/cdalar/onctl/internal/providerazure"
 	"github.com/cdalar/onctl/internal/providergcp"
 	"github.com/cdalar/onctl/internal/providerhtz"
+	"github.com/cdalar/onctl/internal/providervsphere"
 	"github.com/cdalar/onctl/internal/tools"
 
 	"github.com/spf13/cobra"
@@ -34,7 +35,7 @@ var (
   onctl destroy test`,
 	}
 	cloudProvider     string
-	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp"}
+	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "vsphere"}
 	provider          cloud.CloudProviderInterface
 )
 
@@ -94,7 +95,12 @@ func Execute() error {
 			SSHKeyClient:        providerazure.GetSSHKeyClient(),
 			VnetClient:          providerazure.GetVnetClient(),
 		}
+	case "vsphere":
+		provider = &cloud.ProviderVsphere{
+			Client: providervsphere.GetClient(),
+		}
 	}
+
 	return rootCmd.Execute()
 }
 
