@@ -97,7 +97,10 @@ func TestTabWriter(t *testing.T) {
 	// Close the writer and read the output
 	w.Close()
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, err := buf.ReadFrom(r)
+	if err != nil {
+		t.Fatalf("failed to read from pipe: %v", err)
+	}
 	output := buf.String()
 
 	// Reset stdout
@@ -126,7 +129,10 @@ func TestPrettyPrint(t *testing.T) {
 	// Close the writer and read the output
 	w.Close()
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, err = buf.ReadFrom(r)
+	if err != nil {
+		t.Fatalf("failed to read from pipe: %v", err)
+	}
 	output := buf.String()
 
 	// Reset stdout
