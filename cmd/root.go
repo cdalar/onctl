@@ -68,7 +68,10 @@ func Execute() error {
 	if len(os.Args) > 1 && os.Args[1] != "init" && os.Args[1] != "version" {
 		cloudProvider = checkCloudProvider()
 		log.Println("[DEBUG] Cloud: " + cloudProvider)
-		ReadConfig(cloudProvider)
+		err := ReadConfig(cloudProvider)
+		if err != nil {
+			log.Fatalln(err)
+		}
 	}
 	switch cloudProvider {
 	case "hetzner":
