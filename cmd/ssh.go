@@ -104,20 +104,8 @@ var sshCmd = &cobra.Command{
 			s.Stop()
 			fmt.Println("\033[32m\u2714\033[0m " + filepath.Base(apply) + " applied to VM: " + vm.Name)
 		}
-		// TODO go routines for parallel download
 		if len(downloadSlice) > 0 {
-			s.Start()
-			s.Suffix = " Downloading " + fmt.Sprint(len(downloadSlice)) + " file(s)"
-			for _, dfile := range downloadSlice {
-				err = remote.DownloadFile(dfile, filepath.Base(dfile))
-				if err != nil {
-					s.Stop()
-					fmt.Println("\033[32m\u2718\033[0m Could not download " + dfile + " from VM: " + vm.Name)
-					log.Fatal(err)
-				}
-				s.Stop()
-				fmt.Println("\033[32m\u2714\033[0m " + dfile + " downloaded from VM: " + vm.Name)
-			}
+			ProcessDownloadSlice(downloadSlice, remote)
 		}
 		if apply == "" && len(downloadSlice) == 0 {
 			provider.SSHInto(args[0], port, privateKeyFile)
