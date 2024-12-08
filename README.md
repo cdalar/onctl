@@ -106,3 +106,7 @@ Flags:
 
 Use "onctl [command] --help" for more information about a command.
 ```
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=cdalar/onctl&type=Date)](https://star-history.com/#cdalar/onctl&Date)
