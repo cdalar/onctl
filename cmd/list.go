@@ -12,6 +12,7 @@ import (
 	"github.com/cdalar/onctl/internal/tools/puppet"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var output string
@@ -62,8 +63,14 @@ var listCmd = &cobra.Command{
 				log.Println(err)
 			}
 		case "ansible":
+			log.Println("[DEBUG] Ansible output")
+			username := viper.GetString(cloudProvider + ".vm.username")
+			if err != nil {
+				log.Println(err)
+			}
+			fmt.Println("[onctl]")
 			for _, server := range serverList.List {
-				fmt.Println(server.IP)
+				fmt.Println(server.IP, "ansible_user="+username)
 			}
 		case "json":
 			jsonList, err := json.Marshal(serverList.List)
