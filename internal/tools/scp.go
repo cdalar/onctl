@@ -43,6 +43,9 @@ func (r *Remote) DownloadFile(srcPath, dstPath string) error {
 }
 
 func (r *Remote) SSHCopyFile(srcPath, dstPath string) error {
+	log.Println("[DEBUG] srcPath:" + srcPath)
+	log.Println("[DEBUG] dstPath:" + dstPath)
+
 	// Create a new SSH connection
 	err := r.NewSSHConnection()
 	if err != nil {
@@ -57,7 +60,6 @@ func (r *Remote) SSHCopyFile(srcPath, dstPath string) error {
 	defer sftp.Close()
 
 	// Open the source file
-	log.Println("[DEBUG] srcPath:" + srcPath)
 	srcFile, err := os.Open(srcPath)
 	if err != nil {
 		log.Println(err)

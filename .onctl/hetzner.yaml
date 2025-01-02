@@ -1,6 +1,0 @@
-hetzner:
-  location: fsn1
-  vm:
-    type: cx22
-    username: root
-    image: ubuntu-24.04

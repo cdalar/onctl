@@ -273,6 +273,40 @@ func getSSHKeyFilePaths(filename string) (publicKeyFile, privateKeyFile string) 
 	return publicKeyFile, privateKeyFile
 }
 
+func ProcessUploadSlice(uploadSlice []string, remote tools.Remote) {
+	if len(uploadSlice) > 0 {
+		var wg sync.WaitGroup
+		for _, dfile := range uploadSlice {
+			wg.Add(1)
+			go func(dfile string) {
+				defer wg.Done()
+
+				var localFile, remoteFile string
+				// Split by colon to determine if a rename is required
+				if strings.Contains(dfile, ":") {
+					parts := strings.SplitN(dfile, ":", 2)
+					localFile = parts[0]
+					remoteFile = parts[1]
+				} else {
+					localFile = dfile
+					remoteFile = filepath.Base(dfile)
+				}
+
+				log.Println("[DEBUG] localFile: " + localFile)
+				log.Println("[DEBUG] remoteFile: " + remoteFile)
+
+				log.Printf("Uploading file: %s -> %s", localFile, remoteFile)
+
+				err := remote.SSHCopyFile(localFile, remoteFile)
+				if err != nil {
+					log.Printf("[ERROR] Failed to upload %s: %v", localFile, err)
+				}
+			}(dfile)
+		}
+		wg.Wait() // Wait for all goroutines to finish
+	}
+}
+
 func ProcessDownloadSlice(downloadSlice []string, remote tools.Remote) {
 	if len(downloadSlice) > 0 {
 		var wg sync.WaitGroup
