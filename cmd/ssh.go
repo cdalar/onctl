@@ -17,6 +17,7 @@ var (
 	port          int
 	apply         string
 	downloadSlice []string
+	uploadSlice   []string
 	key           string
 )
 
@@ -25,6 +26,7 @@ func init() {
 	sshCmd.Flags().IntVarP(&port, "port", "p", 22, "ssh port")
 	sshCmd.Flags().StringVarP(&apply, "apply", "a", "", "apply script")
 	sshCmd.Flags().StringSliceVarP(&downloadSlice, "download", "d", []string{}, "List of files to download")
+	sshCmd.Flags().StringSliceVarP(&uploadSlice, "upload", "u", []string{}, "List of files to upload")
 	sshCmd.Flags().StringVar(&opt.DotEnvFile, "dot-env", "", "dot-env (.env) file")
 	sshCmd.Flags().StringSliceVarP(&opt.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
 }
@@ -80,6 +82,10 @@ var sshCmd = &cobra.Command{
 			Spinner:    s,
 		}
 
+		if len(uploadSlice) > 0 {
+			ProcessUploadSlice(uploadSlice, remote)
+		}
+
 		if apply != "" {
 			s.Start()
 			s.Suffix = " Applying " + apply
@@ -107,7 +113,7 @@ var sshCmd = &cobra.Command{
 		if len(downloadSlice) > 0 {
 			ProcessDownloadSlice(downloadSlice, remote)
 		}
-		if apply == "" && len(downloadSlice) == 0 {
+		if apply == "" && len(downloadSlice) == 0 && len(uploadSlice) == 0 {
 			provider.SSHInto(args[0], port, privateKeyFile)
 		}
 	},

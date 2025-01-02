@@ -37,6 +37,7 @@ func init() {
 	createCmd.Flags().StringVarP(&opt.PublicKeyFile, "publicKey", "k", "", "Path to publicKey file (default: ~/.ssh/id_rsa))")
 	createCmd.Flags().StringSliceVarP(&opt.ApplyFile, "apply-file", "a", []string{}, "bash script file(s) to run on remote")
 	createCmd.Flags().StringSliceVarP(&downloadSlice, "download", "d", []string{}, "List of files to download")
+	createCmd.Flags().StringSliceVarP(&uploadSlice, "upload", "u", []string{}, "List of files to upload")
 	createCmd.Flags().StringVarP(&opt.Vm.Name, "name", "n", "", "vm name")
 	createCmd.Flags().IntVarP(&opt.Vm.SSHPort, "ssh-port", "p", 22, "ssh port")
 	createCmd.Flags().StringVarP(&opt.Vm.CloudInitFile, "cloud-init", "i", "", "cloud-init file")
@@ -184,6 +185,11 @@ var createCmd = &cobra.Command{
 				log.Println(err)
 			}
 			opt.Variables = append(dotEnvVars, opt.Variables...)
+		}
+
+		// Upload Files
+		if len(uploadSlice) > 0 {
+			ProcessUploadSlice(uploadSlice, remote)
 		}
 
 		// BEGIN Apply File
