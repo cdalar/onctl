@@ -92,6 +92,7 @@ var createCmd = &cobra.Command{
 		}
 
 		applyFileFound := findFile(opt.ApplyFile)
+		log.Println("[DEBUG] applyFileFound: ", applyFileFound)
 		opt.Vm.CloudInitFile = findSingleFile(opt.Vm.CloudInitFile)
 
 		// BEGIN SSH Key
