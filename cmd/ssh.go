@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/briandowns/spinner"
@@ -15,16 +14,18 @@ import (
 
 var (
 	port          int
-	apply         string
+	apply         []string
 	downloadSlice []string
+	uploadSlice   []string
 	key           string
 )
 
 func init() {
 	sshCmd.Flags().StringVarP(&key, "key", "k", "", "Path to privateKey file (default: ~/.ssh/id_rsa))")
 	sshCmd.Flags().IntVarP(&port, "port", "p", 22, "ssh port")
-	sshCmd.Flags().StringVarP(&apply, "apply", "a", "", "apply script")
+	sshCmd.Flags().StringSliceVarP(&apply, "apply-file", "a", []string{}, "bash script file(s) to run on remote")
 	sshCmd.Flags().StringSliceVarP(&downloadSlice, "download", "d", []string{}, "List of files to download")
+	sshCmd.Flags().StringSliceVarP(&uploadSlice, "upload", "u", []string{}, "List of files to upload")
 	sshCmd.Flags().StringVar(&opt.DotEnvFile, "dot-env", "", "dot-env (.env) file")
 	sshCmd.Flags().StringSliceVarP(&opt.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
 }
@@ -51,7 +52,7 @@ var sshCmd = &cobra.Command{
 
 	Run: func(cmd *cobra.Command, args []string) {
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
-		apply = findSingleFile(apply)
+		applyFileFound := findFile(apply)
 		log.Println("[DEBUG] args: ", args)
 
 		if len(args) == 0 {
@@ -59,7 +60,7 @@ var sshCmd = &cobra.Command{
 			return
 		}
 		log.Println("[DEBUG] port: ", port)
-		log.Println("[DEBUG] filename: ", apply)
+		log.Println("[DEBUG] filename: ", applyFileFound)
 		log.Println("[DEBUG] key: ", key)
 		_, privateKeyFile := getSSHKeyFilePaths(key)
 		log.Println("[DEBUG] privateKeyFile: ", privateKeyFile)
@@ -80,34 +81,32 @@ var sshCmd = &cobra.Command{
 			Spinner:    s,
 		}
 
-		if apply != "" {
-			s.Start()
-			s.Suffix = " Applying " + apply
+		if len(uploadSlice) > 0 {
+			ProcessUploadSlice(uploadSlice, remote)
+		}
 
-			if opt.DotEnvFile != "" {
-				dotEnvVars, err := tools.ParseDotEnvFile(opt.DotEnvFile)
-				if err != nil {
-					log.Println(err)
-				}
-				opt.Variables = append(dotEnvVars, opt.Variables...)
-			}
+		// BEGIN Apply File
+		for i, applyFile := range applyFileFound {
+			s.Restart()
+			s.Suffix = " Running " + apply[i] + " on Remote..."
 
 			err = remote.CopyAndRunRemoteFile(&tools.CopyAndRunRemoteFileConfig{
-				File: apply,
+				File: applyFile,
 				Vars: opt.Variables,
 			})
 			if err != nil {
-				s.Stop()
-				fmt.Println("\033[32m\u2718\033[0m Could not apply " + apply + " to VM: " + vm.Name)
-				log.Fatal(err)
+				log.Println(err)
 			}
 			s.Stop()
-			fmt.Println("\033[32m\u2714\033[0m " + filepath.Base(apply) + " applied to VM: " + vm.Name)
+			fmt.Println("\033[32m\u2714\033[0m " + apply[i] + " ran on Remote")
+
 		}
+		// END Apply File
+
 		if len(downloadSlice) > 0 {
 			ProcessDownloadSlice(downloadSlice, remote)
 		}
-		if apply == "" && len(downloadSlice) == 0 {
+		if len(applyFileFound) == 0 && len(downloadSlice) == 0 && len(uploadSlice) == 0 {
 			provider.SSHInto(args[0], port, privateKeyFile)
 		}
 	},
