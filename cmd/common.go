@@ -295,7 +295,7 @@ func ProcessUploadSlice(uploadSlice []string, remote tools.Remote) {
 				log.Println("[DEBUG] localFile: " + localFile)
 				log.Println("[DEBUG] remoteFile: " + remoteFile)
 
-				log.Printf("Uploading file: %s -> %s", localFile, remoteFile)
+				fmt.Printf("Uploading file: %s -> %s", localFile, remoteFile)
 
 				err := remote.SSHCopyFile(localFile, remoteFile)
 				if err != nil {
