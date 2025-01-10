@@ -5,4 +5,4 @@ onctl-deploy.json
 onctl-linux
 ip.txt
 tmp/*
-test.env
+.env*
