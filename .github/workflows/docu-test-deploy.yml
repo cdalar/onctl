@@ -13,7 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
         run:
-            working-directory: ./scripts
+            shell: bash
+            working-directory: ./docs
     steps:
       - uses: actions/checkout@v4
         with:
