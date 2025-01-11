@@ -1,12 +1,12 @@
-import {themes as prismThemes} from 'prism-react-renderer';
-import type {Config} from '@docusaurus/types';
+import { themes as prismThemes } from 'prism-react-renderer';
+import type { Config } from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
   title: 'onctl',
-  tagline: 'Dinosaurs are cool',
+  tagline: 'multi-cloud deployment tool',
   favicon: 'img/favicon.ico',
 
   // Set the production url of your site here
@@ -64,7 +64,7 @@ const config: Config = {
       } satisfies Preset.Options,
     ],
   ],
-  
+
   plugins: [
     [
       require.resolve('docusaurus-lunr-search'),
@@ -112,36 +112,36 @@ const config: Config = {
       //       },
       //     ],
       //   },
-        // {
-        //   title: 'Community',
-        //   items: [
-        //     {
-        //       label: 'Stack Overflow',
-        //       href: 'https://stackoverflow.com/questions/tagged/docusaurus',
-        //     },
-        //     {
-        //       label: 'Discord',
-        //       href: 'https://discordapp.com/invite/docusaurus',
-        //     },
-        //     {
-        //       label: 'X',
-        //       href: 'https://x.com/docusaurus',
-        //     },
-        //   ],
-        // },
-        // {
-        //   title: 'More',
-        //   items: [
-        //     {
-        //       label: 'Blog',
-        //       to: '/blog',
-        //     },
-        //     {
-        //       label: 'GitHub',
-        //       href: 'https://github.com/facebook/docusaurus',
-        //     },
-        //   ],
-        // },
+      // {
+      //   title: 'Community',
+      //   items: [
+      //     {
+      //       label: 'Stack Overflow',
+      //       href: 'https://stackoverflow.com/questions/tagged/docusaurus',
+      //     },
+      //     {
+      //       label: 'Discord',
+      //       href: 'https://discordapp.com/invite/docusaurus',
+      //     },
+      //     {
+      //       label: 'X',
+      //       href: 'https://x.com/docusaurus',
+      //     },
+      //   ],
+      // },
+      // {
+      //   title: 'More',
+      //   items: [
+      //     {
+      //       label: 'Blog',
+      //       to: '/blog',
+      //     },
+      //     {
+      //       label: 'GitHub',
+      //       href: 'https://github.com/facebook/docusaurus',
+      //     },
+      //   ],
+      // },
       // ],
       copyright: `Copyright © ${new Date().getFullYear()} onctl`,
     },
