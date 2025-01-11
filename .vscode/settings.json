@@ -2,5 +2,6 @@
     "go.testEnvFile": "${workspaceFolder}/test.env",
     "yaml.schemas": {
         "https://json.schemastore.org/github-workflow.json": "${workspaceFolder}/.github/workflows/goreleaser.yml"
-    }
+    },
+    "svg.preview.background": "transparent"
 }

@@ -2,7 +2,7 @@
 
 The main component to deploy your app with ease. 
 
-``` 
+```bash 
 Usage:
   onctl deploy [flags]
 
@@ -20,24 +20,25 @@ Flags:
 
 ```
 
-!!! warning "Public Deployments"
+:::warning Public Deployments
     Deployment are by default **not** exposed to internet. In order to get a public URL
     You should use --public option
+:::
 
 ## Image
 
 The url of the image to deploy. ex. `alpine:latest` / `nginx:alpine` etc.
 
-!!! note "To Deploy an image from a private repository"
+:::note To Deploy an image from a private repository
     You should add your access credentials first
 
     * `onctl reg add <image_url> -u <user> -p <password>` - Add your container registry credentials 
-
+:::
 
 ## Environment Variables
 
-1. Define your Environment Variables. Check docs [here](/envvars/#env-file)
+1. Define your Environment Variables.
 2. Pass environment variable group name to deploy command 
-        ```
-        onctl deploy -i nginx:alpine --env <name>
-        ```
+```bash
+    onctl deploy -i nginx:alpine --env <name>
+```
