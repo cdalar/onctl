@@ -39,7 +39,10 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: build
-
+    defaults:
+        run:
+            shell: bash
+            working-directory: ./docs
     # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
       pages: write # to deploy to Pages
