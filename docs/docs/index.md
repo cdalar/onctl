@@ -1,3 +1,6 @@
+---
+sidebar_position: 1
+---
 # Onctl
 
 `onctl` is a tool to manage virtual machines in multi-cloud. 
@@ -8,7 +11,7 @@ Check 🌍 https://onctl.com for detailed documentation
 [![Go Report Card](https://goreportcard.com/badge/github.com/cdalar/onctl)](https://goreportcard.com/report/github.com/cdalar/onctl)
 [![CodeQL](https://github.com/cdalar/onctl/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/cdalar/onctl/actions/workflows/github-code-scanning/codeql)
 [![codecov](https://codecov.io/gh/cdalar/onctl/graph/badge.svg?token=7VU7H1II09)](https://codecov.io/gh/cdalar/onctl)
-[![Github All Releases](https://img.shields.io/github/downloads/cdalar/onctl/total.svg)]()
+![Github All Releases](https://img.shields.io/github/downloads/cdalar/onctl/total.svg)
 ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/cdalar/onctl?sort=semver)
 <!-- [![Known Vulnerabilities](https://snyk.io/test/github/cdalar/onctl/main/badge.svg)](https://snyk.io/test/github/cdalar/onctl/main) -->
 
@@ -24,47 +27,11 @@ Check 🌍 https://onctl.com for detailed documentation
 ## Quick Start
 
 initialize project. this will create a `.onctl` directory. check configuration file and set as needed.
-```
+```bash
 ❯ onctl init
 onctl environment initialized
 ```
 
-export `ONCTL_CLOUD` to set Cloud Provider. 
-```
-❯ export ONCTL_CLOUD=hetzner
-```
-
-Be sure that credentials for that specific cloud provider is already set. 
-If you already use cloud provider CLI. They're already . ex. `az`, `aws`, `hcloud`
-```
-❯ echo $HCLOUD_TOKEN
-```
-
-Create VM.
-```
-❯ onctl up -n onctl-test
-Using: hetzner
-Creating SSHKey: onctl-42da32a9...
-SSH Key already exists (onctl-42da32a9)
-Starting server...
-Server IP: 168.119.58.112
-Vm started.
-```
-
-Ssh into VM.
-```
-❯ onctl ssh onctl-test
-Using: hetzner
-Welcome to Ubuntu 22.04.3 LTS (GNU/Linux 5.15.0-89-generic x86_64)
-.
-.
-.
-root@onctl-test:~# 
-```
-
-## Installation
-
-### MacOS
 
 ```zsh
 brew install cdalar/tap/onctl
@@ -84,7 +51,7 @@ sudo install onctl /usr/local/bin/
 
 # Enjoy ✅
 
-```
+```bash
 ❯ onctl
 onctl is a tool to manage cross platform resources in cloud
 
