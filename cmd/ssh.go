@@ -81,6 +81,14 @@ var sshCmd = &cobra.Command{
 			Spinner:    s,
 		}
 
+		if opt.DotEnvFile != "" {
+			dotEnvVars, err := tools.ParseDotEnvFile(opt.DotEnvFile)
+			if err != nil {
+				log.Println(err)
+			}
+			opt.Variables = append(dotEnvVars, opt.Variables...)
+		}
+
 		if len(uploadSlice) > 0 {
 			ProcessUploadSlice(uploadSlice, remote)
 		}
