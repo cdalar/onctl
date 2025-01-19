@@ -32,6 +32,7 @@ initialize project. this will create a `.onctl` directory. check configuration f
 onctl environment initialized
 ```
 
+### Mac OS
 
 ```zsh
 brew install cdalar/tap/onctl
