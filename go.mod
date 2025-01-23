@@ -11,7 +11,7 @@ require (
 	github.com/briandowns/spinner v1.23.1
 	github.com/cloudflare/cloudflare-go v0.114.0
 	github.com/gofrs/uuid/v5 v5.3.0
-	github.com/hetznercloud/hcloud-go/v2 v2.17.1
+	github.com/hetznercloud/hcloud-go/v2 v2.18.0
 	github.com/manifoldco/promptui v0.9.0
 	github.com/spf13/cobra v1.8.1
 	golang.org/x/term v0.28.0
