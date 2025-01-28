@@ -260,14 +260,14 @@ func getSSHKeyFilePaths(filename string) (publicKeyFile, privateKeyFile string) 
 	publicKeyFile = strings.Replace(publicKeyFile, "~", home, 1)
 	privateKeyFile = strings.Replace(privateKeyFile, "~", home, 1)
 
-	log.Println("[DEBUG] publicKeyFile: ", publicKeyFile)
-	log.Println("[DEBUG] privateKeyFile: ", privateKeyFile)
+	log.Println("[DEBUG] publicKeyFile:", publicKeyFile)
+	log.Println("[DEBUG] privateKeyFile:", privateKeyFile)
 	if _, err := os.Stat(publicKeyFile); err != nil {
-		log.Fatalln(publicKeyFile + " Public key file not found")
+		log.Println("[DEBUG]", publicKeyFile, "Public key file not found")
 	}
 
 	if _, err := os.Stat(privateKeyFile); err != nil {
-		log.Fatalln(privateKeyFile + " Private key file not found")
+		log.Println("[DEBUG]", privateKeyFile, "Private key file not found")
 	}
 
 	return publicKeyFile, privateKeyFile
