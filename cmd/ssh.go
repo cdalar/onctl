@@ -59,11 +59,11 @@ var sshCmd = &cobra.Command{
 			fmt.Println("Please provide a VM id")
 			return
 		}
-		log.Println("[DEBUG] port: ", port)
-		log.Println("[DEBUG] filename: ", applyFileFound)
-		log.Println("[DEBUG] key: ", key)
+		log.Println("[DEBUG] port:", port)
+		log.Println("[DEBUG] filename:", applyFileFound)
+		log.Println("[DEBUG] key:", key)
 		_, privateKeyFile := getSSHKeyFilePaths(key)
-		log.Println("[DEBUG] privateKeyFile: ", privateKeyFile)
+		log.Println("[DEBUG] privateKeyFile:", privateKeyFile)
 
 		privateKey, err := os.ReadFile(privateKeyFile)
 		if err != nil {
