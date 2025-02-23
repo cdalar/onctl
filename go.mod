@@ -8,7 +8,7 @@ require (
 	cloud.google.com/go/compute v1.32.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.2.0
 	github.com/aws/aws-sdk-go v1.55.6
-	github.com/briandowns/spinner v1.23.1
+	github.com/briandowns/spinner v1.23.2
 	github.com/cloudflare/cloudflare-go v0.115.0
 	github.com/gofrs/uuid/v5 v5.3.0
 	github.com/hetznercloud/hcloud-go/v2 v2.19.1
