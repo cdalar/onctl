@@ -1,6 +1,9 @@
 version: 2
 project_name: onctl
 
+signs:
+  - artifacts: checksum
+
 before:
   hooks:
     # You may remove this if you don't use go modules.
