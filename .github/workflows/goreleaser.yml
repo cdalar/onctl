@@ -25,6 +25,10 @@ jobs:
           go-version: '1.21'
           check-latest: true
           cache: true
+      - name: Import GPG Key
+        run: |
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --import --no-tty --batch
+          gpg --list-secret-keys
       - name: Import Code-Signing Certificates
         uses: apple-actions/import-codesign-certs@v3
         with:
