@@ -53,10 +53,10 @@ builds:
 archives:
   - id: repl
     name_template: "{{ .ProjectName }}-{{.Os}}-{{.Arch}}"
-    format: tar.gz
+    formats: ['tar.gz']
     format_overrides:
       - goos: windows
-        format: zip
+        formats: ['zip']
     # files:
     #   - non-existent*
 
