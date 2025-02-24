@@ -17,7 +17,7 @@ require (
 	golang.org/x/term v0.29.0
 	google.golang.org/api v0.222.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/apimachinery v0.32.1
+	k8s.io/apimachinery v0.32.2
 )
 
 require (
