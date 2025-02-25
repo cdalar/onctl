@@ -5,7 +5,7 @@ go 1.23.0
 toolchain go1.23.4
 
 require (
-	cloud.google.com/go/compute v1.32.0
+	cloud.google.com/go/compute v1.34.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.2.0
 	github.com/aws/aws-sdk-go v1.55.6
 	github.com/briandowns/spinner v1.23.2
@@ -76,7 +76,7 @@ require (
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/time v0.10.0 // indirect
 	google.golang.org/genproto v0.0.0-20250122153221-138b5a5a4fd4 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250124145028-65684f501c47 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250219182151-9fdb1cabc7b2 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250212204824-5a70512c5d8b // indirect
 	google.golang.org/grpc v1.70.0 // indirect
 	google.golang.org/protobuf v1.36.5 // indirect
