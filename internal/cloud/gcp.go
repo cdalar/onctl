@@ -26,6 +26,16 @@ type ProviderGcp struct {
 	GroupClient *compute.InstanceGroupsClient
 }
 
+func (p ProviderGcp) AttachNetwork(vm Vm, network Network) error {
+	log.Println("[DEBUG] Attaching network: ", network)
+	return nil
+}
+
+func (p ProviderGcp) DetachNetwork(vm Vm, network Network) error {
+	log.Println("[DEBUG] Detaching network: ", network)
+	return nil
+}
+
 func (p ProviderGcp) List() (VmList, error) {
 	log.Println("[DEBUG] List Servers")
 	cloudList := make([]Vm, 0, 100)
