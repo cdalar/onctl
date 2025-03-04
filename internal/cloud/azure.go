@@ -156,9 +156,10 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 	log.Println("[DEBUG] Deploy Server")
 
 	var vnet *armnetwork.VirtualNetwork
+	var err error
 	// Create the Vnet
 	if viper.GetString("azure.vm.vnet.create") == "true" {
-		vnet, err := createVirtualNetwork(context.Background(), &p)
+		vnet, err = createVirtualNetwork(context.Background(), &p)
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -168,7 +169,7 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 		if err != nil {
 			log.Fatalln(err)
 		}
-		log.Println("[DEBUG] ", vnet)
+		log.Println("[DEBUG] ", vnetResp)
 		vnet = &vnetResp.VirtualNetwork
 	}
 	pip, err := createPublicIP(context.Background(), &p, server)
