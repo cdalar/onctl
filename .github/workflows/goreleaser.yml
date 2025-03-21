@@ -30,7 +30,7 @@ jobs:
           echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --import --no-tty --batch
           gpg --list-secret-keys
       - name: Import Code-Signing Certificates
-        uses: apple-actions/import-codesign-certs@v3
+        uses: apple-actions/import-codesign-certs@v4
         with:
           # The certificates in a PKCS12 file encoded as a base64 string
           p12-file-base64: ${{ secrets.APPLE_DEVELOPER_CERTIFICATE_P12_BASE64 }}
