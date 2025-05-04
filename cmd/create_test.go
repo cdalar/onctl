@@ -12,7 +12,7 @@ func TestParseConfigFile(t *testing.T) {
 	// Create a temporary YAML configuration file
 	configContent := `
 publicKeyFile: "~/.ssh/id_rsa.pub"
-applyFile:
+applyFiles:
   - "script1.sh"
   - "script2.sh"
 dotEnvFile: ".env"
