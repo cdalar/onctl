@@ -87,37 +87,9 @@ var createCmd = &cobra.Command{
 			}
 			log.Println("[DEBUG] config file: ", opt.ConfigFile)
 			log.Printf("[DEBUG] Parsed config: %+v\n", config)
-			// Merge config file options into the command options
-			if config.PublicKeyFile != "" {
-				opt.PublicKeyFile = config.PublicKeyFile
-			}
-			if len(config.ApplyFiles) > 0 {
-				opt.ApplyFiles = append(opt.ApplyFiles, config.ApplyFiles...)
-			}
-			if config.DotEnvFile != "" {
-				opt.DotEnvFile = config.DotEnvFile
-			}
-			if len(config.Variables) > 0 {
-				opt.Variables = append(opt.Variables, config.Variables...)
-			}
-			if config.Vm.Name != "" {
-				opt.Vm.Name = config.Vm.Name
-			}
-			if config.Vm.SSHPort != 0 {
-				opt.Vm.SSHPort = config.Vm.SSHPort
-			}
-			if config.Vm.CloudInitFile != "" {
-				opt.Vm.CloudInitFile = config.Vm.CloudInitFile
-			}
-			if config.Domain != "" {
-				opt.Domain = config.Domain
-			}
-			if len(config.DownloadFiles) > 0 {
-				opt.DownloadFiles = append(opt.DownloadFiles, config.DownloadFiles...)
-			}
-			if len(config.UploadFiles) > 0 {
-				opt.UploadFiles = append(opt.UploadFiles, config.UploadFiles...)
-			}
+
+			// Use the new MergeConfig function
+			MergeConfig(&opt, config)
 		}
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
 		s.Start()
