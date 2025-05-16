@@ -1,8 +1,6 @@
 module github.com/cdalar/onctl
 
-go 1.23.0
-
-toolchain go1.23.4
+go 1.24.0
 
 require (
 	cloud.google.com/go/compute v1.36.1
@@ -17,7 +15,7 @@ require (
 	golang.org/x/term v0.32.0
 	google.golang.org/api v0.231.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/apimachinery v0.32.3
+	k8s.io/apimachinery v0.33.1
 )
 
 require (
