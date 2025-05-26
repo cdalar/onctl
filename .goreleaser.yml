@@ -53,15 +53,15 @@ builds:
 archives:
   - id: repl
     name_template: "{{ .ProjectName }}-{{.Os}}-{{.Arch}}"
-    formats: ['tar.gz']
+    formats: [tar.gz]
     format_overrides:
       - goos: windows
-        formats: ['zip']
+        formats: [zip]
     # files:
     #   - non-existent*
 
 checksum:
-  name_template: "checksums.txt"
+  name_template: checksums.txt
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 changelog:
@@ -81,4 +81,4 @@ brews:
   - repository:
       owner: cdalar
       name: homebrew-tap
-    description: "onctl"
+    description: onctl
