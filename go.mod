@@ -11,6 +11,7 @@ require (
 	github.com/gofrs/uuid/v5 v5.3.2
 	github.com/hetznercloud/hcloud-go/v2 v2.21.0
 	github.com/manifoldco/promptui v0.9.0
+	github.com/mitchellh/go-homedir v1.1.0
 	github.com/spf13/cobra v1.9.1
 	golang.org/x/term v0.32.0
 	google.golang.org/api v0.232.0
