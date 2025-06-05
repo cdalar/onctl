@@ -11,8 +11,9 @@ func Test_String(t *testing.T) {
 	if len(str) != 10 {
 		t.Errorf("%s is not 10 chars", str)
 	}
-	if str != "hsgqfg8vc2" {
-		t.Errorf("got %s, want hsgqfg8vc2", str)
+	const expectedString10Chars = "hsgqfg8vc2"
+	if str != expectedString10Chars {
+		t.Errorf("got %s, want %s", str, expectedString10Chars)
 	}
 
 	str = String(6)
