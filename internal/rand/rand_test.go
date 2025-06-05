@@ -6,13 +6,13 @@ import (
 )
 
 func Test_String(t *testing.T) {
+	seededRand.Seed(1)
 	str := String(10)
 	if len(str) != 10 {
 		t.Errorf("%s is not 10 chars", str)
 	}
-	str2 := String(10)
-	if str == str2 {
-		t.Errorf("%s == %s", str, str2)
+	if str != "hsgqfg8vc2" {
+		t.Errorf("got %s, want hsgqfg8vc2", str)
 	}
 
 	str = String(6)
