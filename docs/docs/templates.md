@@ -29,7 +29,7 @@ onctl up -a wireguard/vpn.sh  # https://templates.onctl.com/wireguard/vpn.sh
     ```bash
     onctl up -a https://gist.githubusercontent.com/cdalar/dabdc001059089f553879a7b535e9b21/raw/02f336857b04eb13bc7ceeec1e66395bd615824b/helloworld.sh
     ```
-    to use the embeded file. Embeded files can be found under `internal/files/` in repository.
+    to use the embedded file. Embedded files can be found under `internal/files/` in the repository.
 
 ## cloud-init 
 
@@ -44,6 +44,6 @@ onctl up -a wireguard/vpn.sh --cloud-init cloud-init-ssh-443.config
 
 ## precedence on scripts
 1. local file
-1. embeded files
+1. embedded files
 1. files on [onctl-templates](https://github.com/cdalar/onctl-templates) repo
 1. as defined on URL (https://example.com)
