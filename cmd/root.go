@@ -36,6 +36,7 @@ var (
 	cloudProvider     string
 	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp"}
 	provider          cloud.CloudProviderInterface
+	networkManager    cloud.NetworkManager
 )
 
 func checkCloudProvider() string {
@@ -78,6 +79,9 @@ func Execute() error {
 		provider = &cloud.ProviderHetzner{
 			Client: providerhtz.GetClient(),
 		}
+		networkManager = &cloud.NetworkProviderHetzner{
+			Client: providerhtz.GetClient(),
+		}
 	case "gcp":
 		provider = &cloud.ProviderGcp{
 			Client:      providergcp.GetClient(),
@@ -86,6 +90,9 @@ func Execute() error {
 
 	case "aws":
 		provider = &cloud.ProviderAws{
+			Client: provideraws.GetClient(),
+		}
+		networkManager = &cloud.NetworkProviderAws{
 			Client: provideraws.GetClient(),
 		}
 	case "azure":
@@ -108,4 +115,6 @@ func init() {
 	rootCmd.AddCommand(destroyCmd)
 	rootCmd.AddCommand(sshCmd)
 	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(networkCmd)
+	rootCmd.AddCommand(vmCmd)
 }
