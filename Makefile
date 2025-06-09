@@ -9,6 +9,8 @@ all: build
 
 # Build the binary
 build:
+	git submodule update --init --recursive --remote
+	buf generate
 	export CGO_ENABLED=0
 	$(GO_CMD) mod tidy
 	$(GO_CMD) build -ldflags="-w -s -X 'github.com/cdalar/onctl/cmd.Version=`git rev-parse HEAD | cut -c1-7`' \

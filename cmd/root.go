@@ -108,5 +108,7 @@ func init() {
 	rootCmd.AddCommand(destroyCmd)
 	rootCmd.AddCommand(sshCmd)
 	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(domainCmd)
 	rootCmd.AddCommand(loginCmd)
+	rootCmd.PersistentFlags().StringVarP(&cloudProvider, "cloud", "c", "", "Cloud Provider to use (aws, hetzner, azure, gcp)")
 }

@@ -13,8 +13,6 @@ import (
 var accessKeyToken string
 
 func init() {
-	rootCmd.AddCommand(loginCmd)
-	loginCmd.Flags().Bool("f", false, "use -f to force login")
 	loginCmd.PersistentFlags().StringVar(&accessKeyToken, "token", "", "access token")
 }
 
@@ -91,11 +89,12 @@ func waitForTokenOnLocalhost(port string) (string, error) {
 
 var loginCmd = &cobra.Command{
 	Use:   "login",
-	Short: "Login to onkube.com",
-	Long:  `Command line tool to login onkube.com`,
+	Short: "Login to onctl.io",
+	Long:  `Command line tool to login onctl.io`,
 	Run: func(cmd *cobra.Command, args []string) {
 		port := "54123" // choose a free port
-		domain := "http://localhost:8081"
+		// domain := "https://api.onctl.io"  // domain for login
+		domain := "http://localhost:8081" // domain for login
 		if accessKeyToken != "" {
 			err := saveAccessKeyToken(accessKeyToken)
 			if err != nil {
