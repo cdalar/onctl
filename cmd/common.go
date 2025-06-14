@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -20,8 +21,11 @@ import (
 	"github.com/cdalar/onctl/internal/files"
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/gofrs/uuid/v5"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/manifoldco/promptui"
+	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/util/duration"
 )
 
@@ -336,4 +340,56 @@ func ProcessDownloadSlice(downloadSlice []string, remote tools.Remote) {
 		}
 		wg.Wait() // Wait for all goroutines to finish
 	}
+}
+
+type CredentialsConfig struct {
+	AccessToken string `yaml:"access_token"`
+}
+
+var ErrTokenExpired = errors.New("access token is expired")
+
+// function to get access token from home directory and validate expiration
+func getAccessToken() (string, error) {
+	home, err := homedir.Dir()
+	if err != nil {
+		return "", fmt.Errorf("problem finding home directory: %v", err)
+	}
+
+	configFile := home + "/.onctl/credentials"
+	content, err := os.ReadFile(configFile)
+	if err != nil {
+		return "", fmt.Errorf("problem reading credentials file: %v", err)
+	}
+
+	var creds CredentialsConfig
+	err = yaml.Unmarshal(content, &creds)
+	if err != nil {
+		return "", fmt.Errorf("problem unmarshalling credentials file: %v", err)
+	}
+
+	token := creds.AccessToken
+
+	// Parse the JWT token without verifying the signature
+	parsedToken, _, err := jwt.NewParser().ParseUnverified(token, jwt.MapClaims{})
+	if err != nil {
+		return "", fmt.Errorf("problem parsing JWT token: %v", err)
+	}
+
+	// Extract claims and check expiration
+	claims, ok := parsedToken.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", errors.New("invalid JWT claims format")
+	}
+
+	exp, ok := claims["exp"].(float64)
+	if !ok {
+		return "", errors.New("expiration claim not found in JWT")
+	}
+
+	// Check if the token is expired
+	if time.Unix(int64(exp), 0).Before(time.Now()) {
+		return "", ErrTokenExpired
+	}
+
+	return token, nil
 }
