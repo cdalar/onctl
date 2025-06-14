@@ -1,6 +1,9 @@
 version: 2
 project_name: onctl
 
+signs:
+  - artifacts: checksum
+
 before:
   hooks:
     # You may remove this if you don't use go modules.
@@ -50,10 +53,10 @@ builds:
 archives:
   - id: repl
     name_template: "{{ .ProjectName }}-{{.Os}}-{{.Arch}}"
-    format: tar.gz
+    formats: ['tar.gz']
     format_overrides:
       - goos: windows
-        format: zip
+        formats: ['zip']
     # files:
     #   - non-existent*
 
