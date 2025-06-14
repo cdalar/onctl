@@ -29,7 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/duration"
 )
 
-// TODO decomple viper and use onctlConfig instead
+// TODO decouple viper and use onctlConfig instead
 // var onctlConfig map[string]interface{}
 
 func GenerateIDToken() uuid.UUID {
