@@ -12,10 +12,10 @@ require (
 	github.com/hetznercloud/hcloud-go/v2 v2.21.1
 	github.com/manifoldco/promptui v0.9.0
 	github.com/spf13/cobra v1.9.1
- 	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.10.0
 	golang.org/x/term v0.32.0
 	google.golang.org/api v0.241.0
- 	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/apimachinery v0.33.1
 )
@@ -80,6 +80,8 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20250528174236-200df99c418a // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822 // indirect
 	google.golang.org/grpc v1.73.0 // indirect
+	google.golang.org/protobuf v1.36.6 // indirect
+	gopkg.in/ini.v1 v1.67.0 // indirect
 )
 
 require (
