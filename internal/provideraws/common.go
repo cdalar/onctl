@@ -519,7 +519,7 @@ func ImportKeyPair(svc *ec2.EC2, keyName string, publicKeyFile string) {
 	if err != nil {
 		log.Println(err)
 	}
-	log.Println(publicKey)
+	log.Println(string(publicKey))
 	input := &ec2.ImportKeyPairInput{
 		KeyName:           aws.String(keyName),
 		PublicKeyMaterial: []byte(publicKey),

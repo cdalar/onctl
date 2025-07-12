@@ -61,7 +61,11 @@ var templatesListCmd = &cobra.Command{
 				fmt.Println("Error fetching templates:", err)
 				os.Exit(1)
 			}
-			defer resp.Body.Close()
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					log.Printf("Failed to close response body: %v", err)
+				}
+			}()
 
 			// Check for 404 status code
 			if resp.StatusCode == http.StatusNotFound {

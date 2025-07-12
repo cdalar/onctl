@@ -22,7 +22,11 @@ func CreateDeployOutputFile(deployOutput *DeployOutput) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close file: %v", err)
+		}
+	}()
 
 	_, err = file.Write(json)
 	if err != nil {

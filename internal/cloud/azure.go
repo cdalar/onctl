@@ -249,12 +249,12 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 		Frequency: time.Duration(3) * time.Second,
 	})
 	return Vm{
-		ID:        *resp.VirtualMachine.Properties.VMID,
-		Name:      *resp.VirtualMachine.Name,
+		ID:        *resp.Properties.VMID,
+		Name:      *resp.Name,
 		IP:        *pip.Properties.IPAddress,
-		Type:      string(*resp.VirtualMachine.Properties.HardwareProfile.VMSize),
-		Status:    *resp.VirtualMachine.Properties.ProvisioningState,
-		CreatedAt: *resp.VirtualMachine.Properties.TimeCreated,
+		Type:      string(*resp.Properties.HardwareProfile.VMSize),
+		Status:    *resp.Properties.ProvisioningState,
+		CreatedAt: *resp.Properties.TimeCreated,
 	}, err
 }
 

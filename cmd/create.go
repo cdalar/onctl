@@ -42,7 +42,11 @@ func parseConfigFile(configFile string) (*cmdCreateOptions, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open config file %q: %w", configFile, err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close config file: %v", err)
+		}
+	}()
 
 	var config cmdCreateOptions
 	decoder := yaml.NewDecoder(file)

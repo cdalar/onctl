@@ -95,7 +95,9 @@ func TestTabWriter(t *testing.T) {
 	TabWriter(data, templateStr)
 
 	// Close the writer and read the output
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close writer: %v", err)
+	}
 	var buf bytes.Buffer
 	_, err := buf.ReadFrom(r)
 	if err != nil {
@@ -127,7 +129,9 @@ func TestPrettyPrint(t *testing.T) {
 	}
 
 	// Close the writer and read the output
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close writer: %v", err)
+	}
 	var buf bytes.Buffer
 	_, err = buf.ReadFrom(r)
 	if err != nil {

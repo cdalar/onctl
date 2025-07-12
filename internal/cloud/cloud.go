@@ -58,7 +58,7 @@ type CostStruct struct {
 func (v Vm) String() string {
 	value := reflect.ValueOf(v)
 	typeOfS := value.Type()
-	var ret string = "\n"
+	ret := "\n"
 	for i := 0; i < value.NumField(); i++ {
 		ret = ret + fmt.Sprintf("%s:\t %v\n", typeOfS.Field(i).Name, value.Field(i).Interface())
 	}

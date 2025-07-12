@@ -114,7 +114,9 @@ func TabWriter(res interface{}, tmpl string) { //nolint
 	if err != nil {
 		log.Println(err)
 	}
-	w.Flush()
+	if err := w.Flush(); err != nil {
+		log.Println(err)
+	}
 }
 func PrettyPrint(v interface{}) (err error) {
 	b, err := json.MarshalIndent(v, "", "  ")
@@ -210,7 +212,11 @@ func findSingleFile(filename string) (filePath string) {
 	if err == nil && resp.StatusCode == 200 {
 		log.Println("[DEBUG]", filename, "file found in templates.onctl.com/")
 
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				log.Printf("Failed to close response body: %v", err)
+			}
+		}()
 		dir, err := os.MkdirTemp("", "onctl")
 		if err != nil {
 			log.Fatal(err)
