@@ -11,6 +11,7 @@ all: build
 build:
 	export CGO_ENABLED=0
 	$(GO_CMD) mod tidy
+	$(GO_CMD) fmt ./...
 	$(GO_CMD) build -ldflags="-w -s -X 'github.com/cdalar/onctl/cmd.Version=`git rev-parse HEAD | cut -c1-7`' \
 		-X 'github.com/cdalar/onctl/cmd.BuildTime=`date -u '+%Y-%m-%d %H:%M:%S'`' \
 		-X 'github.com/cdalar/onctl/cmd.GoVersion=`go version`'" \

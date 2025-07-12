@@ -152,7 +152,7 @@ func TestCmdSSHOptions_StructBasics(t *testing.T) {
 func TestCmdSSHOptions_ZeroValues(t *testing.T) {
 	// Test zero value cmdSSHOptions
 	var opts cmdSSHOptions
-	
+
 	assert.Equal(t, 0, opts.Port)
 	assert.Nil(t, opts.ApplyFiles)
 	assert.Nil(t, opts.DownloadFiles)

@@ -30,7 +30,7 @@ func TestInitializeOnctlEnv_NewDirectory(t *testing.T) {
 
 	// Test initialization in new directory
 	err = initializeOnctlEnv()
-	
+
 	// Since the embedded files might not be available in tests,
 	// we expect either success or a specific error about embedded files
 	if err != nil {

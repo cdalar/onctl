@@ -89,11 +89,11 @@ func TestInitializeOnctlEnv_CreateNew(t *testing.T) {
 func TestFindSingleFile_HttpsUrl(t *testing.T) {
 	// Test that findSingleFile properly handles HTTPS URLs
 	// We can test the URL formation logic without actually downloading
-	
+
 	// This is tricky because findSingleFile calls os.Exit on failure
 	// So we just test that the function exists and can handle the input
 	assert.NotNil(t, findSingleFile)
-	
+
 	// We can't actually call it with a URL that doesn't exist because
 	// it would call os.Exit(1), so we just log that this path exists
 	t.Log("findSingleFile handles HTTPS URLs (not tested to avoid os.Exit)")
@@ -112,7 +112,7 @@ func TestProcessUploadSlice_FileParsing(t *testing.T) {
 	assert.NotPanics(t, func() {
 		ProcessUploadSlice([]string{}, mockRemote)
 	})
-	
+
 	assert.True(t, true, "ProcessUploadSlice works with empty slice")
 }
 
@@ -129,17 +129,17 @@ func TestProcessDownloadSlice_FileParsing(t *testing.T) {
 	assert.NotPanics(t, func() {
 		ProcessDownloadSlice([]string{}, mockRemote)
 	})
-	
+
 	assert.True(t, true, "ProcessDownloadSlice works with empty slice")
 }
 
 func TestTabWriter_ErrorHandling(t *testing.T) {
 	// Test TabWriter with error conditions to improve coverage
 	data := struct{ Name string }{Name: "test"}
-	
+
 	// Test with template that will cause execution error
 	templateWithError := "{{.Name}}\t{{.NonExistentField}}\n"
-	
+
 	// Capture stdout
 	originalStdout := os.Stdout
 	r, w, _ := os.Pipe()
@@ -151,7 +151,7 @@ func TestTabWriter_ErrorHandling(t *testing.T) {
 	// Close writer and restore stdout
 	w.Close()
 	os.Stdout = originalStdout
-	
+
 	// Read and discard the output
 	buf := make([]byte, 1024)
 	r.Read(buf)
@@ -163,15 +163,15 @@ func TestTabWriter_ErrorHandling(t *testing.T) {
 func TestGetSSHKeyFilePaths_ViperValues(t *testing.T) {
 	// Test getSSHKeyFilePaths when filename is empty (uses viper values)
 	// This tests the viper.GetString branches
-	
+
 	// We can't easily mock viper in tests, but we can test the function call
 	publicKey, privateKey := getSSHKeyFilePaths("")
-	
+
 	// With empty viper values, these should be empty or default values
 	// The exact result depends on viper configuration, but function shouldn't panic
 	assert.NotPanics(t, func() {
 		getSSHKeyFilePaths("")
 	})
-	
+
 	t.Logf("SSH key paths with empty filename: public=%s, private=%s", publicKey, privateKey)
 }

@@ -135,7 +135,7 @@ func TestCheckCloudProvider_InvalidProvider(t *testing.T) {
 
 	// Test with invalid cloud provider
 	os.Setenv("ONCTL_CLOUD", "invalid-provider")
-	
+
 	// This would normally call os.Exit(1), so we can't test it directly
 	// We just verify the function exists
 	assert.NotNil(t, checkCloudProvider)
@@ -145,7 +145,7 @@ func TestFindSingleFile_EmbeddedFiles(t *testing.T) {
 	// Test that findSingleFile function exists and can handle embedded file paths
 	// We don't actually call it with embedded paths since that might cause os.Exit
 	// in test environments where embedded files aren't available
-	
+
 	assert.NotNil(t, findSingleFile)
 	t.Log("findSingleFile function exists and handles embedded file paths")
 }

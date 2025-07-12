@@ -27,12 +27,12 @@ func TestReadConfig_WithValidDirectory(t *testing.T) {
 
 func TestAllInitFunctions(t *testing.T) {
 	// Test that all init functions are properly called by checking command registrations
-	
+
 	// Test createCmd init
 	flag := createCmd.Flags().Lookup("publicKey")
 	assert.NotNil(t, flag, "createCmd init should register publicKey flag")
 
-	// Test destroyCmd init  
+	// Test destroyCmd init
 	flag = destroyCmd.Flags().Lookup("force")
 	assert.NotNil(t, flag, "destroyCmd init should register force flag")
 

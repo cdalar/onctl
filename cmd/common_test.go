@@ -222,7 +222,7 @@ func TestFindSingleFile_NonExistentFile(t *testing.T) {
 	// We'll just verify the function exists and is callable
 	// The actual findSingleFile calls os.Exit(1) when file not found,
 	// so we can't test that path directly in unit tests
-	
+
 	// Test that the function exists
 	assert.NotNil(t, findSingleFile)
 }
@@ -252,34 +252,34 @@ func TestGetSSHKeyFilePaths(t *testing.T) {
 	assert.NoError(t, err)
 
 	tests := []struct {
-		name             string
-		filename         string
-		expectedPublic   string
-		expectedPrivate  string
+		name            string
+		filename        string
+		expectedPublic  string
+		expectedPrivate string
 	}{
 		{
-			name:             "Empty filename",
-			filename:         "",
-			expectedPublic:   "",  // Will use viper values
-			expectedPrivate:  "",  // Will use viper values
+			name:            "Empty filename",
+			filename:        "",
+			expectedPublic:  "", // Will use viper values
+			expectedPrivate: "", // Will use viper values
 		},
 		{
-			name:             "Public key file",
-			filename:         "~/.ssh/test.pub",
-			expectedPublic:   filepath.Join(homeDir, ".ssh/test.pub"),
-			expectedPrivate:  filepath.Join(homeDir, ".ssh/test"),
+			name:            "Public key file",
+			filename:        "~/.ssh/test.pub",
+			expectedPublic:  filepath.Join(homeDir, ".ssh/test.pub"),
+			expectedPrivate: filepath.Join(homeDir, ".ssh/test"),
 		},
 		{
-			name:             "Private key file",
-			filename:         "~/.ssh/test",
-			expectedPublic:   filepath.Join(homeDir, ".ssh/test.pub"),
-			expectedPrivate:  filepath.Join(homeDir, ".ssh/test"),
+			name:            "Private key file",
+			filename:        "~/.ssh/test",
+			expectedPublic:  filepath.Join(homeDir, ".ssh/test.pub"),
+			expectedPrivate: filepath.Join(homeDir, ".ssh/test"),
 		},
 		{
-			name:             "Absolute path",
-			filename:         "/home/user/.ssh/key",
-			expectedPublic:   "/home/user/.ssh/key.pub",
-			expectedPrivate:  "/home/user/.ssh/key",
+			name:            "Absolute path",
+			filename:        "/home/user/.ssh/key",
+			expectedPublic:  "/home/user/.ssh/key.pub",
+			expectedPrivate: "/home/user/.ssh/key",
 		},
 	}
 
@@ -436,10 +436,10 @@ func TestYesNo(t *testing.T) {
 
 func TestOpenbrowser(t *testing.T) {
 	// Test that openbrowser function exists and is callable
-	// We can't actually test browser opening in unit tests, so we just verify 
+	// We can't actually test browser opening in unit tests, so we just verify
 	// the function is properly defined without calling it
 	assert.NotNil(t, openbrowser)
-	
+
 	// We skip actually calling the function since it would open a real browser
 	t.Log("openbrowser function exists and is callable (not tested to avoid opening actual browser)")
 }
@@ -449,7 +449,7 @@ func TestOpenbrowser(t *testing.T) {
 func TestTabWriter_WithFunctions(t *testing.T) {
 	// Test TabWriter with template functions
 	data := struct {
-		Tags []*ec2.Tag
+		Tags      []*ec2.Tag
 		CreatedAt time.Time
 	}{
 		Tags: []*ec2.Tag{
@@ -502,7 +502,7 @@ func TestTabWriter_InvalidTemplate(t *testing.T) {
 	if err := w.Close(); err != nil {
 		t.Fatalf("failed to close writer: %v", err)
 	}
-	
+
 	// Read and discard output
 	buf := make([]byte, 1024)
 	_, _ = r.Read(buf)
@@ -518,7 +518,7 @@ func TestGenerateIDToken_Coverage(t *testing.T) {
 	// Test multiple calls to improve coverage
 	token1 := GenerateIDToken()
 	token2 := GenerateIDToken()
-	
+
 	assert.NotEqual(t, token1, token2, "Generated tokens should be unique")
 	assert.NotEqual(t, uuid.Nil, token1)
 	assert.NotEqual(t, uuid.Nil, token2)

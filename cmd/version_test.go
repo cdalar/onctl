@@ -21,7 +21,7 @@ func TestVersion_Variable(t *testing.T) {
 func TestVersionCmd_RunFunction(t *testing.T) {
 	// Test that the Run function is not nil and callable
 	assert.NotNil(t, versionCmd.Run)
-	
+
 	// We can test that the function doesn't panic when called
 	assert.NotPanics(t, func() {
 		versionCmd.Run(versionCmd, []string{})

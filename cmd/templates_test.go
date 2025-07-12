@@ -26,7 +26,7 @@ func TestTemplateIndex_StructBasics(t *testing.T) {
 	// Test TemplateIndex struct creation and field access
 	template1 := Template{Name: "template1", Type: "type1"}
 	template2 := Template{Name: "template2", Type: "type2"}
-	
+
 	index := TemplateIndex{
 		Templates: []Template{template1, template2},
 	}
@@ -66,7 +66,7 @@ func TestTemplateIndex_YAMLMarshal(t *testing.T) {
 		Config:      "config.yaml",
 		Type:        "test-type",
 	}
-	
+
 	index := TemplateIndex{
 		Templates: []Template{template},
 	}
@@ -90,7 +90,7 @@ func TestTemplateIndex_EmptyTemplates(t *testing.T) {
 func TestTemplate_ZeroValues(t *testing.T) {
 	// Test zero value Template
 	var template Template
-	
+
 	assert.Equal(t, "", template.Name)
 	assert.Equal(t, "", template.Description)
 	assert.Equal(t, "", template.Config)
@@ -146,7 +146,7 @@ func TestTemplate_YAMLTags(t *testing.T) {
 
 	yamlData, err := yaml.Marshal(template)
 	assert.NoError(t, err)
-	
+
 	yamlStr := string(yamlData)
 	assert.Contains(t, yamlStr, "name: yaml-test")
 	assert.Contains(t, yamlStr, "description: YAML test template")
@@ -160,14 +160,14 @@ func TestTemplateIndex_YAMLTags(t *testing.T) {
 		Name: "index-test",
 		Type: "index-type",
 	}
-	
+
 	index := TemplateIndex{
 		Templates: []Template{template},
 	}
 
 	yamlData, err := yaml.Marshal(index)
 	assert.NoError(t, err)
-	
+
 	yamlStr := string(yamlData)
 	assert.Contains(t, yamlStr, "templates:")
 	assert.Contains(t, yamlStr, "name: index-test")
