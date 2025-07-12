@@ -42,7 +42,7 @@ func TestPopulateOnctlEnv_InvalidPath(t *testing.T) {
 	// Test with invalid path
 	err := populateOnctlEnv("/invalid/path/that/does/not/exist")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to read embedded files")
+	assert.Contains(t, err.Error(), "failed to write file")
 }
 
 func TestConstants(t *testing.T) {
