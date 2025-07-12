@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/duration"
 )
 
-// TODO decomple viper and use onctlConfig instead
+// TODO decouple viper and use onctlConfig instead
 // var onctlConfig map[string]interface{}
 
 func GenerateIDToken() uuid.UUID {
@@ -342,4 +342,41 @@ func ProcessDownloadSlice(downloadSlice []string, remote tools.Remote) {
 		}
 		wg.Wait() // Wait for all goroutines to finish
 	}
+}
+
+// MergeConfig merges the options from the configuration file into the command-line options.
+// Command-line options take precedence over configuration file options.
+func MergeConfig(opt *cmdCreateOptions, config *cmdCreateOptions) {
+	if opt.PublicKeyFile == "" && config.PublicKeyFile != "" {
+		opt.PublicKeyFile = config.PublicKeyFile
+	}
+	if len(opt.ApplyFiles) == 0 && len(config.ApplyFiles) > 0 {
+		opt.ApplyFiles = append(opt.ApplyFiles, config.ApplyFiles...)
+	}
+	if opt.DotEnvFile == "" && config.DotEnvFile != "" {
+		opt.DotEnvFile = config.DotEnvFile
+	}
+	if len(opt.Variables) == 0 && len(config.Variables) > 0 {
+		opt.Variables = append(opt.Variables, config.Variables...)
+	}
+	if opt.Vm.Name == "" && config.Vm.Name != "" {
+		opt.Vm.Name = config.Vm.Name
+	}
+	if opt.Vm.SSHPort == 22 && config.Vm.SSHPort != 0 { // Default SSH port is 22
+		opt.Vm.SSHPort = config.Vm.SSHPort
+	}
+	if opt.Vm.CloudInitFile == "" && config.Vm.CloudInitFile != "" {
+		opt.Vm.CloudInitFile = config.Vm.CloudInitFile
+	}
+	if opt.Domain == "" && config.Domain != "" {
+		opt.Domain = config.Domain
+	}
+	if len(opt.DownloadFiles) == 0 && len(config.DownloadFiles) > 0 {
+		opt.DownloadFiles = append(opt.DownloadFiles, config.DownloadFiles...)
+	}
+	if len(opt.UploadFiles) == 0 && len(config.UploadFiles) > 0 {
+		opt.UploadFiles = append(opt.UploadFiles, config.UploadFiles...)
+	}
+
+	log.Println("[DEBUG] Merged options: ", opt)
 }
