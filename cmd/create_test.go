@@ -27,11 +27,17 @@ domain: "example.com"
 `
 	tmpFile, err := os.CreateTemp("", "config-*.yaml")
 	assert.NoError(t, err)
-	defer os.Remove(tmpFile.Name()) // Clean up the temporary file
+	defer func() {
+		if err := os.Remove(tmpFile.Name()); err != nil {
+			t.Logf("Failed to remove temp file: %v", err)
+		}
+	}() // Clean up the temporary file
 
 	_, err = tmpFile.Write([]byte(configContent))
 	assert.NoError(t, err)
-	tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("Failed to close temp file: %v", err)
+	}
 
 	// Call the function to parse the configuration file
 	config, err := parseConfigFile(tmpFile.Name())
