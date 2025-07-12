@@ -23,7 +23,7 @@ type Vm struct {
 	// ID is the ID of the instance
 	ID string
 	// Name is the name of the instance
-	Name string
+	Name string `yaml:"name"`
 	// IP is the public IP of the instance
 	IP string
 	//LocalIP is the local IP of the instance
@@ -37,9 +37,9 @@ type Vm struct {
 	// SSHKeyID is the ID of the SSH key
 	SSHKeyID string
 	// SSHPort is the port to connect to the instance
-	SSHPort int
+	SSHPort int `yaml:"sshPort"`
 	// CloudInit is the cloud-init file
-	CloudInitFile string
+	CloudInitFile string `yaml:"cloudInitFile"`
 	// CreatedAt is the creation date of the instance
 	CreatedAt time.Time
 	// Provider is the cloud provider
