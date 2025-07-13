@@ -38,12 +38,12 @@ func TestCheckCloudProvider_WithEnvVar(t *testing.T) {
 	defer func() { _ = os.Setenv("ONCTL_CLOUD", originalEnv) }()
 
 	// Test with valid cloud provider
-	os.Setenv("ONCTL_CLOUD", "aws")
+	_ = os.Setenv("ONCTL_CLOUD", "aws")
 	result := checkCloudProvider()
 	assert.Equal(t, "aws", result)
 
 	// Test with another valid provider
-	os.Setenv("ONCTL_CLOUD", "hetzner")
+	_ = os.Setenv("ONCTL_CLOUD", "hetzner")
 	result = checkCloudProvider()
 	assert.Equal(t, "hetzner", result)
 }
