@@ -200,12 +200,12 @@ func TestFindSingleFile_FileSystem(t *testing.T) {
 	// Create a temporary file
 	tmpFile, err := os.CreateTemp("", "test-file-*.txt")
 	assert.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	content := "test content"
 	_, err = tmpFile.WriteString(content)
 	assert.NoError(t, err)
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	// Test finding file in filesystem
 	result := findSingleFile(tmpFile.Name())
@@ -231,13 +231,13 @@ func TestFindFile(t *testing.T) {
 	// Create temporary files
 	tmpFile1, err := os.CreateTemp("", "test-file-1-*.txt")
 	assert.NoError(t, err)
-	defer os.Remove(tmpFile1.Name())
-	tmpFile1.Close()
+	defer func() { _ = os.Remove(tmpFile1.Name()) }()
+	_ = tmpFile1.Close()
 
 	tmpFile2, err := os.CreateTemp("", "test-file-2-*.txt")
 	assert.NoError(t, err)
-	defer os.Remove(tmpFile2.Name())
-	tmpFile2.Close()
+	defer func() { _ = os.Remove(tmpFile2.Name()) }()
+	_ = tmpFile2.Close()
 
 	files := []string{tmpFile1.Name(), tmpFile2.Name()}
 	result := findFile(files)
@@ -506,7 +506,7 @@ func TestTabWriter_InvalidTemplate(t *testing.T) {
 	// Read and discard output
 	buf := make([]byte, 1024)
 	_, _ = r.Read(buf)
-	r.Close()
+	_ = r.Close()
 
 	// Reset stdout
 	os.Stdout = originalStdout

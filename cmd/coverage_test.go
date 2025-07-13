@@ -14,12 +14,12 @@ func TestReadConfig_WithValidConfig(t *testing.T) {
 	// Create a temp directory with .onctl subdirectory
 	tempDir, err := os.MkdirTemp("", "onctl-test")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Save original working directory
 	originalWd, err := os.Getwd()
 	assert.NoError(t, err)
-	defer os.Chdir(originalWd)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	// Change to temp directory
 	err = os.Chdir(tempDir)
@@ -66,12 +66,12 @@ func TestReadConfig_HomeDirectory(t *testing.T) {
 	// Create a temp directory that's not the current directory
 	tempDir, err := os.MkdirTemp("", "onctl-test")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Save original working directory
 	originalWd, err := os.Getwd()
 	assert.NoError(t, err)
-	defer os.Chdir(originalWd)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	// Change to temp directory (which doesn't have .onctl)
 	err = os.Chdir(tempDir)
@@ -127,14 +127,14 @@ func TestCheckCloudProvider_InvalidProvider(t *testing.T) {
 	originalEnv := os.Getenv("ONCTL_CLOUD")
 	defer func() {
 		if originalEnv == "" {
-			os.Unsetenv("ONCTL_CLOUD")
+			_ = os.Unsetenv("ONCTL_CLOUD")
 		} else {
-			os.Setenv("ONCTL_CLOUD", originalEnv)
+			_ = os.Setenv("ONCTL_CLOUD", originalEnv)
 		}
 	}()
 
 	// Test with invalid cloud provider
-	os.Setenv("ONCTL_CLOUD", "invalid-provider")
+	_ = os.Setenv("ONCTL_CLOUD", "invalid-provider")
 
 	// This would normally call os.Exit(1), so we can't test it directly
 	// We just verify the function exists

@@ -11,7 +11,7 @@ func TestReadConfig_FunctionExists(t *testing.T) {
 	// This tests the function's signature without requiring specific behavior
 	assert.NotPanics(t, func() {
 		// ReadConfig may succeed or fail depending on environment, but should not panic
-		ReadConfig("aws")
+		_ = ReadConfig("aws")
 		// No assertion on error since test environment may have valid config
 	})
 }
@@ -20,7 +20,7 @@ func TestReadConfig_WithValidDirectory(t *testing.T) {
 	// Test that ReadConfig function can handle directory operations without hanging
 	assert.NotPanics(t, func() {
 		// ReadConfig may succeed or fail depending on environment, but should not panic
-		ReadConfig("gcp")
+		_ = ReadConfig("gcp")
 		// No assertion on error since test environment may have valid config
 	})
 }

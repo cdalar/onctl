@@ -15,16 +15,16 @@ func TestCheckCloudProvider_WithValidProviders(t *testing.T) {
 	originalEnv := os.Getenv("ONCTL_CLOUD")
 	defer func() {
 		if originalEnv == "" {
-			os.Unsetenv("ONCTL_CLOUD")
+			_ = os.Unsetenv("ONCTL_CLOUD")
 		} else {
-			os.Setenv("ONCTL_CLOUD", originalEnv)
+			_ = os.Setenv("ONCTL_CLOUD", originalEnv)
 		}
 	}()
 
 	// Test with valid cloud providers only
 	validProviders := []string{"aws", "hetzner", "azure", "gcp"}
 	for _, provider := range validProviders {
-		os.Setenv("ONCTL_CLOUD", provider)
+		_ = os.Setenv("ONCTL_CLOUD", provider)
 		result := checkCloudProvider()
 		assert.Equal(t, provider, result)
 	}
@@ -77,14 +77,14 @@ func TestGenerateIDToken_BranchCoverage(t *testing.T) {
 func TestReadConfig_ErrorPaths(t *testing.T) {
 	// Test ReadConfig with non-existent provider to improve branch coverage
 	originalWd, _ := os.Getwd()
-	defer os.Chdir(originalWd)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	// Create temp directory without .onctl
 	tempDir, err := os.MkdirTemp("", "onctl-test")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
-	os.Chdir(tempDir)
+	_ = os.Chdir(tempDir)
 
 	// This should fail with no config directory
 	err = ReadConfig("nonexistent-provider")
@@ -109,14 +109,14 @@ func TestTabWriter_TemplateParsing(t *testing.T) {
 
 	TabWriter(data, validTemplate)
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = originalStdout
 
 	// Read output
 	buf := make([]byte, 1024)
 	n, _ := r.Read(buf)
 	output := string(buf[:n])
-	r.Close()
+	_ = r.Close()
 
 	assert.Contains(t, output, "test")
 	assert.Contains(t, output, "42")
@@ -129,10 +129,10 @@ func TestFindSingleFile_LocalFile(t *testing.T) {
 	// Create a temporary file
 	tempFile, err := os.CreateTemp("", "test-file-*.txt")
 	assert.NoError(t, err)
-	defer os.Remove(tempFile.Name())
+	defer func() { _ = os.Remove(tempFile.Name()) }()
 
-	tempFile.WriteString("test content")
-	tempFile.Close()
+	_, _ = tempFile.WriteString("test content")
+	_ = tempFile.Close()
 
 	// Test that the function can find existing files
 	// Note: findSingleFile may still call os.Exit in some paths, so we test carefully
@@ -144,14 +144,14 @@ func TestCheckCloudProvider_InvalidProviderSetup(t *testing.T) {
 	originalEnv := os.Getenv("ONCTL_CLOUD")
 	defer func() {
 		if originalEnv == "" {
-			os.Unsetenv("ONCTL_CLOUD")
+			_ = os.Unsetenv("ONCTL_CLOUD")
 		} else {
-			os.Setenv("ONCTL_CLOUD", originalEnv)
+			_ = os.Setenv("ONCTL_CLOUD", originalEnv)
 		}
 	}()
 
 	// This would normally call os.Exit(1), but we can test the setup
-	os.Setenv("ONCTL_CLOUD", "invalid-provider")
+	_ = os.Setenv("ONCTL_CLOUD", "invalid-provider")
 
 	// We can't actually call checkCloudProvider() here as it would call os.Exit(1)
 	// But we can verify the environment variable is set
@@ -162,16 +162,16 @@ func TestInitializeOnctlEnv_Coverage(t *testing.T) {
 	// Test initializeOnctlEnv to improve coverage
 	tempDir, err := os.MkdirTemp("", "onctl-test")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	originalWd, _ := os.Getwd()
-	defer os.Chdir(originalWd)
+	defer func() { _ = os.Chdir(originalWd) }()
 
-	os.Chdir(tempDir)
+	_ = os.Chdir(tempDir)
 
 	// Test the function - it may fail due to embedded files but shouldn't panic
 	assert.NotPanics(t, func() {
-		initializeOnctlEnv()
+		_ = initializeOnctlEnv()
 	})
 }
 
@@ -179,10 +179,10 @@ func TestPopulateOnctlEnv_Coverage(t *testing.T) {
 	// Test populateOnctlEnv with valid directory to improve coverage
 	tempDir, err := os.MkdirTemp("", "onctl-test")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Test with valid directory - may fail due to embedded files but shouldn't panic
 	assert.NotPanics(t, func() {
-		populateOnctlEnv(tempDir)
+		_ = populateOnctlEnv(tempDir)
 	})
 }

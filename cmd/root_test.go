@@ -35,7 +35,7 @@ func TestRootCmd_HasSubCommands(t *testing.T) {
 func TestCheckCloudProvider_WithEnvVar(t *testing.T) {
 	// Save original env var
 	originalEnv := os.Getenv("ONCTL_CLOUD")
-	defer os.Setenv("ONCTL_CLOUD", originalEnv)
+	defer func() { _ = os.Setenv("ONCTL_CLOUD", originalEnv) }()
 
 	// Test with valid cloud provider
 	os.Setenv("ONCTL_CLOUD", "aws")

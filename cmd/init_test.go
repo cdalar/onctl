@@ -18,12 +18,12 @@ func TestInitializeOnctlEnv_NewDirectory(t *testing.T) {
 	// Create a temporary directory for testing
 	tempDir, err := os.MkdirTemp("", "onctl-test")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Change to temp directory
 	originalWd, err := os.Getwd()
 	assert.NoError(t, err)
-	defer os.Chdir(originalWd)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	err = os.Chdir(tempDir)
 	assert.NoError(t, err)
