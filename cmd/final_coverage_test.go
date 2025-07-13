@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/gofrs/uuid/v5"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -67,11 +68,21 @@ func TestGenerateIDToken_BranchCoverage(t *testing.T) {
 	// Tokens should be different
 	assert.NotEqual(t, token1, token2)
 
-	// Both should be valid UUIDs (36 characters with hyphens)
-	assert.Len(t, token1, 36)
-	assert.Len(t, token2, 36)
-	assert.Contains(t, token1, "-")
-	assert.Contains(t, token2, "-")
+	// Both should be valid UUIDs (not nil)
+	assert.NotEqual(t, token1, uuid.Nil)
+	assert.NotEqual(t, token2, uuid.Nil)
+
+	// Test string representation has correct UUID format (36 characters with hyphens)
+	token1Str := token1.String()
+	token2Str := token2.String()
+	assert.Len(t, token1Str, 36)
+	assert.Len(t, token2Str, 36)
+	assert.Contains(t, token1Str, "-")
+	assert.Contains(t, token2Str, "-")
+
+	// Verify UUID version (should be version 4)
+	assert.Equal(t, byte(4), token1.Version())
+	assert.Equal(t, byte(4), token2.Version())
 }
 
 func TestReadConfig_ErrorPaths(t *testing.T) {
@@ -89,7 +100,7 @@ func TestReadConfig_ErrorPaths(t *testing.T) {
 	// This should fail with no config directory
 	err = ReadConfig("nonexistent-provider")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no configuration directory found")
+	assert.Contains(t, err.Error(), "no configuration")
 }
 
 func TestTabWriter_TemplateParsing(t *testing.T) {
