@@ -88,6 +88,6 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/pkg/sftp v1.13.9
 	github.com/spf13/viper v1.20.1
-	golang.org/x/crypto v0.39.0
-	golang.org/x/text v0.26.0 // indirect
+	golang.org/x/crypto v0.40.0
+	golang.org/x/text v0.27.0 // indirect
 )
