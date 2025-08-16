@@ -2,9 +2,11 @@
 
 `onctl` is a tool to manage virtual machines in multi-cloud. 
 
-Check 🌍 https://onctl.com for detailed documentation
+Check 🌍 https://docs.onctl.io for detailed documentation
 
 [![build](https://github.com/cdalar/onctl/actions/workflows/build.yml/badge.svg)](https://github.com/cdalar/onctl/actions/workflows/build.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/cdalar/onctl/badge)](https://scorecard.dev/viewer/?uri=github.com/cdalar/onctl)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/10052/badge)](https://www.bestpractices.dev/projects/10052)
 [![Go Report Card](https://goreportcard.com/badge/github.com/cdalar/onctl)](https://goreportcard.com/report/github.com/cdalar/onctl)
 [![CodeQL](https://github.com/cdalar/onctl/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/cdalar/onctl/actions/workflows/github-code-scanning/codeql)
 [![codecov](https://codecov.io/gh/cdalar/onctl/graph/badge.svg?token=7VU7H1II09)](https://codecov.io/gh/cdalar/onctl)
@@ -106,3 +108,7 @@ Flags:
 
 Use "onctl [command] --help" for more information about a command.
 ```
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=cdalar/onctl&type=Date)](https://star-history.com/#cdalar/onctl&Date)

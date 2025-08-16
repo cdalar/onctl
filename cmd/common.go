@@ -11,19 +11,21 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"text/template"
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/cdalar/onctl/internal/files"
+	"github.com/cdalar/onctl/internal/tools"
 	"github.com/gofrs/uuid/v5"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/util/duration"
 )
 
-// TODO decomple viper and use onctlConfig instead
+// TODO decouple viper and use onctlConfig instead
 // var onctlConfig map[string]interface{}
 
 func GenerateIDToken() uuid.UUID {
@@ -35,36 +37,56 @@ func GenerateIDToken() uuid.UUID {
 	return u1
 }
 
-func ReadConfig(cloudProvider string) {
+func ReadConfig(cloudProvider string) error {
+	// Check current working directory
 	dir, err := os.Getwd()
 	if err != nil {
-		log.Println(err)
+		return fmt.Errorf("failed to get working directory: %v", err)
 	}
-	configFile := dir + "/.onctl/" + cloudProvider + ".yaml"
-	log.Println("[DEBUG] Working Directory: " + configFile)
-	configFileInfo, err := os.Stat(configFile)
+
+	localConfigPath := filepath.Join(dir, ".onctl")
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		// log.Println(err)
-		fmt.Println("No configuration found. Please run `onctl init` first")
-		os.Exit(1)
+		return fmt.Errorf("failed to get home directory: %v", err)
+	}
+	homeConfigPath := filepath.Join(homeDir, ".onctl")
+
+	log.Println("[DEBUG] Local Config Path:", localConfigPath)
+	log.Println("[DEBUG] Home Config Path:", homeConfigPath)
+	// Determine which directory to use
+	var configDir string
+	if _, err := os.Stat(localConfigPath); err == nil {
+		configDir = localConfigPath
+		log.Println("[DEBUG] Using local config directory")
+	} else if _, err := os.Stat(homeConfigPath); err == nil {
+		configDir = homeConfigPath
+		log.Println("[DEBUG] Using home config directory")
+	} else {
+		return fmt.Errorf("no configuration directory found in current directory or home directory. Please run `onctl init` first")
 	}
 
-	viper.SetConfigName("onctl")
-	viper.AddConfigPath(dir + "/.onctl")
-	err = viper.ReadInConfig()
-	if err != nil {
-		log.Println(err)
+	// Set paths for general and cloud provider-specific config
+	configFile := filepath.Join(configDir, cloudProvider+".yaml")
+	log.Println("[DEBUG] Config File Path:", configFile)
+
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		return fmt.Errorf("no configuration file found for %s in %s", cloudProvider, configDir)
 	}
 
-	if configFileInfo != nil {
-		viper.SetConfigName(cloudProvider)
-		err = viper.MergeInConfig()
-		if err != nil {
-			log.Println(err)
-		}
+	viper.SetConfigName("onctl") // General config
+	viper.AddConfigPath(configDir)
+
+	if err := viper.ReadInConfig(); err != nil {
+		log.Printf("Failed to read general config: %v", err)
 	}
 
-	log.Println("[DEBUG]", viper.AllSettings())
+	viper.SetConfigName(cloudProvider) // Specific config
+	if err := viper.MergeInConfig(); err != nil {
+		log.Printf("Failed to merge cloud provider config: %v", err)
+	}
+
+	log.Println("[DEBUG] Loaded Settings:", viper.AllSettings())
+	return nil
 }
 
 func getNameFromTags(tags []*ec2.Tag) string {
@@ -92,7 +114,9 @@ func TabWriter(res interface{}, tmpl string) { //nolint
 	if err != nil {
 		log.Println(err)
 	}
-	w.Flush()
+	if err := w.Flush(); err != nil {
+		log.Println(err)
+	}
 }
 func PrettyPrint(v interface{}) (err error) {
 	b, err := json.MarshalIndent(v, "", "  ")
@@ -188,7 +212,11 @@ func findSingleFile(filename string) (filePath string) {
 	if err == nil && resp.StatusCode == 200 {
 		log.Println("[DEBUG]", filename, "file found in templates.onctl.com/")
 
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				log.Printf("Failed to close response body: %v", err)
+			}
+		}()
 		dir, err := os.MkdirTemp("", "onctl")
 		if err != nil {
 			log.Fatal(err)
@@ -238,15 +266,117 @@ func getSSHKeyFilePaths(filename string) (publicKeyFile, privateKeyFile string) 
 	publicKeyFile = strings.Replace(publicKeyFile, "~", home, 1)
 	privateKeyFile = strings.Replace(privateKeyFile, "~", home, 1)
 
-	log.Println("[DEBUG] publicKeyFile: ", publicKeyFile)
-	log.Println("[DEBUG] privateKeyFile: ", privateKeyFile)
+	log.Println("[DEBUG] publicKeyFile:", publicKeyFile)
+	log.Println("[DEBUG] privateKeyFile:", privateKeyFile)
 	if _, err := os.Stat(publicKeyFile); err != nil {
-		log.Fatalln(publicKeyFile + " Public key file not found")
+		log.Println("[DEBUG]", publicKeyFile, "Public key file not found")
 	}
 
 	if _, err := os.Stat(privateKeyFile); err != nil {
-		log.Fatalln(privateKeyFile + " Private key file not found")
+		log.Println("[DEBUG]", privateKeyFile, "Private key file not found")
 	}
 
 	return publicKeyFile, privateKeyFile
+}
+
+func ProcessUploadSlice(uploadSlice []string, remote tools.Remote) {
+	if len(uploadSlice) > 0 {
+		var wg sync.WaitGroup
+		for _, dfile := range uploadSlice {
+			wg.Add(1)
+			go func(dfile string) {
+				defer wg.Done()
+
+				var localFile, remoteFile string
+				// Split by colon to determine if a rename is required
+				if strings.Contains(dfile, ":") {
+					parts := strings.SplitN(dfile, ":", 2)
+					localFile = parts[0]
+					remoteFile = parts[1]
+				} else {
+					localFile = dfile
+					remoteFile = filepath.Base(dfile)
+				}
+
+				log.Println("[DEBUG] localFile: " + localFile)
+				log.Println("[DEBUG] remoteFile: " + remoteFile)
+
+				fmt.Printf("Uploading file: %s -> %s\n", localFile, remoteFile)
+
+				err := remote.SSHCopyFile(localFile, remoteFile)
+				if err != nil {
+					log.Printf("[ERROR] Failed to upload %s: %v", localFile, err)
+				}
+			}(dfile)
+		}
+		wg.Wait() // Wait for all goroutines to finish
+	}
+}
+
+func ProcessDownloadSlice(downloadSlice []string, remote tools.Remote) {
+	if len(downloadSlice) > 0 {
+		var wg sync.WaitGroup
+		for _, dfile := range downloadSlice {
+			wg.Add(1)
+			go func(dfile string) {
+				defer wg.Done()
+
+				var remoteFile, localFile string
+				// Split by colon to determine if a rename is required
+				if strings.Contains(dfile, ":") {
+					parts := strings.SplitN(dfile, ":", 2)
+					remoteFile = parts[0]
+					localFile = parts[1]
+				} else {
+					remoteFile = dfile
+					localFile = filepath.Base(dfile)
+				}
+
+				log.Printf("Downloading file: %s -> %s", remoteFile, localFile)
+
+				err := remote.DownloadFile(remoteFile, localFile)
+				if err != nil {
+					log.Printf("[ERROR] Failed to download %s: %v", remoteFile, err)
+				}
+			}(dfile)
+		}
+		wg.Wait() // Wait for all goroutines to finish
+	}
+}
+
+// MergeConfig merges the options from the configuration file into the command-line options.
+// Command-line options take precedence over configuration file options.
+func MergeConfig(opt *cmdCreateOptions, config *cmdCreateOptions) {
+	if opt.PublicKeyFile == "" && config.PublicKeyFile != "" {
+		opt.PublicKeyFile = config.PublicKeyFile
+	}
+	if len(opt.ApplyFiles) == 0 && len(config.ApplyFiles) > 0 {
+		opt.ApplyFiles = append(opt.ApplyFiles, config.ApplyFiles...)
+	}
+	if opt.DotEnvFile == "" && config.DotEnvFile != "" {
+		opt.DotEnvFile = config.DotEnvFile
+	}
+	if len(opt.Variables) == 0 && len(config.Variables) > 0 {
+		opt.Variables = append(opt.Variables, config.Variables...)
+	}
+	if opt.Vm.Name == "" && config.Vm.Name != "" {
+		opt.Vm.Name = config.Vm.Name
+	}
+	if opt.Vm.SSHPort == 22 && config.Vm.SSHPort != 0 { // Default SSH port is 22
+		opt.Vm.SSHPort = config.Vm.SSHPort
+	}
+	if opt.Vm.CloudInitFile == "" && config.Vm.CloudInitFile != "" {
+		opt.Vm.CloudInitFile = config.Vm.CloudInitFile
+	}
+	if opt.Domain == "" && config.Domain != "" {
+		opt.Domain = config.Domain
+	}
+	if len(opt.DownloadFiles) == 0 && len(config.DownloadFiles) > 0 {
+		opt.DownloadFiles = append(opt.DownloadFiles, config.DownloadFiles...)
+	}
+	if len(opt.UploadFiles) == 0 && len(config.UploadFiles) > 0 {
+		opt.UploadFiles = append(opt.UploadFiles, config.UploadFiles...)
+	}
+
+	log.Println("[DEBUG] Merged options: ", opt)
 }

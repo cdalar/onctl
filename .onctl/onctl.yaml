@@ -1,9 +1,0 @@
-vm:
-  name: onctl-vm
-  cloud-init:
-    timeout: 3m # ex. 3m or 180s
-ssh:
-  # publicKey: ~/.ssh/id_ed25519.pub
-  # privateKey: ~/.ssh/id_ed25519
-  publicKey: ~/.ssh/id_rsa.pub
-  privateKey: ~/.ssh/id_rsa

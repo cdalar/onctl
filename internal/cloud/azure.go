@@ -166,9 +166,10 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 	log.Println("[DEBUG] Deploy Server")
 
 	var vnet *armnetwork.VirtualNetwork
+	var err error
 	// Create the Vnet
 	if viper.GetString("azure.vm.vnet.create") == "true" {
-		vnet, err := createVirtualNetwork(context.Background(), &p)
+		vnet, err = createVirtualNetwork(context.Background(), &p)
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -178,7 +179,7 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 		if err != nil {
 			log.Fatalln(err)
 		}
-		log.Println("[DEBUG] ", vnet)
+		log.Println("[DEBUG] ", vnetResp)
 		vnet = &vnetResp.VirtualNetwork
 	}
 	pip, err := createPublicIP(context.Background(), &p, server)
@@ -258,12 +259,12 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 		Frequency: time.Duration(3) * time.Second,
 	})
 	return Vm{
-		ID:        *resp.VirtualMachine.Properties.VMID,
-		Name:      *resp.VirtualMachine.Name,
+		ID:        *resp.Properties.VMID,
+		Name:      *resp.Name,
 		IP:        *pip.Properties.IPAddress,
-		Type:      string(*resp.VirtualMachine.Properties.HardwareProfile.VMSize),
-		Status:    *resp.VirtualMachine.Properties.ProvisioningState,
-		CreatedAt: *resp.VirtualMachine.Properties.TimeCreated,
+		Type:      string(*resp.Properties.HardwareProfile.VMSize),
+		Status:    *resp.Properties.ProvisioningState,
+		CreatedAt: *resp.Properties.TimeCreated,
 	}, err
 }
 

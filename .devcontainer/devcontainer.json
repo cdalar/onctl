@@ -13,10 +13,10 @@
             },
             "cdalar/kw-pv-policy": {
               "permissions": "write-all"
-            },
+            }
           }
         }
       },
-    // "image":"mcr.microsoft.com/devcontainers/universal:2"
-    "build": { "dockerfile": "Dockerfile" }
+    "image":"mcr.microsoft.com/devcontainers/universal:2"
+    // "build": { "dockerfile": "Dockerfile" }
 }

@@ -19,21 +19,33 @@ func (r *Remote) DownloadFile(srcPath, dstPath string) error {
 	if err != nil {
 		return err
 	}
-	defer sftp.Close()
+	defer func() {
+		if err := sftp.Close(); err != nil {
+			log.Printf("Failed to close SFTP client: %v", err)
+		}
+	}()
 
 	// Open the source file
 	srcFile, err := sftp.Open(srcPath)
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer func() {
+		if err := srcFile.Close(); err != nil {
+			log.Printf("Failed to close source file: %v", err)
+		}
+	}()
 
 	// Create the destination file
 	dstFile, err := os.Create(dstPath)
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
+	defer func() {
+		if err := dstFile.Close(); err != nil {
+			log.Printf("Failed to close destination file: %v", err)
+		}
+	}()
 
 	// write to file
 	if _, err := srcFile.WriteTo(dstFile); err != nil {
@@ -43,6 +55,9 @@ func (r *Remote) DownloadFile(srcPath, dstPath string) error {
 }
 
 func (r *Remote) SSHCopyFile(srcPath, dstPath string) error {
+	log.Println("[DEBUG] srcPath:" + srcPath)
+	log.Println("[DEBUG] dstPath:" + dstPath)
+
 	// Create a new SSH connection
 	err := r.NewSSHConnection()
 	if err != nil {
@@ -54,23 +69,34 @@ func (r *Remote) SSHCopyFile(srcPath, dstPath string) error {
 	if err != nil {
 		return err
 	}
-	defer sftp.Close()
+	defer func() {
+		if err := sftp.Close(); err != nil {
+			log.Printf("Failed to close SFTP client: %v", err)
+		}
+	}()
 
 	// Open the source file
-	log.Println("[DEBUG] srcPath:" + srcPath)
 	srcFile, err := os.Open(srcPath)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
-	defer srcFile.Close()
+	defer func() {
+		if err := srcFile.Close(); err != nil {
+			log.Printf("Failed to close source file: %v", err)
+		}
+	}()
 
 	// Create the destination file
 	dstFile, err := sftp.Create(dstPath)
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
+	defer func() {
+		if err := dstFile.Close(); err != nil {
+			log.Printf("Failed to close destination file: %v", err)
+		}
+	}()
 
 	// write to file
 	if _, err := dstFile.ReadFrom(srcFile); err != nil {

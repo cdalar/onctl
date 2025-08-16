@@ -66,7 +66,7 @@ func (c *CloudFlareService) SetRecord(in *SetRecordRequest) (out *SetRecordRespo
 
 	for _, record := range dnsRecords {
 		log.Println("[DEBUG] record:", record.Name)
-		if record.Name == in.Subdomain+"."+record.ZoneName {
+		if record.Name == in.Subdomain {
 			log.Println("[DEBUG] Deleting record:", record.Name)
 			err := api.DeleteDNSRecord(ctx, cloudflare.ResourceIdentifier(zoneID), record.ID)
 			if err != nil {

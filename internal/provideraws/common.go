@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/cdalar/onctl/internal/tools"
+	"github.com/spf13/viper"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -343,6 +344,7 @@ func CreateVpcAndSubnet(svc *ec2.EC2) (*string, []string) {
 func GetClient() *ec2.EC2 {
 	sess, err := session.NewSessionWithOptions(session.Options{
 		SharedConfigState: session.SharedConfigEnable,
+		Config:            aws.Config{Region: aws.String(viper.GetString("aws.location"))},
 	})
 	if err != nil {
 		log.Println(err)
@@ -517,7 +519,7 @@ func ImportKeyPair(svc *ec2.EC2, keyName string, publicKeyFile string) {
 	if err != nil {
 		log.Println(err)
 	}
-	log.Println(publicKey)
+	log.Println(string(publicKey))
 	input := &ec2.ImportKeyPairInput{
 		KeyName:           aws.String(keyName),
 		PublicKeyMaterial: []byte(publicKey),

@@ -127,7 +127,11 @@ func ParseDotEnvFile(dotEnvFile string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close file: %v", err)
+		}
+	}()
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -147,7 +151,10 @@ func variablesToEnvVars(vars []string) string {
 
 	var command string
 	for _, value := range vars {
-		envs := strings.Split(value, "=")
+		envs := strings.SplitN(value, "=", 2)
+		if len(envs) == 1 {
+			envs = append(envs, os.Getenv(envs[0]))
+		}
 		vars_command := envs[0] + "=" + strconv.Quote(envs[1])
 		command += vars_command + " "
 	}
@@ -234,7 +241,11 @@ func (r *Remote) RemoteRun(remoteRunConfig *RemoteRunConfig) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer session.Close()
+	defer func() {
+		if err := session.Close(); err != nil {
+			log.Printf("Failed to close session: %v", err)
+		}
+	}()
 	stdOutReader, err := session.StdoutPipe()
 	if err != nil {
 		return "", err

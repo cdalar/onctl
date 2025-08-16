@@ -6,8 +6,12 @@ permissions:
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**' 
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
   schedule:
   - cron: '0 10 * * 1' # run "At 10:00 on Monday"
   workflow_call:
