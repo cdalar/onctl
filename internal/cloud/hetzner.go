@@ -33,7 +33,7 @@ func (n NetworkProviderHetzner) GetByName(networkName string) (Network, error) {
 		return Network{}, err
 	}
 	if s == nil {
-		return Network{}, errors.New("No Network found with name: " + networkName)
+		return Network{}, errors.New("no network found with name: " + networkName)
 	}
 	return mapHetznerNetwork(*s), nil
 }
