@@ -9,7 +9,7 @@ require (
 	github.com/briandowns/spinner v1.23.2
 	github.com/cloudflare/cloudflare-go v0.115.0
 	github.com/gofrs/uuid/v5 v5.3.2
-	github.com/hetznercloud/hcloud-go/v2 v2.21.1
+	github.com/hetznercloud/hcloud-go/v2 v2.22.0
 	github.com/manifoldco/promptui v0.9.0
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
