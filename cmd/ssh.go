@@ -137,12 +137,46 @@ var sshCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalln(err)
 		}
+
+		// Resolve jumphost name to IP address if it's not already an IP
+		resolvedJumpHost := sshOpt.JumpHost
+		if sshOpt.JumpHost != "" {
+			jumpHostVM, err := provider.GetByName(sshOpt.JumpHost)
+			if err != nil {
+				log.Printf("[WARNING] Could not resolve jumphost '%s': %v", sshOpt.JumpHost, err)
+			} else {
+				resolvedJumpHost = jumpHostVM.IP
+				log.Printf("[DEBUG] Resolved jumphost '%s' to IP '%s'", sshOpt.JumpHost, resolvedJumpHost)
+			}
+		}
+
+		// Determine which IP to use for the target VM
+		var targetIP string
+		if resolvedJumpHost != "" && (vm.IP == "" || vm.IP == "<nil>") {
+			// If using jumphost and no public IP, use private IP
+			if vm.PrivateIP != "" && vm.PrivateIP != "N/A" {
+				targetIP = vm.PrivateIP
+				log.Printf("[DEBUG] Using private IP '%s' for target VM", targetIP)
+			} else {
+				log.Fatalln("No private IP available for VM")
+			}
+		} else {
+			// Use public IP if available
+			if vm.IP != "" && vm.IP != "<nil>" {
+				targetIP = vm.IP
+				log.Printf("[DEBUG] Using public IP '%s' for target VM", targetIP)
+			} else {
+				log.Fatalln("No public IP available for VM and no jumphost specified")
+			}
+		}
+
 		remote := tools.Remote{
 			Username:   viper.GetString(cloudProvider + ".vm.username"),
-			IPAddress:  vm.IP,
+			IPAddress:  targetIP,
 			SSHPort:    sshOpt.Port,
 			PrivateKey: string(privateKey),
 			Spinner:    s,
+			JumpHost:   resolvedJumpHost,
 		}
 
 		if sshOpt.DotEnvFile != "" {

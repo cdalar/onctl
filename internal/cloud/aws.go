@@ -164,9 +164,10 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 	if server.Type == "" {
 		server.Type = viper.GetString("aws.vm.type")
 	}
-	images, err := provideraws.GetImages()
+	// Get the latest Ubuntu 22.04 AMI for the current region
+	latestAMI, err := provideraws.GetLatestUbuntu2204AMI()
 	if err != nil {
-		log.Println(err)
+		log.Fatalln("Failed to get latest Ubuntu 22.04 AMI:", err)
 	}
 
 	keyPairs, err := p.Client.DescribeKeyPairs(&ec2.DescribeKeyPairsInput{
@@ -189,7 +190,7 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 	// }
 	// log.Println("[DEBUG] Security Group Ids: ", securityGroupIds)
 	input := &ec2.RunInstancesInput{
-		ImageId:      aws.String(*images[0].ImageId),
+		ImageId:      aws.String(latestAMI),
 		InstanceType: aws.String(server.Type),
 		// InstanceMarketOptions: &ec2.InstanceMarketOptionsRequest{
 		// 	MarketType: aws.String("spot"),
@@ -204,7 +205,7 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 			{
 				DeviceIndex: aws.Int64(0),
 				// SubnetId:                 aws.String(subnetIds[0]),
-				AssociatePublicIpAddress: aws.Bool(true),
+				AssociatePublicIpAddress: aws.Bool(server.JumpHost == ""), // Only associate public IP if no jumphost
 				DeleteOnTermination:      aws.Bool(true),
 				// Groups:                   securityGroupIds,
 			},

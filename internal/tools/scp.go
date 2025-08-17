@@ -1,13 +1,21 @@
 package tools
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"os/exec"
+	"strings"
 
 	"github.com/pkg/sftp"
 )
 
 func (r *Remote) DownloadFile(srcPath, dstPath string) error {
+	// If jumphost is specified, use system scp command with ProxyJump
+	if r.JumpHost != "" {
+		return r.downloadFileWithJumpHost(srcPath, dstPath)
+	}
+
 	// Create a new SSH connection
 	err := r.NewSSHConnection()
 	if err != nil {
@@ -54,9 +62,58 @@ func (r *Remote) DownloadFile(srcPath, dstPath string) error {
 	return nil
 }
 
+func (r *Remote) downloadFileWithJumpHost(srcPath, dstPath string) error {
+	// Create a temporary file for the private key
+	tempKeyFile, err := os.CreateTemp("", "onctl_ssh_key_*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp key file: %v", err)
+	}
+	defer os.Remove(tempKeyFile.Name())
+
+	// Write the private key to the temp file
+	if _, err := tempKeyFile.WriteString(r.PrivateKey); err != nil {
+		return fmt.Errorf("failed to write private key to temp file: %v", err)
+	}
+	tempKeyFile.Close()
+
+	// Use system scp command with ProxyJump
+	scpArgs := []string{
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "StrictHostKeyChecking=no",
+		"-i", tempKeyFile.Name(),
+		"-P", fmt.Sprint(r.SSHPort),
+	}
+
+	// Add jumphost support using SSH's ProxyJump option
+	if r.JumpHost != "" {
+		// Format jumphost as user@host if user is not already specified
+		jumpHostSpec := r.JumpHost
+		if !strings.Contains(jumpHostSpec, "@") {
+			jumpHostSpec = r.Username + "@" + jumpHostSpec
+		}
+		scpArgs = append(scpArgs, "-J", jumpHostSpec)
+	}
+
+	// Add the source and destination
+	scpArgs = append(scpArgs, fmt.Sprintf("%s@%s:%s", r.Username, r.IPAddress, srcPath), dstPath)
+
+	log.Printf("[DEBUG] scp download args: %v", scpArgs)
+
+	scpCommand := exec.Command("scp", scpArgs...)
+	scpCommand.Stdout = os.Stdout
+	scpCommand.Stderr = os.Stderr
+
+	return scpCommand.Run()
+}
+
 func (r *Remote) SSHCopyFile(srcPath, dstPath string) error {
 	log.Println("[DEBUG] srcPath:" + srcPath)
 	log.Println("[DEBUG] dstPath:" + dstPath)
+
+	// If jumphost is specified, use system scp command with ProxyJump
+	if r.JumpHost != "" {
+		return r.uploadFileWithJumpHost(srcPath, dstPath)
+	}
 
 	// Create a new SSH connection
 	err := r.NewSSHConnection()
@@ -103,4 +160,48 @@ func (r *Remote) SSHCopyFile(srcPath, dstPath string) error {
 		return err
 	}
 	return nil
+}
+
+func (r *Remote) uploadFileWithJumpHost(srcPath, dstPath string) error {
+	// Create a temporary file for the private key
+	tempKeyFile, err := os.CreateTemp("", "onctl_ssh_key_*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp key file: %v", err)
+	}
+	defer os.Remove(tempKeyFile.Name())
+
+	// Write the private key to the temp file
+	if _, err := tempKeyFile.WriteString(r.PrivateKey); err != nil {
+		return fmt.Errorf("failed to write private key to temp file: %v", err)
+	}
+	tempKeyFile.Close()
+
+	// Use system scp command with ProxyJump
+	scpArgs := []string{
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "StrictHostKeyChecking=no",
+		"-i", tempKeyFile.Name(),
+		"-P", fmt.Sprint(r.SSHPort),
+	}
+
+	// Add jumphost support using SSH's ProxyJump option
+	if r.JumpHost != "" {
+		// Format jumphost as user@host if user is not already specified
+		jumpHostSpec := r.JumpHost
+		if !strings.Contains(jumpHostSpec, "@") {
+			jumpHostSpec = r.Username + "@" + jumpHostSpec
+		}
+		scpArgs = append(scpArgs, "-J", jumpHostSpec)
+	}
+
+	// Add the source and destination
+	scpArgs = append(scpArgs, srcPath, fmt.Sprintf("%s@%s:%s", r.Username, r.IPAddress, dstPath))
+
+	log.Printf("[DEBUG] scp upload args: %v", scpArgs)
+
+	scpCommand := exec.Command("scp", scpArgs...)
+	scpCommand.Stdout = os.Stdout
+	scpCommand.Stderr = os.Stderr
+
+	return scpCommand.Run()
 }
