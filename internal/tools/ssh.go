@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 )
 
@@ -13,6 +14,7 @@ type SSHIntoVMRequest struct {
 	User           string
 	Port           int
 	PrivateKeyFile string
+	JumpHost       string
 }
 
 func SSHIntoVM(request SSHIntoVMRequest) {
@@ -21,9 +23,22 @@ func SSHIntoVM(request SSHIntoVMRequest) {
 		"-o", "StrictHostKeyChecking=no",
 		"-i", request.PrivateKeyFile,
 		"-l", request.User,
-		request.IPAddress,
 		"-p", fmt.Sprint(request.Port),
 	}
+
+	// Add jumphost support using SSH's ProxyJump option
+	if request.JumpHost != "" {
+		// Format jumphost as user@host if user is not already specified
+		jumpHostSpec := request.JumpHost
+		if !strings.Contains(jumpHostSpec, "@") {
+			jumpHostSpec = request.User + "@" + jumpHostSpec
+		}
+		sshArgs = append(sshArgs, "-J", jumpHostSpec)
+	}
+
+	// Add the target IP address
+	sshArgs = append(sshArgs, request.IPAddress)
+
 	log.Println("[DEBUG] sshArgs: ", sshArgs)
 	// sshCommand := exec.Command("ssh", append(sshArgs, args[1:]...)...)
 	sshCommand := exec.Command("ssh", sshArgs...)

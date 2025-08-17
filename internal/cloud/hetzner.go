@@ -387,7 +387,7 @@ func (p ProviderHetzner) GetByName(serverName string) (Vm, error) {
 	return mapHetznerServer(*s), nil
 }
 
-func (p ProviderHetzner) SSHInto(serverName string, port int, privateKey string) {
+func (p ProviderHetzner) SSHInto(serverName string, port int, privateKey string, jumpHost string) {
 	server, _, err := p.Client.Server.GetByName(context.TODO(), serverName)
 	if server == nil {
 		fmt.Println("No Server found with name: " + serverName)
@@ -410,10 +410,30 @@ func (p ProviderHetzner) SSHInto(serverName string, port int, privateKey string)
 	if privateKey == "" {
 		privateKey = viper.GetString("ssh.privateKey")
 	}
+
+	// Determine which IP to use
+	var targetIP string
+	if jumpHost != "" && server.PublicNet.IPv4.IP == nil {
+		// If using jumphost and no public IP, use private IP
+		if len(server.PrivateNet) > 0 {
+			targetIP = server.PrivateNet[0].IP.String()
+		} else {
+			log.Fatalln("No private IP available for VM")
+		}
+	} else {
+		// Use public IP if available
+		if server.PublicNet.IPv4.IP != nil {
+			targetIP = server.PublicNet.IPv4.IP.String()
+		} else {
+			log.Fatalln("No public IP available for VM and no jumphost specified")
+		}
+	}
+
 	tools.SSHIntoVM(tools.SSHIntoVMRequest{
-		IPAddress:      server.PublicNet.IPv4.IP.String(),
+		IPAddress:      targetIP,
 		User:           viper.GetString("hetzner.vm.username"),
 		Port:           port,
 		PrivateKeyFile: privateKey,
+		JumpHost:       jumpHost,
 	})
 }

@@ -46,6 +46,8 @@ type Vm struct {
 	Provider string
 	// Cost is the cost of the vm
 	Cost CostStruct
+	// JumpHost is the jump host
+	JumpHost string
 }
 
 type CostStruct struct {
@@ -75,7 +77,7 @@ type CloudProviderInterface interface {
 	// CreateSSHKey creates a new SSH key
 	CreateSSHKey(publicKeyFile string) (keyID string, err error)
 	// SSHInto connects to a VM
-	SSHInto(serverName string, port int, privateKey string)
+	SSHInto(serverName string, port int, privateKey string, jumpHost string)
 	// GetByName gets a VM by name
 	GetByName(serverName string) (Vm, error)
 	// AttachNetwork attaches a network to a VM
