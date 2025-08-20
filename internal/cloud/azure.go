@@ -105,23 +105,26 @@ func (p ProviderAzure) List() (VmList, error) {
 				items["publicIpAddress"] = "N/A"
 			}
 
-			cloudList = append(cloudList, Vm{
-				Provider:  "azure",
-				ID:        filepath.Base(items["vmId"].(string)),
-				Name:      items["vmName"].(string),
-				IP:        items["publicIpAddress"].(string),
-				PrivateIP: items["privateIp"].(string),
-				Type:      items["vmSize"].(string),
-				Status:    items["status"].(string),
-				CreatedAt: createdAt,
-				Location:  items["location"].(string),
-				Cost: CostStruct{
-					Currency:        "N/A",
-					CostPerHour:     0,
-					CostPerMonth:    0,
-					AccumulatedCost: 0,
-				},
-			})
+			// Only include running instances
+			if items["status"] == "VM running" {
+				cloudList = append(cloudList, Vm{
+					Provider:  "azure",
+					ID:        filepath.Base(items["vmId"].(string)),
+					Name:      items["vmName"].(string),
+					IP:        items["publicIpAddress"].(string),
+					PrivateIP: items["privateIp"].(string),
+					Type:      items["vmSize"].(string),
+					Status:    items["status"].(string),
+					CreatedAt: createdAt,
+					Location:  items["location"].(string),
+					Cost: CostStruct{
+						Currency:        "N/A",
+						CostPerHour:     0,
+						CostPerMonth:    0,
+						AccumulatedCost: 0,
+					},
+				})
+			}
 		}
 	}
 
@@ -315,23 +318,9 @@ func (p ProviderAzure) Destroy(server Vm) error {
 }
 
 func (p ProviderAzure) SSHInto(serverName string, port int, privateKey string, jumpHost string) {
-	s, err := p.GetByName(serverName)
-	if err != nil || s.ID == "" {
-		log.Fatalln(err)
-	}
-	log.Println("[DEBUG] " + s.String())
-
-	if privateKey == "" {
-		privateKey = viper.GetString("ssh.privateKey")
-	}
-	tools.SSHIntoVM(tools.SSHIntoVMRequest{
-		IPAddress:      s.IP,
-		User:           viper.GetString("azure.vm.username"),
-		Port:           port,
-		PrivateKeyFile: privateKey,
-		JumpHost:       jumpHost,
-	})
-
+	// This method is not used - SSH logic is handled in cmd/ssh.go
+	// Keeping as stub to satisfy the interface
+	log.Printf("[DEBUG] Azure SSHInto called for %s (not used)", serverName)
 }
 
 func (p ProviderAzure) GetByName(serverName string) (Vm, error) {

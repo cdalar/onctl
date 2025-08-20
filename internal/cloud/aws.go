@@ -8,7 +8,6 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/cdalar/onctl/internal/tools"
 	"github.com/spf13/viper"
 
 	"github.com/cdalar/onctl/internal/provideraws"
@@ -316,6 +315,10 @@ func (p ProviderAws) List() (VmList, error) {
 				Name:   aws.String("tag:Owner"),
 				Values: []*string{aws.String("onctl")},
 			},
+			{
+				Name:   aws.String("instance-state-name"),
+				Values: []*string{aws.String("running")},
+			},
 		},
 	}
 	instances, err := p.Client.DescribeInstances(input)
@@ -460,21 +463,7 @@ func (p ProviderAws) GetByName(serverName string) (Vm, error) {
 }
 
 func (p ProviderAws) SSHInto(serverName string, port int, privateKey string, jumpHost string) {
-
-	s, err := p.GetByName(serverName)
-	if err != nil || s.ID == "" {
-		log.Fatalln(err)
-	}
-	log.Println("[DEBUG] " + s.String())
-
-	if privateKey == "" {
-		privateKey = viper.GetString("ssh.privateKey")
-	}
-	tools.SSHIntoVM(tools.SSHIntoVMRequest{
-		IPAddress:      s.IP,
-		User:           viper.GetString("aws.vm.username"),
-		Port:           port,
-		PrivateKeyFile: privateKey,
-		JumpHost:       jumpHost,
-	})
+	// This method is not used - SSH logic is handled in cmd/ssh.go
+	// Keeping as stub to satisfy the interface
+	log.Printf("[DEBUG] AWS SSHInto called for %s (not used)", serverName)
 }

@@ -213,18 +213,14 @@ var sshCmd = &cobra.Command{
 			ProcessDownloadSlice(sshOpt.DownloadFiles, remote)
 		}
 		if sshOpt.ConfigFile == "" && len(applyFileFound) == 0 && len(sshOpt.DownloadFiles) == 0 && len(sshOpt.UploadFiles) == 0 {
-			// Resolve jumphost name to IP address if it's not already an IP
-			resolvedJumpHost := sshOpt.JumpHost
-			if sshOpt.JumpHost != "" {
-				jumpHostVM, err := provider.GetByName(sshOpt.JumpHost)
-				if err != nil {
-					log.Printf("[WARNING] Could not resolve jumphost '%s': %v", sshOpt.JumpHost, err)
-				} else {
-					resolvedJumpHost = jumpHostVM.IP
-					log.Printf("[DEBUG] Resolved jumphost '%s' to IP '%s'", sshOpt.JumpHost, resolvedJumpHost)
-				}
-			}
-			provider.SSHInto(args[0], sshOpt.Port, privateKeyFile, resolvedJumpHost)
+			// Call SSH directly with the calculated target IP and resolved jump host
+			tools.SSHIntoVM(tools.SSHIntoVMRequest{
+				IPAddress:      targetIP,
+				User:           viper.GetString(cloudProvider + ".vm.username"),
+				Port:           sshOpt.Port,
+				PrivateKeyFile: privateKeyFile,
+				JumpHost:       resolvedJumpHost,
+			})
 		}
 	},
 }
