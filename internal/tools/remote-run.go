@@ -116,15 +116,21 @@ func (r *Remote) NewSSHConnection() error {
 		// Create a connection from jumphost to target
 		conn, err := jumpHostClient.Dial("tcp", net.JoinHostPort(r.IPAddress, fmt.Sprint(r.SSHPort)))
 		if err != nil {
-			jumpHostClient.Close()
+			if closeErr := jumpHostClient.Close(); closeErr != nil {
+				log.Printf("Failed to close jumphost client: %v", closeErr)
+			}
 			return fmt.Errorf("failed to connect from jumphost to target %s: %v", r.IPAddress, err)
 		}
 
 		// Create SSH connection over the tunnel
 		ncc, chans, reqs, err := ssh.NewClientConn(conn, r.IPAddress, config)
 		if err != nil {
-			conn.Close()
-			jumpHostClient.Close()
+			if closeErr := conn.Close(); closeErr != nil {
+				log.Printf("Failed to close connection: %v", closeErr)
+			}
+			if closeErr := jumpHostClient.Close(); closeErr != nil {
+				log.Printf("Failed to close jumphost client: %v", closeErr)
+			}
 			return fmt.Errorf("failed to create SSH connection over tunnel: %v", err)
 		}
 

@@ -68,13 +68,19 @@ func (r *Remote) downloadFileWithJumpHost(srcPath, dstPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create temp key file: %v", err)
 	}
-	defer os.Remove(tempKeyFile.Name())
+	defer func() {
+		if err := os.Remove(tempKeyFile.Name()); err != nil {
+			log.Printf("Failed to remove temp key file: %v", err)
+		}
+	}()
 
 	// Write the private key to the temp file
 	if _, err := tempKeyFile.WriteString(r.PrivateKey); err != nil {
 		return fmt.Errorf("failed to write private key to temp file: %v", err)
 	}
-	tempKeyFile.Close()
+	if err := tempKeyFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp key file: %v", err)
+	}
 
 	// Use system scp command with ProxyJump
 	scpArgs := []string{
@@ -168,13 +174,19 @@ func (r *Remote) uploadFileWithJumpHost(srcPath, dstPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create temp key file: %v", err)
 	}
-	defer os.Remove(tempKeyFile.Name())
+	defer func() {
+		if err := os.Remove(tempKeyFile.Name()); err != nil {
+			log.Printf("Failed to remove temp key file: %v", err)
+		}
+	}()
 
 	// Write the private key to the temp file
 	if _, err := tempKeyFile.WriteString(r.PrivateKey); err != nil {
 		return fmt.Errorf("failed to write private key to temp file: %v", err)
 	}
-	tempKeyFile.Close()
+	if err := tempKeyFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp key file: %v", err)
+	}
 
 	// Use system scp command with ProxyJump
 	scpArgs := []string{
