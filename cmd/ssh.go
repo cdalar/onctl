@@ -22,6 +22,7 @@ type cmdSSHOptions struct {
 	DotEnvFile    string   `yaml:"dotEnvFile"`
 	Variables     []string `yaml:"variables"`
 	ConfigFile    string   `yaml:"configFile"`
+	JumpHost      string   `yaml:"jumpHost"`
 }
 
 var sshOpt cmdSSHOptions
@@ -55,6 +56,7 @@ func init() {
 	sshCmd.Flags().StringVar(&sshOpt.DotEnvFile, "dot-env", "", "dot-env (.env) file")
 	sshCmd.Flags().StringSliceVarP(&sshOpt.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
 	sshCmd.Flags().StringVarP(&sshOpt.ConfigFile, "file", "f", "", "Path to configuration YAML file")
+	sshCmd.Flags().StringVarP(&sshOpt.JumpHost, "jump-host", "j", "", "Jump host")
 }
 
 var sshCmd = &cobra.Command{
@@ -108,6 +110,9 @@ var sshCmd = &cobra.Command{
 			if len(config.Variables) > 0 {
 				sshOpt.Variables = append(sshOpt.Variables, config.Variables...)
 			}
+			if config.JumpHost != "" {
+				sshOpt.JumpHost = config.JumpHost
+			}
 		}
 
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
@@ -132,12 +137,46 @@ var sshCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalln(err)
 		}
+
+		// Resolve jumphost name to IP address if it's not already an IP
+		resolvedJumpHost := sshOpt.JumpHost
+		if sshOpt.JumpHost != "" {
+			jumpHostVM, err := provider.GetByName(sshOpt.JumpHost)
+			if err != nil {
+				log.Printf("[WARNING] Could not resolve jumphost '%s': %v", sshOpt.JumpHost, err)
+			} else {
+				resolvedJumpHost = jumpHostVM.IP
+				log.Printf("[DEBUG] Resolved jumphost '%s' to IP '%s'", sshOpt.JumpHost, resolvedJumpHost)
+			}
+		}
+
+		// Determine which IP to use for the target VM
+		var targetIP string
+		if resolvedJumpHost != "" && (vm.IP == "" || vm.IP == "<nil>") {
+			// If using jumphost and no public IP, use private IP
+			if vm.PrivateIP != "" && vm.PrivateIP != "N/A" {
+				targetIP = vm.PrivateIP
+				log.Printf("[DEBUG] Using private IP '%s' for target VM", targetIP)
+			} else {
+				log.Fatalln("No private IP available for VM")
+			}
+		} else {
+			// Use public IP if available
+			if vm.IP != "" && vm.IP != "<nil>" {
+				targetIP = vm.IP
+				log.Printf("[DEBUG] Using public IP '%s' for target VM", targetIP)
+			} else {
+				log.Fatalln("No public IP available for VM and no jumphost specified")
+			}
+		}
+
 		remote := tools.Remote{
 			Username:   viper.GetString(cloudProvider + ".vm.username"),
-			IPAddress:  vm.IP,
+			IPAddress:  targetIP,
 			SSHPort:    sshOpt.Port,
 			PrivateKey: string(privateKey),
 			Spinner:    s,
+			JumpHost:   resolvedJumpHost,
 		}
 
 		if sshOpt.DotEnvFile != "" {
@@ -174,7 +213,14 @@ var sshCmd = &cobra.Command{
 			ProcessDownloadSlice(sshOpt.DownloadFiles, remote)
 		}
 		if sshOpt.ConfigFile == "" && len(applyFileFound) == 0 && len(sshOpt.DownloadFiles) == 0 && len(sshOpt.UploadFiles) == 0 {
-			provider.SSHInto(args[0], sshOpt.Port, privateKeyFile)
+			// Call SSH directly with the calculated target IP and resolved jump host
+			tools.SSHIntoVM(tools.SSHIntoVMRequest{
+				IPAddress:      targetIP,
+				User:           viper.GetString(cloudProvider + ".vm.username"),
+				Port:           sshOpt.Port,
+				PrivateKeyFile: privateKeyFile,
+				JumpHost:       resolvedJumpHost,
+			})
 		}
 	},
 }

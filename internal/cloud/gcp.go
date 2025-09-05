@@ -26,6 +26,16 @@ type ProviderGcp struct {
 	GroupClient *compute.InstanceGroupsClient
 }
 
+func (p ProviderGcp) AttachNetwork(vm Vm, network Network) error {
+	log.Println("[DEBUG] Attaching network: ", network)
+	return nil
+}
+
+func (p ProviderGcp) DetachNetwork(vm Vm, network Network) error {
+	log.Println("[DEBUG] Detaching network: ", network)
+	return nil
+}
+
 func (p ProviderGcp) List() (VmList, error) {
 	log.Println("[DEBUG] List Servers")
 	cloudList := make([]Vm, 0, 100)
@@ -41,8 +51,11 @@ func (p ProviderGcp) List() (VmList, error) {
 			log.Fatalln(err)
 		}
 		for _, instance := range resp.Value.Instances {
-			cloudList = append(cloudList, mapGcpServer(instance))
-			log.Println("[DEBUG] server name: " + *instance.Name)
+			// Only include running instances
+			if instance.GetStatus() == "RUNNING" {
+				cloudList = append(cloudList, mapGcpServer(instance))
+				log.Println("[DEBUG] server name: " + *instance.Name)
+			}
 		}
 		_ = resp
 	}
@@ -151,20 +164,10 @@ func (p ProviderGcp) Deploy(server Vm) (Vm, error) {
 	return p.GetByName(server.Name)
 }
 
-func (p ProviderGcp) SSHInto(serverName string, port int, privateKey string) {
-	server, err := p.GetByName(serverName)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	if privateKey == "" {
-		privateKey = viper.GetString("ssh.privateKey")
-	}
-	tools.SSHIntoVM(tools.SSHIntoVMRequest{
-		IPAddress:      server.IP,
-		User:           viper.GetString("gcp.vm.username"),
-		Port:           port,
-		PrivateKeyFile: privateKey,
-	})
+func (p ProviderGcp) SSHInto(serverName string, port int, privateKey string, jumpHost string) {
+	// This method is not used - SSH logic is handled in cmd/ssh.go
+	// Keeping as stub to satisfy the interface
+	log.Printf("[DEBUG] GCP SSHInto called for %s (not used)", serverName)
 }
 
 // mapGcpServer maps a GCP server to a Vm struct
@@ -175,11 +178,11 @@ func mapGcpServer(server *computepb.Instance) Vm {
 	}
 
 	return Vm{
-		Provider: "gcp",
-		ID:       strconv.FormatUint(server.GetId(), 10),
-		Name:     server.GetName(),
-		IP:       server.GetNetworkInterfaces()[0].GetAccessConfigs()[0].GetNatIP(),
-		// PrivateIP:   server.GetNetworkInterfaces()[0].GetNetworkIP(),
+		Provider:  "gcp",
+		ID:        strconv.FormatUint(server.GetId(), 10),
+		Name:      server.GetName(),
+		IP:        server.GetNetworkInterfaces()[0].GetAccessConfigs()[0].GetNatIP(),
+		PrivateIP: server.GetNetworkInterfaces()[0].GetNetworkIP(),
 		Type:      filepath.Base(server.GetMachineType()),
 		Status:    server.GetStatus(),
 		CreatedAt: createdAt,

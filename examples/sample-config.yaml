@@ -1,0 +1,162 @@
+# Sample configuration file for onctl up -f command
+# This file demonstrates all available configuration options
+
+# VM Configuration
+vm:
+  name: "my-awesome-vm"                    # VM name (required)
+  sshPort: 22                              # SSH port (default: 22)
+  cloudInitFile: "cloud-init/ubuntu-setup.yaml"  # Cloud-init file path
+  jumpHost: ""                             # Jump host for SSH tunneling (optional)
+
+# SSH Configuration
+publicKeyFile: "~/.ssh/id_rsa.pub"        # Path to public key file (default: ~/.ssh/id_rsa.pub)
+
+# Domain Configuration
+domain: "my-vm.example.com"               # Request a domain name for the VM (optional)
+# Note: Requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID environment variables
+
+# File Operations
+applyFiles:                                # Bash scripts to run on remote VM
+  - "docker/docker.sh"                     # Install Docker
+  - "nginx/nginx-setup.sh"                 # Setup Nginx
+  - "custom/my-script.sh"                  # Custom script
+
+downloadFiles:                             # Files to download from remote VM
+  - "/var/log/nginx/access.log"            # Download nginx access log
+  - "/home/user/app.log"                   # Download application log
+
+uploadFiles:                               # Files to upload to remote VM
+  - "configs/nginx.conf:/etc/nginx/nginx.conf"  # Upload nginx config
+  - "scripts/backup.sh:/home/user/backup.sh"    # Upload backup script
+
+# Environment Variables
+variables:                                 # Environment variables passed to scripts
+  - "APP_ENV=production"                   # Application environment
+  - "DB_HOST=localhost"                    # Database host
+  - "API_KEY=your-secret-key"              # API key
+  - "DEBUG=false"                          # Debug mode
+
+# Alternative: Use .env file instead of variables array
+dotEnvFile: ".env.production"              # Path to .env file (alternative to variables)
+
+# Example configurations for different use cases:
+
+# 1. Simple web server setup
+# vm:
+#   name: "web-server"
+#   sshPort: 22
+# applyFiles:
+#   - "nginx/nginx-setup.sh"
+#   - "ssl/letsencrypt.sh"
+# variables:
+#   - "DOMAIN=example.com"
+#   - "EMAIL=admin@example.com"
+
+# 2. Development environment
+# vm:
+#   name: "dev-env"
+#   sshPort: 22
+# applyFiles:
+#   - "docker/docker.sh"
+#   - "nodejs/nodejs.sh"
+#   - "git/git-setup.sh"
+# variables:
+#   - "NODE_ENV=development"
+#   - "GIT_USER=developer"
+
+# 3. Database server
+# vm:
+#   name: "db-server"
+#   sshPort: 22
+# applyFiles:
+#   - "postgresql/postgresql.sh"
+#   - "redis/redis.sh"
+# variables:
+#   - "POSTGRES_DB=myapp"
+#   - "POSTGRES_USER=admin"
+#   - "POSTGRES_PASSWORD=secure-password"
+
+# 4. CI/CD agent
+# vm:
+#   name: "ci-agent"
+#   sshPort: 22
+# applyFiles:
+#   - "azure/agent-pool.sh"
+# dotEnvFile: ".env.azure"
+# # .env.azure file should contain:
+# # TOKEN=your_pat_token
+# # AGENT_POOL_NAME=your_pool_name
+# # URL=https://dev.azure.com/your_org
+
+# 5. Kubernetes cluster node
+# vm:
+#   name: "k8s-node"
+#   sshPort: 22
+# applyFiles:
+#   - "kubernetes/k8s-node.sh"
+# variables:
+#   - "K8S_VERSION=1.28"
+#   - "NODE_ROLE=worker"
+#   - "MASTER_IP=10.0.0.1"
+
+# 6. Monitoring server
+# vm:
+#   name: "monitoring"
+#   sshPort: 22
+# applyFiles:
+#   - "prometheus/prometheus.sh"
+#   - "grafana/grafana.sh"
+#   - "node-exporter/node-exporter.sh"
+# variables:
+#   - "PROMETHEUS_PORT=9090"
+#   - "GRAFANA_PORT=3000"
+
+# 7. File server with custom domain
+# vm:
+#   name: "file-server"
+#   sshPort: 22
+# domain: "files.example.com"
+# applyFiles:
+#   - "nginx/nginx-setup.sh"
+#   - "ssl/letsencrypt.sh"
+#   - "samba/samba.sh"
+# variables:
+#   - "SHARE_NAME=public"
+#   - "SHARE_PATH=/srv/shares"
+
+# 8. Game server
+# vm:
+#   name: "minecraft-server"
+#   sshPort: 22
+# applyFiles:
+#   - "java/java.sh"
+#   - "minecraft/minecraft.sh"
+# variables:
+#   - "SERVER_VERSION=1.20.1"
+#   - "MAX_PLAYERS=20"
+#   - "WORLD_NAME=myworld"
+
+# 9. Backup server
+# vm:
+#   name: "backup-server"
+#   sshPort: 22
+# applyFiles:
+#   - "rsync/rsync.sh"
+#   - "cron/cron-setup.sh"
+# uploadFiles:
+#   - "scripts/backup.sh:/usr/local/bin/backup.sh"
+# variables:
+#   - "BACKUP_SOURCE=/data"
+#   - "BACKUP_DEST=/backups"
+#   - "RETENTION_DAYS=30"
+
+# 10. Load balancer
+# vm:
+#   name: "load-balancer"
+#   sshPort: 22
+# applyFiles:
+#   - "haproxy/haproxy.sh"
+#   - "keepalived/keepalived.sh"
+# variables:
+#   - "BACKEND_SERVERS=10.0.0.1,10.0.0.2,10.0.0.3"
+#   - "VIP=10.0.0.100"

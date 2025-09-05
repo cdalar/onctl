@@ -30,6 +30,7 @@ type Remote struct {
 	Passphrase string
 	Spinner    *spinner.Spinner
 	Client     *ssh.Client
+	JumpHost   string
 }
 
 type RemoteRunConfig struct {
@@ -57,13 +58,14 @@ func (r *Remote) ReadPassphrase() (string, error) {
 }
 
 func (r *Remote) NewSSHConnection() error {
+	if r.Client != nil {
+		return nil
+	}
+
 	var (
 		key ssh.Signer
 		err error
 	)
-	if r.Client != nil {
-		return nil
-	}
 	if r.Passphrase != "" {
 		key, err = ssh.ParsePrivateKeyWithPassphrase([]byte(r.PrivateKey), []byte(r.Passphrase))
 	} else {
@@ -91,7 +93,8 @@ func (r *Remote) NewSSHConnection() error {
 			return err
 		}
 	}
-	// Authentication
+
+	// Authentication config
 	config := &ssh.ClientConfig{
 		User:            r.Username,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
@@ -100,11 +103,46 @@ func (r *Remote) NewSSHConnection() error {
 			ssh.PublicKeys(key),
 		},
 	}
-	// Connect
-	r.Client, err = ssh.Dial("tcp", net.JoinHostPort(r.IPAddress, fmt.Sprint(r.SSHPort)), config)
-	if err != nil {
-		return err
+
+	// Connect with or without jumphost
+	if r.JumpHost != "" {
+		log.Printf("[DEBUG] Connecting to '%s' via jumphost '%s'", r.IPAddress, r.JumpHost)
+		// Connect to jumphost first
+		jumpHostClient, err := ssh.Dial("tcp", net.JoinHostPort(r.JumpHost, fmt.Sprint(r.SSHPort)), config)
+		if err != nil {
+			return fmt.Errorf("failed to connect to jumphost %s: %v", r.JumpHost, err)
+		}
+
+		// Create a connection from jumphost to target
+		conn, err := jumpHostClient.Dial("tcp", net.JoinHostPort(r.IPAddress, fmt.Sprint(r.SSHPort)))
+		if err != nil {
+			if closeErr := jumpHostClient.Close(); closeErr != nil {
+				log.Printf("Failed to close jumphost client: %v", closeErr)
+			}
+			return fmt.Errorf("failed to connect from jumphost to target %s: %v", r.IPAddress, err)
+		}
+
+		// Create SSH connection over the tunnel
+		ncc, chans, reqs, err := ssh.NewClientConn(conn, r.IPAddress, config)
+		if err != nil {
+			if closeErr := conn.Close(); closeErr != nil {
+				log.Printf("Failed to close connection: %v", closeErr)
+			}
+			if closeErr := jumpHostClient.Close(); closeErr != nil {
+				log.Printf("Failed to close jumphost client: %v", closeErr)
+			}
+			return fmt.Errorf("failed to create SSH connection over tunnel: %v", err)
+		}
+
+		r.Client = ssh.NewClient(ncc, chans, reqs)
+	} else {
+		// Direct connection
+		r.Client, err = ssh.Dial("tcp", net.JoinHostPort(r.IPAddress, fmt.Sprint(r.SSHPort)), config)
+		if err != nil {
+			return err
+		}
 	}
+
 	return nil
 }
 
@@ -230,6 +268,7 @@ func NextApplyDir(path string) (applyDirName string, nextApplyDirError error) {
 
 func (r *Remote) RemoteRun(remoteRunConfig *RemoteRunConfig) (string, error) {
 	log.Println("[DEBUG] remoteRunConfig: ", remoteRunConfig)
+
 	// Create a new SSH connection
 	err := r.NewSSHConnection()
 	if err != nil {
@@ -243,7 +282,10 @@ func (r *Remote) RemoteRun(remoteRunConfig *RemoteRunConfig) (string, error) {
 	}
 	defer func() {
 		if err := session.Close(); err != nil {
-			log.Printf("Failed to close session: %v", err)
+			// Only log non-EOF errors as EOF is expected when session is already closed
+			if err.Error() != "EOF" {
+				log.Printf("Failed to close session: %v", err)
+			}
 		}
 	}()
 	stdOutReader, err := session.StdoutPipe()

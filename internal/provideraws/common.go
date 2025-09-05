@@ -2,9 +2,9 @@ package provideraws
 
 import (
 	"fmt"
-
 	"log"
 	"os"
+	"time"
 
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/spf13/viper"
@@ -352,6 +352,80 @@ func GetClient() *ec2.EC2 {
 	return ec2.New(sess)
 }
 
+// GetLatestUbuntu2204AMI returns the latest Ubuntu 22.04 AMI for the current region
+func GetLatestUbuntu2204AMI() (string, error) {
+	svc := GetClient()
+	input := &ec2.DescribeImagesInput{
+		Filters: []*ec2.Filter{
+			{
+				Name: aws.String("owner-alias"),
+				Values: []*string{
+					aws.String("amazon"),
+				},
+			},
+			{
+				Name: aws.String("name"),
+				Values: []*string{
+					aws.String("ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"),
+				},
+			},
+			{
+				Name: aws.String("state"),
+				Values: []*string{
+					aws.String("available"),
+				},
+			},
+		},
+	}
+
+	result, err := svc.DescribeImages(input)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			default:
+				fmt.Println(aerr.Error())
+			}
+		} else {
+			// Print the error, cast err to awserr.Error to get the Code and
+			// Message from an error.
+			fmt.Println(err.Error())
+		}
+		return "", err
+	}
+
+	if len(result.Images) == 0 {
+		return "", fmt.Errorf("no Ubuntu 22.04 AMIs found in region")
+	}
+
+	// Sort images by creation date to get the latest one
+	var latestImage *ec2.Image
+	var latestTime time.Time
+
+	for _, image := range result.Images {
+		if image.CreationDate == nil {
+			continue
+		}
+
+		creationTime, err := time.Parse(time.RFC3339, *image.CreationDate)
+		if err != nil {
+			log.Printf("Failed to parse creation date for image %s: %v", *image.ImageId, err)
+			continue
+		}
+
+		if latestImage == nil || creationTime.After(latestTime) {
+			latestImage = image
+			latestTime = creationTime
+		}
+	}
+
+	if latestImage == nil {
+		return "", fmt.Errorf("no valid Ubuntu 22.04 AMIs found in region")
+	}
+
+	log.Printf("Found latest Ubuntu 22.04 AMI: %s (created: %s)", *latestImage.ImageId, *latestImage.CreationDate)
+	return *latestImage.ImageId, nil
+}
+
 func GetImages() ([]*ec2.Image, error) {
 	svc := GetClient()
 	input := &ec2.DescribeImagesInput{
@@ -365,7 +439,7 @@ func GetImages() ([]*ec2.Image, error) {
 			{
 				Name: aws.String("name"),
 				Values: []*string{
-					aws.String("ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20230208"),
+					aws.String("ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"),
 				},
 			},
 		},

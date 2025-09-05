@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/charmbracelet/glamour"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -29,6 +30,7 @@ var (
 func init() {
 	rootCmd.AddCommand(templatesCmd)
 	templatesCmd.AddCommand(templatesListCmd)
+	templatesCmd.AddCommand(templatesDescribeCmd)
 	templatesListCmd.Flags().StringVarP(&indexFile, "file", "f", "", "local index.yaml file path")
 }
 
@@ -100,5 +102,120 @@ var templatesListCmd = &cobra.Command{
 
 		log.Println("[DEBUG] Templates:", index)
 		TabWriter(index, tmpl)
+	},
+}
+
+var templatesDescribeCmd = &cobra.Command{
+	Use:     "describe <template-name>",
+	Aliases: []string{"desc"},
+	Short:   "Describe a template by showing its README.md",
+	Long:    `Fetch and display the README.md file for a specific template from the GitHub repository.`,
+	Example: `  onctl templates describe azure`,
+	Args:    cobra.ExactArgs(1),
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		// Get template names from the index
+		var body []byte
+		var err error
+
+		if indexFile != "" {
+			// Read from local file
+			body, err = os.ReadFile(indexFile)
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveError
+			}
+		} else {
+			// Fetch from remote
+			resp, err := http.Get("https://templates.onctl.com/index.yaml")
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveError
+			}
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					log.Printf("Failed to close response body: %v", err)
+				}
+			}()
+
+			if resp.StatusCode != http.StatusOK {
+				return nil, cobra.ShellCompDirectiveError
+			}
+
+			body, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveError
+			}
+		}
+
+		// Parse the YAML
+		var index TemplateIndex
+		err = yaml.Unmarshal(body, &index)
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
+		// Extract template names
+		list := []string{}
+		for _, template := range index.Templates {
+			list = append(list, template.Name)
+		}
+
+		return list, cobra.ShellCompDirectiveNoFileComp
+	},
+	Run: func(cmd *cobra.Command, args []string) {
+		templateName := args[0]
+
+		// Construct the GitHub URL for the README.md file
+		readmeURL := fmt.Sprintf("https://raw.githubusercontent.com/cdalar/onctl-templates/main/%s/README.md", templateName)
+
+		// Fetch the README.md content
+		resp, err := http.Get(readmeURL)
+		if err != nil {
+			fmt.Printf("Error fetching README for template '%s': %v\n", templateName, err)
+			os.Exit(1)
+		}
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				log.Printf("Failed to close response body: %v", err)
+			}
+		}()
+
+		// Check for 404 status code
+		if resp.StatusCode == http.StatusNotFound {
+			fmt.Printf("Error: Template '%s' not found (404)\n", templateName)
+			fmt.Printf("The README file at %s does not exist\n", readmeURL)
+			os.Exit(1)
+		}
+
+		// Check for other non-200 status codes
+		if resp.StatusCode != http.StatusOK {
+			fmt.Printf("Error: Unexpected status code %d when fetching README for template '%s'\n", resp.StatusCode, templateName)
+			os.Exit(1)
+		}
+
+		// Read the content
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			fmt.Printf("Error reading README content for template '%s': %v\n", templateName, err)
+			os.Exit(1)
+		}
+
+		// Render the markdown content for terminal display using glamour
+		// Create a renderer with auto-style detection and word wrap
+		r, err := glamour.NewTermRenderer(
+			glamour.WithAutoStyle(),   // detect background color and pick appropriate theme
+			glamour.WithWordWrap(100), // wrap output at 100 characters
+		)
+		if err != nil {
+			fmt.Printf("Error creating markdown renderer: %v\n", err)
+			os.Exit(1)
+		}
+
+		rendered, err := r.Render(string(body))
+		if err != nil {
+			fmt.Printf("Error rendering markdown: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("README for template '%s':\n\n", templateName)
+		fmt.Print(rendered)
 	},
 }
