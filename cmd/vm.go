@@ -30,6 +30,32 @@ var vmCmd = &cobra.Command{
 var vmNetworkAttachCmd = &cobra.Command{
 	Use:   "attach",
 	Short: "Attach a network",
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		// Complete VM names for the --vm flag
+		if cmd.Flags().Changed("vm") {
+			// If --vm is already set, complete network names
+			netList, err := networkManager.List()
+			list := []string{}
+			for _, net := range netList {
+				list = append(list, net.Name)
+			}
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveError
+			}
+			return list, cobra.ShellCompDirectiveNoFileComp
+		} else {
+			// Complete VM names
+			VMList, err := provider.List()
+			list := []string{}
+			for _, vm := range VMList.List {
+				list = append(list, vm.Name)
+			}
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveError
+			}
+			return list, cobra.ShellCompDirectiveNoFileComp
+		}
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Do network creation
 		log.Println("[DEBUG] Attaching network")
@@ -53,6 +79,32 @@ var vmNetworkAttachCmd = &cobra.Command{
 var vmNetworkDetachCmd = &cobra.Command{
 	Use:   "detach",
 	Short: "Detach a network",
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		// Complete VM names for the --vm flag
+		if cmd.Flags().Changed("vm") {
+			// If --vm is already set, complete network names
+			netList, err := networkManager.List()
+			list := []string{}
+			for _, net := range netList {
+				list = append(list, net.Name)
+			}
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveError
+			}
+			return list, cobra.ShellCompDirectiveNoFileComp
+		} else {
+			// Complete VM names
+			VMList, err := provider.List()
+			list := []string{}
+			for _, vm := range VMList.List {
+				list = append(list, vm.Name)
+			}
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveError
+			}
+			return list, cobra.ShellCompDirectiveNoFileComp
+		}
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Do network creation
 		log.Println("[DEBUG] Detaching network")

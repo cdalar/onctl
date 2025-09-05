@@ -282,7 +282,10 @@ func (r *Remote) RemoteRun(remoteRunConfig *RemoteRunConfig) (string, error) {
 	}
 	defer func() {
 		if err := session.Close(); err != nil {
-			log.Printf("Failed to close session: %v", err)
+			// Only log non-EOF errors as EOF is expected when session is already closed
+			if err.Error() != "EOF" {
+				log.Printf("Failed to close session: %v", err)
+			}
 		}
 	}()
 	stdOutReader, err := session.StdoutPipe()

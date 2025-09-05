@@ -88,6 +88,19 @@ var networkDeleteCmd = &cobra.Command{
 	Aliases: []string{"rm", "remove", "destroy", "down", "del"},
 	Short:   "Delete a network",
 	Long:    `Delete a network`,
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		netList, err := networkManager.List()
+		list := []string{}
+		for _, net := range netList {
+			list = append(list, net.Name)
+		}
+
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
+		return list, cobra.ShellCompDirectiveNoFileComp
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Do network deletion
 		// log.Println("Deleting network")

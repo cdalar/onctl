@@ -112,6 +112,50 @@ var templatesDescribeCmd = &cobra.Command{
 	Long:    `Fetch and display the README.md file for a specific template from the GitHub repository.`,
 	Example: `  onctl templates describe azure`,
 	Args:    cobra.ExactArgs(1),
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		// Get template names from the index
+		var body []byte
+		var err error
+
+		if indexFile != "" {
+			// Read from local file
+			body, err = os.ReadFile(indexFile)
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveError
+			}
+		} else {
+			// Fetch from remote
+			resp, err := http.Get("https://templates.onctl.com/index.yaml")
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveError
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				return nil, cobra.ShellCompDirectiveError
+			}
+
+			body, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveError
+			}
+		}
+
+		// Parse the YAML
+		var index TemplateIndex
+		err = yaml.Unmarshal(body, &index)
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
+		// Extract template names
+		list := []string{}
+		for _, template := range index.Templates {
+			list = append(list, template.Name)
+		}
+
+		return list, cobra.ShellCompDirectiveNoFileComp
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		templateName := args[0]
 

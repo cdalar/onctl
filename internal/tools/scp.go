@@ -29,7 +29,10 @@ func (r *Remote) DownloadFile(srcPath, dstPath string) error {
 	}
 	defer func() {
 		if err := sftp.Close(); err != nil {
-			log.Printf("Failed to close SFTP client: %v", err)
+			// Only log non-EOF errors as EOF is expected when connection is already closed
+			if err.Error() != "EOF" {
+				log.Printf("Failed to close SFTP client: %v", err)
+			}
 		}
 	}()
 
@@ -40,7 +43,10 @@ func (r *Remote) DownloadFile(srcPath, dstPath string) error {
 	}
 	defer func() {
 		if err := srcFile.Close(); err != nil {
-			log.Printf("Failed to close source file: %v", err)
+			// Only log non-EOF errors as EOF is expected when file is already closed
+			if err.Error() != "EOF" {
+				log.Printf("Failed to close source file: %v", err)
+			}
 		}
 	}()
 
@@ -51,7 +57,10 @@ func (r *Remote) DownloadFile(srcPath, dstPath string) error {
 	}
 	defer func() {
 		if err := dstFile.Close(); err != nil {
-			log.Printf("Failed to close destination file: %v", err)
+			// Only log non-EOF errors as EOF is expected when file is already closed
+			if err.Error() != "EOF" {
+				log.Printf("Failed to close destination file: %v", err)
+			}
 		}
 	}()
 
@@ -134,7 +143,10 @@ func (r *Remote) SSHCopyFile(srcPath, dstPath string) error {
 	}
 	defer func() {
 		if err := sftp.Close(); err != nil {
-			log.Printf("Failed to close SFTP client: %v", err)
+			// Only log non-EOF errors as EOF is expected when connection is already closed
+			if err.Error() != "EOF" {
+				log.Printf("Failed to close SFTP client: %v", err)
+			}
 		}
 	}()
 
@@ -146,7 +158,10 @@ func (r *Remote) SSHCopyFile(srcPath, dstPath string) error {
 	}
 	defer func() {
 		if err := srcFile.Close(); err != nil {
-			log.Printf("Failed to close source file: %v", err)
+			// Only log non-EOF errors as EOF is expected when file is already closed
+			if err.Error() != "EOF" {
+				log.Printf("Failed to close source file: %v", err)
+			}
 		}
 	}()
 
@@ -157,7 +172,10 @@ func (r *Remote) SSHCopyFile(srcPath, dstPath string) error {
 	}
 	defer func() {
 		if err := dstFile.Close(); err != nil {
-			log.Printf("Failed to close destination file: %v", err)
+			// Only log non-EOF errors as EOF is expected when file is already closed
+			if err.Error() != "EOF" {
+				log.Printf("Failed to close destination file: %v", err)
+			}
 		}
 	}()
 
