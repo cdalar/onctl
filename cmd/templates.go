@@ -129,7 +129,11 @@ var templatesDescribeCmd = &cobra.Command{
 			if err != nil {
 				return nil, cobra.ShellCompDirectiveError
 			}
-			defer resp.Body.Close()
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					log.Printf("Failed to close response body: %v", err)
+				}
+			}()
 
 			if resp.StatusCode != http.StatusOK {
 				return nil, cobra.ShellCompDirectiveError
@@ -199,6 +203,8 @@ var templatesDescribeCmd = &cobra.Command{
 		rendered := markdown.Render(string(body), 100, 4)
 
 		fmt.Printf("README for template '%s':\n\n", templateName)
-		os.Stdout.Write(rendered)
+		if _, err := os.Stdout.Write(rendered); err != nil {
+			log.Printf("Failed to write to stdout: %v", err)
+		}
 	},
 }
