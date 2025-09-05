@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"os"
 
-	markdown "github.com/MichaelMure/go-term-markdown"
+	"github.com/charmbracelet/glamour"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -198,13 +198,24 @@ var templatesDescribeCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// Render the markdown content for terminal display
-		// Use terminal width detection and adjust rendering parameters
-		rendered := markdown.Render(string(body), 100, 4)
+		// Render the markdown content for terminal display using glamour
+		// Create a renderer with auto-style detection and word wrap
+		r, err := glamour.NewTermRenderer(
+			glamour.WithAutoStyle(),   // detect background color and pick appropriate theme
+			glamour.WithWordWrap(100), // wrap output at 100 characters
+		)
+		if err != nil {
+			fmt.Printf("Error creating markdown renderer: %v\n", err)
+			os.Exit(1)
+		}
+
+		rendered, err := r.Render(string(body))
+		if err != nil {
+			fmt.Printf("Error rendering markdown: %v\n", err)
+			os.Exit(1)
+		}
 
 		fmt.Printf("README for template '%s':\n\n", templateName)
-		if _, err := os.Stdout.Write(rendered); err != nil {
-			log.Printf("Failed to write to stdout: %v", err)
-		}
+		fmt.Print(rendered)
 	},
 }
