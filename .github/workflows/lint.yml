@@ -13,7 +13,12 @@ on:
     paths-ignore:
       - 'docs/**'
   workflow_call:
-
+  workflow_dispatch:        # <- Manuel çalıştırma için gerekli
+    inputs:
+      target:
+        description: "Select the target branch"
+        required: false
+        default: "main"
 jobs:
   run:
     name: Lint
