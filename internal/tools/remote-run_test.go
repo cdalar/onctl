@@ -86,7 +86,8 @@ func TestExists(t *testing.T) {
 	tempFile, err := os.CreateTemp("", "test_exists_*.txt")
 	assert.NoError(t, err)
 	defer func() { _ = os.Remove(tempFile.Name()) }()
-	tempFile.Close()
+	err = tempFile.Close()
+	assert.NoError(t, err)
 
 	fileExists, err := exists(tempFile.Name())
 	assert.NoError(t, err)
