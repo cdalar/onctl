@@ -1,0 +1,123 @@
+---
+globs: "internal/cloud/*.go,internal/provider*/*.go"
+description: "Cloud provider implementation patterns and interfaces"
+---
+
+# Cloud Provider Implementation Patterns
+
+## Core Interfaces
+
+All cloud providers must implement these interfaces defined in [internal/cloud/cloud.go](mdc:internal/cloud/cloud.go):
+
+### VM Provider Interface
+```go
+type VmProvider interface {
+    Deploy(server Vm) (Vm, error)
+    Destroy(server Vm) error
+    List() (VmList, error)
+    GetByName(serverName string) (Vm, error)
+    CreateSSHKey(publicKeyFile string) (keyID string, err error)
+    SSHInto(serverName string, port int, privateKey string, jumpHost string)
+    AttachNetwork(vm Vm, network Network) error
+    DetachNetwork(vm Vm, network Network) error
+}
+```
+
+### Network Provider Interface
+```go
+type NetworkProvider interface {
+    Create(network Network) (Network, error)
+    Delete(network Network) error
+    List() ([]Network, error)
+    GetByName(networkName string) (Network, error)
+}
+```
+
+## Implementation Patterns
+
+### 1. Data Mapping Functions
+Each provider should have mapping functions to convert provider-specific types to common types:
+
+```go
+// Example from hetzner.go
+func mapHetznerServer(server hcloud.Server) Vm {
+    return Vm{
+        Provider:  "hetzner",
+        ID:        strconv.FormatInt(server.ID, 10),
+        Name:      server.Name,
+        IP:        server.PublicNet.IPv4.IP.String(),
+        // ... other fields
+    }
+}
+```
+
+**Key Requirements:**
+- Always set the Provider field to identify the cloud provider
+- Convert IDs to strings for consistency
+- Handle nil/empty values gracefully
+- Include cost calculations when available
+
+### 2. Error Handling Patterns
+
+```go
+// Good: Handle provider-specific errors
+if herr, ok := err.(hcloud.Error); ok {
+    switch herr.Code {
+    case hcloud.ErrorCodeUniquenessError:
+        // Handle duplicate resource
+        return existingResource, nil
+    default:
+        log.Printf("Provider error: %s", herr.Error())
+    }
+}
+```
+
+### 3. Resource Tagging/Labeling
+Always tag/label resources with "Owner=onctl" for identification:
+
+```go
+// AWS example
+TagSpecifications: []*ec2.TagSpecification{
+    {
+        ResourceType: aws.String("instance"),
+        Tags: []*ec2.Tag{
+            {Key: aws.String("Owner"), Value: aws.String("onctl")},
+        },
+    },
+}
+
+// Hetzner example
+Labels: map[string]string{
+    "Owner": "onctl",
+},
+```
+
+### 4. SSH Key Management
+- Generate consistent key names using MD5 hash
+- Handle duplicate key scenarios gracefully
+- Return provider-specific key IDs
+
+### 5. Network Operations
+- Support both direct connections and jumphost scenarios
+- Use provider-specific network attachment methods
+- Handle network creation with proper CIDR configuration
+
+## Provider-Specific Notes
+
+### Hetzner ([internal/cloud/hetzner.go](mdc:internal/cloud/hetzner.go))
+- Uses hcloud-go/v2 SDK
+- Supports cost calculations with pricing data
+- Network zones are configurable
+- Server status mapping: running, off, etc.
+
+### AWS ([internal/cloud/aws.go](mdc:internal/cloud/aws.go))
+- Uses aws-sdk-go
+- Supports VPC and subnet management
+- Security group handling
+- AMI selection for Ubuntu 22.04
+
+### Testing Provider Code
+- Focus on testing mapping functions (100% testable)
+- Mock provider SDKs when necessary
+- Test error handling scenarios
+- Avoid testing actual cloud API calls

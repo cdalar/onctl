@@ -1,0 +1,149 @@
+---
+globs: "internal/tools/ssh.go,internal/tools/scp.go,internal/tools/remote-run.go,cmd/ssh.go"
+description: "SSH and remote operations patterns and best practices"
+---
+
+# SSH and Remote Operations Guide
+
+## Core Components
+
+### SSH Connection Management ([internal/tools/remote-run.go](mdc:internal/tools/remote-run.go))
+The `Remote` struct handles SSH connections with optional jumphost support:
+
+```go
+type Remote struct {
+    Username   string
+    IPAddress  string
+    SSHPort    int
+    PrivateKey string
+    Passphrase string
+    Spinner    *spinner.Spinner
+    Client     *ssh.Client
+    JumpHost   string
+}
+```
+
+### File Transfer ([internal/tools/scp.go](mdc:internal/tools/scp.go))
+- `SSHCopyFile()` - Upload files to remote server
+- `DownloadFile()` - Download files from remote server
+- Both support jumphost scenarios
+
+### Remote Execution ([internal/tools/remote-run.go](mdc:internal/tools/remote-run.go))
+- `RemoteRun()` - Execute commands on remote server
+- `CopyAndRunRemoteFile()` - Copy script and execute it remotely
+
+## Key Patterns
+
+### 1. Jumphost Support
+All SSH operations support optional jumphost routing:
+
+```go
+if r.JumpHost != "" {
+    // Use ProxyJump for scp operations
+    scpArgs = append(scpArgs, "-J", jumpHostSpec)
+    
+    // Or create tunneled SSH connection
+    jumpHostClient, err := ssh.Dial("tcp", net.JoinHostPort(r.JumpHost, fmt.Sprint(r.SSHPort)), config)
+    // ... tunnel setup
+}
+```
+
+### 2. Private Key Handling
+- Support both passphrase-protected and unprotected keys
+- Interactive passphrase prompting when needed
+- Temporary key files for scp operations
+
+### 3. Environment Variable Processing
+Environment variables are processed and injected into remote commands:
+
+```go
+func variablesToEnvVars(vars []string) string {
+    var command string
+    for _, value := range vars {
+        envs := strings.SplitN(value, "=", 2)
+        if len(envs) == 1 {
+            envs = append(envs, os.Getenv(envs[0])) // Get from local env
+        }
+        vars_command := envs[0] + "=" + strconv.Quote(envs[1])
+        command += vars_command + " "
+    }
+    return command
+}
+```
+
+### 4. Apply Directory Management
+Remote operations use versioned apply directories (`.onctl/apply00`, `.onctl/apply01`, etc.):
+
+```go
+func NextApplyDir(path string) (applyDirName string, nextApplyDirError error) {
+    // Create .onctl directory if it doesn't exist
+    // Find next available apply directory number
+    // Return path like "path/.onctl/apply01"
+}
+```
+
+### 5. Error Handling Best Practices
+
+```go
+// Always close resources properly
+defer func() {
+    if err := session.Close(); err != nil {
+        if err.Error() != "EOF" {
+            log.Printf("Failed to close session: %v", err)
+        }
+    }
+}()
+```
+
+## Configuration Parsing
+
+### .env File Processing
+- Comments (lines starting with #) are ignored
+- Empty lines are skipped
+- Format: `KEY=value`
+- Supports values with spaces
+
+### SSH Configuration
+SSH connection parameters are parsed from various sources:
+- Command line flags
+- Configuration files
+- Environment variables
+
+## Security Considerations
+
+### SSH Options
+Always use secure SSH options:
+```go
+scpArgs := []string{
+    "-o", "UserKnownHostsFile=/dev/null",
+    "-o", "StrictHostKeyChecking=no",
+    "-i", tempKeyFile.Name(),
+    "-P", fmt.Sprint(r.SSHPort),
+}
+```
+
+### Temporary File Cleanup
+Always clean up temporary key files:
+```go
+defer func() {
+    if err := os.Remove(tempKeyFile.Name()); err != nil {
+        log.Printf("Failed to remove temp key file: %v", err)
+    }
+}()
+```
+
+## Testing Remote Operations
+
+### What to Test
+- Environment variable processing (100% testable)
+- Configuration file parsing (testable with temp files)
+- Path manipulation and directory logic
+- Error handling scenarios
+
+### What NOT to Test
+- Actual SSH connections
+- Real file transfers
+- Interactive password prompts
+
+### Mock Patterns
+Use system command mocking for scp operations rather than trying to mock SSH connections directly.
