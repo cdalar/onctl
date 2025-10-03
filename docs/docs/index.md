@@ -41,7 +41,7 @@ brew install cdalar/tap/onctl
 ### Linux
 
 ```bash
-curl -sLS https://www.onctl.com/get.sh | bash
+curl -sLS https://docs.onctl.io/get.sh | bash
 sudo install onctl /usr/local/bin/
 ```
 
