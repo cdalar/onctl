@@ -2,7 +2,7 @@ GO_CMD=go
 BINARY_NAME=onctl
 
 # Mark targets as phony (not files)
-.PHONY: all build clean run test
+.PHONY: all build clean lint coverage release test
 
 # Default target
 all: build
@@ -24,3 +24,14 @@ clean:
 # Test the application
 test:
 	$(GO_CMD) test ./...
+
+lint:
+	golangci-lint run ./...
+
+coverage:
+	$(GO_CMD) test ./... -coverprofile=coverage.out
+	$(GO_CMD) tool cover -html=coverage.out -o coverage.html
+	open coverage.html
+
+release:
+	goreleaser release --clean
