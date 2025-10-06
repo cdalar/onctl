@@ -1,0 +1,70 @@
+---
+globs: "Makefile,main.go,go.mod,go.sum,goreleaser.yml"
+description: "Build system and deployment guidelines for the Golang project"
+---
+
+# Build and Deployment Guide
+
+## Build System
+
+### Primary Build Tool
+**IMPORTANT:** Always use [Makefile](mdc:Makefile) instead of direct `go build` commands. The Makefile handles cross-compilation, version injection, formatting, and tidying.
+
+```bash
+# Correct way to build
+make                        # Builds the default binary (onctl)
+make clean                  # Cleans up binary
+make test                   # Runs all tests
+make lint                   # Lints the code
+make coverage               # Generates and opens coverage report
+make release                # Creates release using Goreleaser
+
+# Avoid direct go commands
+go build ./...              # Don't do this - use make instead
+go test ./...               # Don't do this - use make test
+```
+
+The Makefile performs:
+- `go mod tidy` to ensure dependencies
+- `go fmt ./...` for code formatting
+- `go build` with ldflags for version (`git rev-parse HEAD | cut -c1-7`), build time, and Go version
+- CGO_ENABLED=0 for static binary
+
+### Dependencies ([go.mod](mdc:go.mod))
+Manage dependencies via `go mod tidy` in the Makefile. Key dependencies include:
+- Cobra for CLI framework
+- Cloud provider SDKs (e.g., aws-sdk-go, hcloud)
+- SSH libraries (golang.org/x/crypto/ssh)
+- Viper for configuration
+- Testify for testing
+- Golangci-lint for linting
+- Goreleaser for releases
+
+Update dependencies by running `make` or directly `go mod tidy` if needed, but prefer Makefile.
+
+### Release Artifacts
+Releases are built using [goreleaser.yml](mdc:goreleaser.yml) via `make release`. Artifacts are generated for multiple platforms:
+- macOS (amd64, arm64)
+- Linux (amd64, arm64)
+- Windows (amd64)
+
+Stored in dist/ directory with versioned folders.
+
+## Development Workflow
+
+### Code Quality
+- Run `make lint` before commits (uses golangci-lint)
+- Maintain test coverage (target 20%+; current ~18%)
+- Follow Go conventions: proper error handling, no unused imports
+
+### Testing
+- `make test` for full suite: `go test ./...`
+- Coverage: `make coverage` generates HTML report and opens it
+
+### Deployment Considerations
+- Binary is statically linked (CGO_ENABLED=0)
+- Supports multi-platform builds via Goreleaser
+- Versioning: Injected via ldflags from git commit and build time
+- Distribution: Use Homebrew formula or direct binary download
+
+Always commit with clean state: run `make` to build and lint before pushing.

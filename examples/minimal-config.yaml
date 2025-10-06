@@ -1,0 +1,8 @@
+# Minimal configuration file for onctl up -f command
+# This is the simplest possible configuration
+
+vm:
+  name: "test-vm"
+
+applyFiles:
+  - "docker/docker.sh"

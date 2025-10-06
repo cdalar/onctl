@@ -1,0 +1,54 @@
+---
+alwaysApply: true
+description: "Project structure and architecture guide for onctl"
+---
+
+# OnCtl Project Structure Guide
+
+OnCtl is a Go-based CLI tool for managing cloud VMs across multiple providers (AWS, Azure, GCP, Hetzner).
+
+## Main Entry Point
+- [main.go](mdc:main.go) - Application entry point
+- [Makefile](mdc:Makefile) - Build system (use `make` instead of `go build` directly)
+
+## Core Architecture
+
+### Command Layer (`cmd/`)
+- [cmd/root.go](mdc:cmd/root.go) - Root command and provider initialization
+- [cmd/common.go](mdc:cmd/common.go) - Shared utilities and helper functions
+- [cmd/create.go](mdc:cmd/create.go) - VM creation commands
+- [cmd/destroy.go](mdc:cmd/destroy.go) - VM destruction commands
+- [cmd/list.go](mdc:cmd/list.go) - VM listing commands
+- [cmd/ssh.go](mdc:cmd/ssh.go) - SSH connection commands
+- [cmd/network.go](mdc:cmd/network.go) - Network management commands
+- [cmd/vm.go](mdc:cmd/vm.go) - VM-specific operations
+
+### Cloud Providers (`internal/cloud/`)
+- [internal/cloud/cloud.go](mdc:internal/cloud/cloud.go) - Common cloud interfaces
+- [internal/cloud/aws.go](mdc:internal/cloud/aws.go) - AWS implementation
+- [internal/cloud/azure.go](mdc:internal/cloud/azure.go) - Azure implementation
+- [internal/cloud/gcp.go](mdc:internal/cloud/gcp.go) - GCP implementation
+- [internal/cloud/hetzner.go](mdc:internal/cloud/hetzner.go) - Hetzner implementation
+
+### Provider-Specific Helpers
+- [internal/provideraws/common.go](mdc:internal/provideraws/common.go) - AWS-specific utilities
+- [internal/providerazure/common.go](mdc:internal/providerazure/common.go) - Azure-specific utilities
+- [internal/providergcp/common.go](mdc:internal/providergcp/common.go) - GCP-specific utilities
+- [internal/providerhtz/common.go](mdc:internal/providerhtz/common.go) - Hetzner-specific utilities
+
+### Tools and Utilities (`internal/tools/`)
+- [internal/tools/remote-run.go](mdc:internal/tools/remote-run.go) - Remote command execution
+- [internal/tools/scp.go](mdc:internal/tools/scp.go) - File transfer operations
+- [internal/tools/ssh.go](mdc:internal/tools/ssh.go) - SSH utilities
+- [internal/tools/cloud-init.go](mdc:internal/tools/cloud-init.go) - Cloud-init helpers
+- [internal/files/embed.go](mdc:internal/files/embed.go) - Embedded files
+
+### Configuration
+- [examples/](mdc:examples/) - Example configuration files
+- Configuration is handled through Viper in [cmd/common.go](mdc:cmd/common.go)
+
+## Key Patterns
+- All cloud providers implement common interfaces defined in `cloud.go`
+- Remote operations use SSH with optional jumphost support
+- Configuration merging prioritizes command-line flags over config files
+- Error handling follows Go conventions with proper logging

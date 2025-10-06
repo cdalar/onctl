@@ -69,6 +69,7 @@ func init() {
 	createCmd.Flags().StringVar(&opt.Domain, "domain", "", "request a domain name for the VM")
 	createCmd.Flags().StringSliceVarP(&opt.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
 	createCmd.Flags().StringVarP(&opt.ConfigFile, "file", "f", "", "Path to configuration YAML file")
+	createCmd.Flags().StringVarP(&opt.Vm.JumpHost, "jump-host", "j", "", "Jump host")
 	createCmd.SetUsageTemplate(createCmd.UsageTemplate() + `
 Environment Variables:
   CLOUDFLARE_API_TOKEN  Cloudflare API Token (required for --domain)
@@ -165,8 +166,44 @@ var createCmd = &cobra.Command{
 		if err != nil {
 			log.Println(err)
 		}
+
+		// Resolve jumphost name to IP address if it's not already an IP
+		resolvedJumpHost := opt.Vm.JumpHost
+		if opt.Vm.JumpHost != "" {
+			jumpHostVM, err := provider.GetByName(opt.Vm.JumpHost)
+			if err != nil {
+				log.Printf("[WARNING] Could not resolve jumphost '%s': %v", opt.Vm.JumpHost, err)
+			} else {
+				resolvedJumpHost = jumpHostVM.IP
+				log.Printf("[DEBUG] Resolved jumphost '%s' to IP '%s'", opt.Vm.JumpHost, resolvedJumpHost)
+			}
+		}
+
+		// Determine which IP to use for the target VM
+		var targetIP string
+		var displayIP string
+		if resolvedJumpHost != "" && (vm.IP == "" || vm.IP == "<nil>") {
+			// If using jumphost and no public IP, use private IP
+			if vm.PrivateIP != "" && vm.PrivateIP != "N/A" {
+				targetIP = vm.PrivateIP
+				displayIP = vm.PrivateIP + " (private, via jumphost)"
+				log.Printf("[DEBUG] Using private IP '%s' for target VM", targetIP)
+			} else {
+				log.Fatalln("No private IP available for VM")
+			}
+		} else {
+			// Use public IP if available
+			if vm.IP != "" && vm.IP != "<nil>" {
+				targetIP = vm.IP
+				displayIP = vm.IP
+				log.Printf("[DEBUG] Using public IP '%s' for target VM", targetIP)
+			} else {
+				log.Fatalln("No public IP available for VM and no jumphost specified")
+			}
+		}
+
 		s.Restart()
-		s.Suffix = " VM IP: " + vm.IP
+		s.Suffix = " VM IP: " + displayIP
 		s.Stop()
 		fmt.Println("\033[32m\u2714\033[0m" + s.Suffix)
 
@@ -183,19 +220,33 @@ var createCmd = &cobra.Command{
 		// fmt.Println("\033[32m\u2714\033[0m VM Starting...")
 		remote := tools.Remote{
 			Username:   viper.GetString(cloudProvider + ".vm.username"),
-			IPAddress:  vm.IP,
+			IPAddress:  targetIP,
 			SSHPort:    opt.Vm.SSHPort,
 			PrivateKey: string(privateKey),
 			Spinner:    s,
+			JumpHost:   resolvedJumpHost,
 		}
 
 		// BEGIN Domain
 		if opt.Domain != "" {
 			s.Restart()
 			s.Suffix = " Requesting Domain..."
+
+			// For domain registration, use jumphost IP if VM has no public IP
+			var domainIP string
+			if resolvedJumpHost != "" && (vm.IP == "" || vm.IP == "<nil>") {
+				// Use jumphost IP for domain when VM has no public IP
+				domainIP = resolvedJumpHost
+				log.Printf("[DEBUG] Using jumphost IP '%s' for domain registration", domainIP)
+			} else {
+				// Use VM's public IP for domain
+				domainIP = vm.IP
+				log.Printf("[DEBUG] Using VM public IP '%s' for domain registration", domainIP)
+			}
+
 			_, err := domain.NewCloudFlareService().SetRecord(&domain.SetRecordRequest{
 				Subdomain: opt.Domain,
-				Ipaddress: vm.IP,
+				Ipaddress: domainIP,
 			})
 			s.Stop()
 			if err != nil {

@@ -1,0 +1,99 @@
+---
+globs: "Makefile,main.go,go.mod,go.sum,.github/**/*,dist/**/*"
+description: "Build system and deployment guidelines"
+---
+
+# Build and Deployment Guide
+
+## Build System
+
+### Primary Build Tool
+**IMPORTANT:** Always use [Makefile](mdc:Makefile) instead of direct `go build` commands.
+
+```bash
+# Correct way to build
+make
+
+# Avoid direct go build
+go build  # Don't do this
+```
+
+The Makefile handles:
+- Cross-compilation for multiple platforms
+- Version injection
+- Asset embedding
+- Release packaging
+
+### Dependencies ([go.mod](mdc:go.mod))
+Key dependencies include:
+- Cobra for CLI framework
+- Cloud provider SDKs (aws-sdk-go, hcloud-go, etc.)
+- SSH libraries (golang.org/x/crypto/ssh)
+- Testify for testing
+
+### Release Artifacts ([dist/](mdc:dist/))
+Built artifacts are stored in `dist/` directory:
+- `onctl_darwin_amd64_v1/` - macOS Intel
+- `onctl_darwin_arm64_v8.0/` - macOS Apple Silicon  
+- `onctl-linux_linux_amd64_v1/` - Linux x64
+- `onctl-linux_linux_arm64_v8.0/` - Linux ARM64
+- `onctl-windows_windows_amd64_v1/` - Windows x64
+
+### Homebrew Formula
+- [dist/homebrew/onctl.rb](mdc:dist/homebrew/onctl.rb) - Homebrew formula for macOS installation
+
+## Configuration Management
+
+### Embedded Files ([internal/files/](mdc:internal/files/))
+Static files are embedded using Go's embed functionality:
+- Cloud-init templates
+- Shell scripts for remote execution
+- Default configuration templates
+
+### Environment Variables
+The application respects these environment variables:
+- `CLOUDFLARE_API_TOKEN` - For domain management
+- `CLOUDFLARE_ZONE_ID` - DNS zone configuration
+- Provider-specific credentials (AWS_*, AZURE_*, etc.)
+
+### Configuration Files
+- [examples/](mdc:examples/) - Example configurations
+- Support for YAML configuration files
+- Command-line flags override config file values
+
+## Development Workflow
+
+### Code Quality
+- Run `golangci-lint run --timeout 5m` before commits
+- Maintain test coverage above 18% (current target)
+- Follow Go conventions and error handling patterns
+
+### Testing
+- Use `go test ./...` for full test suite
+- Generate coverage reports: `go test -coverprofile=coverage.out ./...`
+- Focus testing on pure functions and business logic
+
+### Documentation
+- [docs/](mdc:docs/) - Docusaurus-based documentation
+- Auto-completion support in [AUTO-COMPLETION.md](mdc:AUTO-COMPLETION.md)
+- Configuration examples in [CONFIG-EXAMPLES.md](mdc:CONFIG-EXAMPLES.md)
+
+## Deployment Considerations
+
+### Multi-Platform Support
+The application is designed to run on:
+- macOS (Intel and Apple Silicon)
+- Linux (x64 and ARM64)
+- Windows (x64)
+
+### Cloud Provider Authentication
+Each provider has specific authentication requirements:
+- AWS: IAM credentials or roles
+- Azure: Service principal or managed identity
+- GCP: Service account keys
+- Hetzner: API tokens
+
+### Network Requirements
+- SSH access to target VMs (port 22 or custom)
+- Cloud provider API access
+- Optional: Jumphost/bastion support for private networks

@@ -1,0 +1,90 @@
+---
+globs: "*_test.go"
+description: "Testing guidelines and patterns for onctl"
+---
+
+# OnCtl Testing Guidelines
+
+## Testing Strategy
+
+### Coverage Goals
+- **Target overall coverage:** 20%+ (currently at 18.0%)
+- **Priority areas:** Core business logic, data transformations, utilities
+- **Avoid testing:** Complex integrations requiring real cloud resources
+
+### Test File Organization
+- Test files follow `*_test.go` naming convention
+- Place tests in the same package as the code being tested
+- Group related tests using descriptive function names with prefixes
+
+### Successful Test Patterns
+
+#### 1. Pure Function Testing (Preferred)
+Focus on functions with clear inputs/outputs:
+```go
+func TestMapHetznerServer(t *testing.T) {
+    server := hcloud.Server{
+        ID: 123,
+        Name: "test-server",
+        // ... setup data
+    }
+    
+    result := mapHetznerServer(server)
+    
+    assert.Equal(t, "hetzner", result.Provider)
+    assert.Equal(t, "123", result.ID)
+}
+```
+
+#### 2. Configuration Parsing Tests
+Test configuration loading and validation:
+```go
+func TestParseDotEnvFile(t *testing.T) {
+    tempDir := t.TempDir()
+    envFile := filepath.Join(tempDir, ".env")
+    
+    envContent := `VAR1=value1\nVAR2=value2`
+    err := os.WriteFile(envFile, []byte(envContent), 0644)
+    assert.NoError(t, err)
+    
+    vars, err := ParseDotEnvFile(envFile)
+    assert.NoError(t, err)
+    assert.Equal(t, []string{"VAR1=value1", "VAR2=value2"}, vars)
+}
+```
+
+#### 3. Error Handling Tests
+Always test error conditions:
+```go
+func TestParseDotEnvFile_NonExistent(t *testing.T) {
+    _, err := ParseDotEnvFile("/nonexistent/.env")
+    assert.Error(t, err)
+}
+```
+
+### What NOT to Test
+- SSH connections requiring real servers
+- Cloud provider APIs requiring credentials
+- File operations that modify system directories
+- Interactive terminal input/output
+
+### Test Utilities
+- Use `t.TempDir()` for temporary directories
+- Use `assert.NoError(t, err)` for error checking
+- Use table-driven tests for multiple scenarios
+- Clean up resources in defer statements
+
+### Linting Requirements
+- Always check error return values: `err := file.Close(); assert.NoError(t, err)`
+- Use proper error handling patterns
+- Follow golangci-lint rules strictly
+
+### Mock Usage
+- Use testify/mock for complex dependencies
+- Keep mocks simple and focused
+- Prefer testing real implementations when possible
+
+### Running Tests
+Use the Makefile for testing:
+- `make test` - Runs all tests with `go test ./...`
+- `make coverage` - Generates HTML coverage report and opens it

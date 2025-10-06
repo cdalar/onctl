@@ -1,0 +1,37 @@
+# Example configuration file for onctl up -f command
+# Copy this file and modify it according to your needs
+
+# VM Configuration
+vm:
+  name: "my-vm"                           # VM name (required)
+  sshPort: 22                             # SSH port (default: 22)
+  cloudInitFile: "cloud-init/ubuntu-setup.yaml"  # Cloud-init file (optional)
+  jumpHost: ""                            # Jump host for SSH tunneling (optional)
+
+# SSH Configuration
+publicKeyFile: "~/.ssh/id_rsa.pub"       # Path to public key file
+
+# Domain Configuration (optional)
+domain: "my-vm.example.com"              # Request a domain name for the VM
+# Note: Requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID environment variables
+
+# Scripts to run on the VM
+applyFiles:
+  - "docker/docker.sh"                   # Install Docker
+  - "nginx/nginx-setup.sh"               # Setup Nginx
+
+# Environment variables for the scripts
+variables:
+  - "APP_ENV=production"
+  - "DOMAIN=example.com"
+
+# Alternative: Use .env file instead of variables
+# dotEnvFile: ".env.production"
+
+# Files to download from the VM (optional)
+downloadFiles:
+  - "/var/log/nginx/access.log"
+
+# Files to upload to the VM (optional)
+uploadFiles:
+  - "configs/nginx.conf:/etc/nginx/nginx.conf"

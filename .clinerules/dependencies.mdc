@@ -1,0 +1,42 @@
+---
+globs: "go.mod,go.sum"
+description: "Go dependency management guidelines for the Golang project"
+---
+
+# Dependencies Guide
+
+## Managing Dependencies
+
+Dependencies are managed using Go modules with [go.mod](mdc:go.mod) as the primary file. Use the Makefile to handle dependency updates to ensure consistency.
+
+### Key Dependencies
+The project relies on several key libraries:
+- **Cobra**: For the CLI framework and command structure
+- **Cloud Provider SDKs**: 
+  - `aws-sdk-go` for AWS
+  - `azure-sdk-for-go` for Azure
+  - `google-cloud-go` for GCP
+  - `hcloud-go` for Hetzner Cloud
+- **SSH Libraries**: `golang.org/x/crypto/ssh` for secure connections
+- **Viper**: For configuration management
+- **Testify**: For testing assertions and mocks
+- **Golangci-lint**: For code linting
+- **Goreleaser**: For release automation
+
+### Updating Dependencies
+- Run `make` to automatically execute `go mod tidy` which adds missing dependencies and removes unused ones.
+- For new dependencies: Add with `go get <package>`, then run `make` to tidy and build.
+- Avoid manual `go mod tidy` when possible; use the build process.
+- Commit both `go.mod` and `go.sum` to ensure reproducible builds.
+
+### Version Policy
+- Pin major versions where possible for stability (e.g., `github.com/spf13/cobra v1.8.0`).
+- Update dependencies regularly but test thoroughly before merging.
+- Use `go list -m all` to see current module versions.
+
+## Development Tips
+- If a dependency conflict arises, resolve with `go mod tidy` via Makefile.
+- For vendor mode (if needed): `go mod vendor`, but prefer standard modules.
+- Check compatibility with Go version in `go.mod` (requires Go 1.21 or later for this project).
+
+Always run `make lint` after dependency changes to ensure no issues.
