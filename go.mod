@@ -4,6 +4,7 @@ go 1.24.0
 
 require (
 	cloud.google.com/go/compute v1.45.0
+	connectrpc.com/connect v1.18.1
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.2.0
 	github.com/aws/aws-sdk-go v1.55.7
 	github.com/briandowns/spinner v1.23.2
@@ -15,6 +16,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/term v0.34.0
 	google.golang.org/api v0.247.0
+	google.golang.org/protobuf v1.36.7
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/apimachinery v0.33.4
@@ -97,7 +99,6 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20250818200422-3122310a409c // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250811230008-5f3141c8851a // indirect
 	google.golang.org/grpc v1.74.2 // indirect
-	google.golang.org/protobuf v1.36.7 // indirect
 )
 
 require (
