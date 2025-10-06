@@ -6,3 +6,5 @@ onctl-linux
 ip.txt
 tmp/*
 .env*
+coverage.out
+coverage.html
