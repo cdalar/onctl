@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cdalar/onctl/internal/tools"
 	pxapi "github.com/Telmate/proxmox-api-go/proxmox"
+	"github.com/cdalar/onctl/internal/tools"
 	"github.com/spf13/viper"
 	"golang.org/x/crypto/ssh"
 )
