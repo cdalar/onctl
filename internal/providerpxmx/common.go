@@ -1,7 +1,6 @@
 package providerpxmx
 
 import (
-	"context"
 	"crypto/tls"
 	"log"
 	"os"
@@ -28,11 +27,7 @@ func GetClient() *pxapi.Client {
 		log.Fatalln("Failed to create Proxmox client:", err)
 	}
 
-	ctx := context.Background()
-	err = client.Login(ctx, tokenID, secret, "")
-	if err != nil {
-		log.Fatalln("Failed to login to Proxmox:", err)
-	}
+	client.SetAPIToken(tokenID, secret)
 
 	return client
 }
