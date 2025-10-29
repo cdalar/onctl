@@ -87,7 +87,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resourcegraph/armresourcegraph v0.9.0
 	github.com/hashicorp/logutils v1.0.0
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	github.com/pkg/sftp v1.13.9
+	github.com/pkg/sftp v1.13.10
 	github.com/spf13/viper v1.21.0
 	golang.org/x/crypto v0.43.0
 	golang.org/x/text v0.30.0 // indirect
