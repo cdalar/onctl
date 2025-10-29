@@ -1,6 +1,6 @@
 name: build
 
-permissions: 
+permissions:
   contents: read
 
 on:
