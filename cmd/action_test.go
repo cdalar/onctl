@@ -65,7 +65,7 @@ func TestDownloadFile_WithTestServer(t *testing.T) {
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("fake binary content"))
+		_, _ = w.Write([]byte("fake binary content"))
 	}))
 	defer server.Close()
 
@@ -80,5 +80,5 @@ func TestDownloadFile_WithTestServer(t *testing.T) {
 	assert.Equal(t, "fake binary content", string(content))
 
 	// Clean up
-	os.Remove(tempFile)
+	_ = os.Remove(tempFile)
 }

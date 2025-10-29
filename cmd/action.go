@@ -104,7 +104,9 @@ var actionCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("Failed to open parameter file %s: %v", actionParamsFile, err)
 			}
-			defer paramsFile.Close()
+			defer func() {
+				_ = paramsFile.Close()
+			}()
 			command.Stdin = paramsFile
 		} else {
 			command.Stdin = os.Stdin
@@ -122,7 +124,9 @@ func downloadFile(url, filepath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to download: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download failed with status: %s", resp.Status)
@@ -132,7 +136,9 @@ func downloadFile(url, filepath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create file: %v", err)
 	}
-	defer out.Close()
+	defer func() {
+		_ = out.Close()
+	}()
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
