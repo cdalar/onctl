@@ -1,8 +1,10 @@
 package tools
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"os/exec"
 
 	"github.com/pkg/sftp"
 )
@@ -55,11 +57,19 @@ func (r *Remote) DownloadFile(srcPath, dstPath string) error {
 }
 
 func (r *Remote) SSHCopyFile(srcPath, dstPath string) error {
-	log.Println("[DEBUG] srcPath:" + srcPath)
-	log.Println("[DEBUG] dstPath:" + dstPath)
+	return r.SSHCopyFileWithProgress(srcPath, dstPath, nil)
+}
+
+func (r *Remote) SSHCopyFileWithProgress(srcPath, dstPath string, progressCallback func(current, total int64)) error {
+	// Get file size for progress reporting
+	srcStat, err := os.Stat(srcPath)
+	if err != nil {
+		return err
+	}
+	fileSize := srcStat.Size()
 
 	// Create a new SSH connection
-	err := r.NewSSHConnection()
+	err = r.NewSSHConnection()
 	if err != nil {
 		return err
 	}
@@ -98,9 +108,93 @@ func (r *Remote) SSHCopyFile(srcPath, dstPath string) error {
 		}
 	}()
 
-	// write to file
-	if _, err := dstFile.ReadFrom(srcFile); err != nil {
+	// Copy file in larger chunks for better performance
+	const bufferSize = 1024 * 1024 // 1MB chunks for better throughput
+	buffer := make([]byte, bufferSize)
+	var totalWritten int64
+	var lastProgressUpdate int64
+
+	for {
+		n, readErr := srcFile.Read(buffer)
+		if n > 0 {
+			_, writeErr := dstFile.Write(buffer[:n])
+			if writeErr != nil {
+				return writeErr
+			}
+			totalWritten += int64(n)
+
+			// Report progress at reasonable intervals to balance responsiveness and performance
+			// Update every 1MB or when complete
+			if progressCallback != nil && (totalWritten-lastProgressUpdate >= 1024*1024 || totalWritten == fileSize) {
+				progressCallback(totalWritten, fileSize)
+				lastProgressUpdate = totalWritten
+			}
+		}
+
+		if readErr != nil {
+			if readErr.Error() == "EOF" {
+				// Final progress update
+				if progressCallback != nil {
+					progressCallback(totalWritten, fileSize)
+				}
+				break
+			}
+			return readErr
+		}
+	}
+
+	return nil
+}
+
+func (r *Remote) SCPCopyFileWithProgress(srcPath, dstPath string, progressCallback func(current, total int64)) error {
+	// Get file size for progress reporting
+	srcStat, err := os.Stat(srcPath)
+	if err != nil {
 		return err
 	}
+	fileSize := srcStat.Size()
+
+	// Create temporary file for private key
+	tmpKeyFile, err := os.CreateTemp("", "onctl-scp-key-")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpKeyFile.Name())
+	defer tmpKeyFile.Close()
+
+	// Write private key to temp file
+	if _, err := tmpKeyFile.WriteString(r.PrivateKey); err != nil {
+		return err
+	}
+	if err := tmpKeyFile.Close(); err != nil {
+		return err
+	}
+
+	// Set restrictive permissions on key file
+	if err := os.Chmod(tmpKeyFile.Name(), 0600); err != nil {
+		return err
+	}
+
+	// Use scp command for faster transfer
+	scpCmd := exec.Command("scp",
+		"-i", tmpKeyFile.Name(),
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "LogLevel=ERROR",
+		srcPath,
+		fmt.Sprintf("%s@%s:%s", r.Username, r.IPAddress, dstPath))
+
+	// For progress tracking with scp, we'll use a polling approach
+	// since scp doesn't have built-in progress reporting like rsync
+	err = scpCmd.Run()
+	if err != nil {
+		return err
+	}
+
+	// Report completion
+	if progressCallback != nil {
+		progressCallback(fileSize, fileSize)
+	}
+
 	return nil
 }

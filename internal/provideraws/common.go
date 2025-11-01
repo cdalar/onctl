@@ -2,6 +2,7 @@ package provideraws
 
 import (
 	"fmt"
+	"strings"
 
 	"log"
 	"os"
@@ -354,19 +355,23 @@ func GetClient() *ec2.EC2 {
 
 func GetImages() ([]*ec2.Image, error) {
 	svc := GetClient()
+
+	// Use configured image name, or fallback to a pattern for latest Ubuntu
+	imageName := viper.GetString("aws.vm.image")
+	if imageName == "" {
+		imageName = "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
+	}
+
 	input := &ec2.DescribeImagesInput{
+		Owners: []*string{aws.String("amazon")},
 		Filters: []*ec2.Filter{
 			{
-				Name: aws.String("owner-alias"),
-				Values: []*string{
-					aws.String("amazon"),
-				},
+				Name:   aws.String("name"),
+				Values: []*string{aws.String(imageName)},
 			},
 			{
-				Name: aws.String("name"),
-				Values: []*string{
-					aws.String("ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20230208"),
-				},
+				Name:   aws.String("state"),
+				Values: []*string{aws.String("available")},
 			},
 		},
 	}
@@ -385,6 +390,21 @@ func GetImages() ([]*ec2.Image, error) {
 		}
 		return nil, err
 	}
+
+	// Sort images by creation date (newest first) if using wildcard
+	if strings.Contains(imageName, "*") && len(result.Images) > 0 {
+		// Sort by creation date descending
+		for i := 0; i < len(result.Images)-1; i++ {
+			for j := i + 1; j < len(result.Images); j++ {
+				if result.Images[i].CreationDate != nil && result.Images[j].CreationDate != nil {
+					if *result.Images[i].CreationDate < *result.Images[j].CreationDate {
+						result.Images[i], result.Images[j] = result.Images[j], result.Images[i]
+					}
+				}
+			}
+		}
+	}
+
 	return result.Images, nil
 }
 

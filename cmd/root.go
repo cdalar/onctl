@@ -24,8 +24,8 @@ var (
 		Example: `  # List all VMs
   onctl ls
 
-  # Create a VM with docker installed 
-  onctl create -n test -a docker/docker.sh 
+  # Create a VM with docker installed
+  onctl create -n test -a docker/docker.sh
 
   # SSH into a VM
   onctl ssh test
@@ -103,9 +103,5 @@ func Execute() error {
 
 func init() {
 	rootCmd.AddCommand(versionCmd)
-	rootCmd.AddCommand(listCmd)
-	rootCmd.AddCommand(createCmd)
-	rootCmd.AddCommand(destroyCmd)
-	rootCmd.AddCommand(sshCmd)
 	rootCmd.AddCommand(initCmd)
 }

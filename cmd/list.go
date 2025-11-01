@@ -19,6 +19,8 @@ var output string
 
 func init() {
 	listCmd.Flags().StringVarP(&output, "output", "o", "tab", "output format (tab, json, yaml, puppet, ansiable)")
+	// Register list command at root level for convenience
+	rootCmd.AddCommand(listCmd)
 }
 
 var listCmd = &cobra.Command{
