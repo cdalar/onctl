@@ -16,11 +16,9 @@ import (
 )
 
 type cmdDeployOptions struct {
-	Image          string   `yaml:"image"`
-	Env            []string `yaml:"env"`
-	TransferMethod string   `yaml:"transferMethod"`
-	Diagnostics    bool     `yaml:"diagnostics"`
-	Name           string   `yaml:"name"`
+	Image string   `yaml:"image"`
+	Env   []string `yaml:"env"`
+	Name  string   `yaml:"name"`
 }
 
 var deployOpt cmdDeployOptions
@@ -41,6 +39,34 @@ func normalizeArch(arch string) string {
 	default:
 		return arch
 	}
+}
+
+// checkDockerHubImage checks if a Docker image exists on Docker Hub
+// Returns true if the image exists and can be pulled
+func checkDockerHubImage(image string) bool {
+	// Use docker search for faster checking
+	// This is much faster than manifest inspect
+	cmd := exec.Command("docker", "search", image, "--limit", "1", "--format", "{{.Name}}")
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+
+	// Check if the exact image name appears in the search results
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	for _, line := range lines {
+		if strings.TrimSpace(line) == image {
+			return true
+		}
+		// Also check if it matches without registry prefix
+		if strings.Contains(image, "/") {
+			parts := strings.Split(image, "/")
+			if len(parts) == 2 && strings.TrimSpace(line) == parts[1] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // runContainer runs a Docker container on the remote VM
@@ -136,8 +162,6 @@ func runContainer(remote tools.Remote, s *spinner.Spinner, image string, env []s
 func init() {
 	deployCmd.Flags().StringVarP(&deployOpt.Image, "image", "i", "", "Docker image to deploy (required)")
 	deployCmd.Flags().StringSliceVarP(&deployOpt.Env, "env", "e", []string{}, "Environment variables for the container")
-	deployCmd.Flags().StringVar(&deployOpt.TransferMethod, "transfer-method", "scp", "Transfer method to use (sftp or scp)")
-	deployCmd.Flags().BoolVar(&deployOpt.Diagnostics, "diagnostics", false, "Run diagnostics to check for potential speed limitations")
 	deployCmd.Flags().StringVarP(&deployOpt.Name, "name", "n", "", "Name for the Docker container")
 	deployCmd.MarkFlagRequired("image")
 	rootCmd.AddCommand(deployCmd)
@@ -198,28 +222,10 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 			Spinner:    s,
 		}
 
-		// Run diagnostics if requested
-		if deployOpt.Diagnostics {
-			fmt.Println("🔍 Running diagnostics to check for potential speed limitations...")
-			// TODO: Implement runDiagnostics function
-			fmt.Println("Diagnostics not yet implemented")
-		}
-
-		// Check architecture compatibility
-		s.Suffix = " Checking architecture compatibility..."
+		// Get remote VM architecture first
+		s.Suffix = " Getting remote VM architecture..."
 		s.Start()
 
-		// Get local image architecture
-		localArchCmd := exec.Command("docker", "image", "inspect", deployOpt.Image, "--format", "{{.Architecture}}")
-		localArchOutput, err := localArchCmd.Output()
-		if err != nil {
-			s.Stop()
-			fmt.Print("\033[?25h")
-			log.Fatalf("Failed to inspect local Docker image: %v", err)
-		}
-		localArch := strings.TrimSpace(string(localArchOutput))
-
-		// Get remote VM architecture
 		remoteArchOutput, err := remote.RemoteRun(&tools.RemoteRunConfig{
 			Command: "uname -m",
 		})
@@ -229,183 +235,224 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 			log.Fatalf("Failed to get remote VM architecture: %v", err)
 		}
 		remoteArch := strings.TrimSpace(remoteArchOutput)
-
-		// Normalize architecture names
-		normalizedLocalArch := normalizeArch(localArch)
 		normalizedRemoteArch := normalizeArch(remoteArch)
 
 		s.Stop()
+		fmt.Printf("\033[32m\u2714\033[0m Remote VM architecture: %s\033[?25h\n", normalizedRemoteArch)
 
-		// Check if architectures match
-		if normalizedLocalArch != normalizedRemoteArch {
-			fmt.Print("\033[?25h")
-			fmt.Printf("\033[31m\u2717\033[0m Architecture mismatch detected!\n")
-			fmt.Printf("  Local image architecture:  %s (%s)\n", localArch, normalizedLocalArch)
-			fmt.Printf("  Remote VM architecture:    %s (%s)\n", remoteArch, normalizedRemoteArch)
-			fmt.Println("\nTo fix this issue:")
-			fmt.Printf("  1. Pull the correct architecture: docker pull --platform linux/%s %s\n", normalizedRemoteArch, deployOpt.Image)
-			fmt.Printf("  2. Then run the deploy command again\n")
-			log.Fatalf("Cannot deploy %s image to %s VM", normalizedLocalArch, normalizedRemoteArch)
+		// Check if image exists on Docker Hub
+		s.Suffix = " Checking if Docker image exists on Docker Hub..."
+		s.Start()
+
+		isDockerHubImage := checkDockerHubImage(deployOpt.Image)
+
+		s.Stop()
+
+		var imageArch string
+		var normalizedImageArch string
+		var useDockerHub bool
+
+		if isDockerHubImage {
+			fmt.Printf("\033[32m\u2714\033[0m Docker image found on Docker Hub\033[?25h\n")
+			useDockerHub = true
+
+			// For Docker Hub images, skip local architecture check
+			// Docker will handle architecture compatibility during pull on remote VM
+			// This is much faster and avoids downloading manifests locally
+			imageArch = normalizedRemoteArch
+			normalizedImageArch = normalizedRemoteArch
+		} else {
+			fmt.Printf("\033[36m\u2139\033[0m Docker image not found on Docker Hub (assuming local/private image)\033[?25h\n")
+			useDockerHub = false
+
+			// Check local image
+			s.Suffix = " Checking local Docker image..."
+			s.Start()
+
+			localArchCmd := exec.Command("docker", "image", "inspect", deployOpt.Image, "--format", "{{.Architecture}}")
+			localArchOutput, err := localArchCmd.Output()
+			if err != nil {
+				s.Stop()
+				fmt.Print("\033[?25h")
+				log.Fatalf("Failed to inspect local Docker image: %v", err)
+			}
+			imageArch = strings.TrimSpace(string(localArchOutput))
+			normalizedImageArch = normalizeArch(imageArch)
+
+			s.Stop()
 		}
 
-		fmt.Printf("\033[32m\u2714\033[0m Architecture check passed: %s\033[?25h\n", normalizedLocalArch)
+		// Check architecture compatibility (only for local/private images)
+		if !useDockerHub {
+			if normalizedImageArch != normalizedRemoteArch {
+				fmt.Print("\033[?25h")
+				fmt.Printf("\033[31m\u2717\033[0m Architecture mismatch detected!\n")
+				fmt.Printf("  Image architecture:  %s (%s)\n", imageArch, normalizedImageArch)
+				fmt.Printf("  Remote VM architecture: %s (%s)\n", remoteArch, normalizedRemoteArch)
+				fmt.Println("\nTo fix this issue:")
+				fmt.Printf("  1. Pull the correct architecture: docker pull --platform linux/%s %s\n", normalizedRemoteArch, deployOpt.Image)
+				fmt.Printf("  2. Then run the deploy command again\n")
+				log.Fatalf("Cannot deploy %s image to %s VM", normalizedImageArch, normalizedRemoteArch)
+			}
+			fmt.Printf("\033[32m\u2714\033[0m Architecture check passed: %s\033[?25h\n", normalizedImageArch)
+		}
 
 		// Step 1: Check if image already exists on remote VM
 		s.Suffix = " Checking if Docker image already exists on remote VM..."
 		s.Start()
 
-		// Get local image layers (most reliable way to compare images)
-		localLayersCmd := exec.Command("docker", "image", "inspect", deployOpt.Image, "--format", "{{.RootFS.Layers}}")
-		localLayersOutput, err := localLayersCmd.Output()
-		if err != nil {
-			s.Stop()
-			fmt.Print("\033[?25h")
-			log.Fatalf("Failed to get local Docker image layers: %v", err)
-		}
-		localLayers := strings.TrimSpace(string(localLayersOutput))
-
-		// Check if image exists on remote VM and get its layers
-		checkRemoteCmd := fmt.Sprintf("docker image inspect %s --format '{{.RootFS.Layers}}'", deployOpt.Image)
-		remoteLayersOutput, err := remote.RemoteRun(&tools.RemoteRunConfig{
+		// Check if image exists on remote VM
+		checkRemoteCmd := fmt.Sprintf("docker image inspect %s --format 'exists'", deployOpt.Image)
+		_, err = remote.RemoteRun(&tools.RemoteRunConfig{
 			Command: checkRemoteCmd,
 		})
 
-		imageExists := false
-		var remoteLayers string
-		if err == nil {
-			// Command succeeded, image exists
-			remoteLayers = strings.TrimSpace(remoteLayersOutput)
-			if remoteLayers != "" {
-				imageExists = true
-			}
-		} else {
-			// Command failed, image doesn't exist
-			imageExists = false
-			remoteLayers = ""
-		}
+		imageExists := (err == nil)
 
 		s.Stop()
 
-		if imageExists && remoteLayers == localLayers {
-			fmt.Printf("\033[32m\u2714\033[0m Docker image already exists on remote VM (same version)\033[?25h\n")
-			// Skip upload and load, go directly to running container
+		if imageExists {
+			fmt.Printf("\033[32m\u2714\033[0m Docker image already exists on remote VM\033[?25h\n")
+			// Skip download/upload and load, go directly to running container
 			runContainer(remote, s, deployOpt.Image, deployOpt.Env, deployOpt.Name)
 			return
-		} else if imageExists {
-			fmt.Printf("\033[33m\u26a0\033[0m Docker image exists but is different (will re-upload)\033[?25h\n")
 		} else {
 			fmt.Printf("\033[36m\u2139\033[0m Docker image not found on remote VM\033[?25h\n")
 		}
 
-		// Step 2: Save Docker image locally
-		s.Suffix = " Saving Docker image locally..."
-		s.Start()
+		if useDockerHub {
+			// Step 2: Pull Docker image directly on remote VM
+			s.Suffix = " Pulling Docker image on remote VM..."
+			s.Start()
 
-		tempDir, err := os.MkdirTemp("", "onctl-deploy")
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer os.RemoveAll(tempDir)
-
-		imageTarPath := filepath.Join(tempDir, "image.tar.gz")
-		dockerSaveCmd := exec.Command("sh", "-c", fmt.Sprintf("docker save %s | gzip > %s", deployOpt.Image, imageTarPath))
-		if err := dockerSaveCmd.Run(); err != nil {
-			s.Stop()
-			fmt.Print("\033[?25h") // Ensure cursor is visible on error
-			log.Fatalf("Failed to save and compress Docker image: %v", err)
-		}
-
-		// Get file size for display
-		fileInfo, err := os.Stat(imageTarPath)
-		if err != nil {
-			log.Printf("Warning: Could not get file size: %v", err)
-		}
-		fileSize := fileInfo.Size()
-		fileSizeMB := float64(fileSize) / (1024 * 1024)
-
-		s.Suffix = " Docker image saved locally"
-		s.Stop()
-		fmt.Printf("\033[32m\u2714\033[0m Docker image saved locally (%.1f MB)\033[?25h\n", fileSizeMB)
-
-		// Step 2: Upload image to remote VM with progress bar
-		var totalBytes = fileSize
-		startTime := time.Now()
-
-		// Progress callback function
-		progressCallback := func(current, total int64) {
-			percentage := float64(current) / float64(total) * 100
-
-			// Calculate speed in MBit/s
-			elapsed := time.Since(startTime)
-			if elapsed.Seconds() > 0 {
-				bytesPerSecond := float64(current) / elapsed.Seconds()
-				mbitsPerSecond := (bytesPerSecond * 8) / (1024 * 1024) // Convert to MBit/s
-				if mbitsPerSecond < 1 {
-					mbitsPerSecond = 0 // Don't show very low speeds
-				}
-
-				// Create progress bar (20 characters wide)
-				progressBarWidth := 20
-				filled := int(float64(current) / float64(total) * float64(progressBarWidth))
-				bar := strings.Repeat("█", filled) + strings.Repeat("░", progressBarWidth-filled)
-
-				s.Suffix = fmt.Sprintf(" Uploading... %.1f%% [%s] (%.1f/%.1f MB) %.1f MBit/s",
-					percentage, bar, float64(current)/(1024*1024), fileSizeMB, mbitsPerSecond)
-			} else {
-				// First callback, speed not yet available
-				progressBarWidth := 20
-				filled := int(float64(current) / float64(total) * float64(progressBarWidth))
-				bar := strings.Repeat("█", filled) + strings.Repeat("░", progressBarWidth-filled)
-
-				s.Suffix = fmt.Sprintf(" Uploading... %.1f%% [%s] (%.1f/%.1f MB)",
-					percentage, bar, float64(current)/(1024*1024), fileSizeMB)
+			pullCmd := fmt.Sprintf("docker pull %s", deployOpt.Image)
+			_, err = remote.RemoteRun(&tools.RemoteRunConfig{
+				Command: pullCmd,
+			})
+			if err != nil {
+				s.Stop()
+				fmt.Print("\033[?25h")
+				fmt.Printf("\033[31m\u2717\033[0m Failed to pull Docker image on remote VM\033[?25h\n")
+				fmt.Printf("Error: %v\n", err)
+				fmt.Println("\nPossible causes:")
+				fmt.Printf("  - Image doesn't support %s architecture\n", normalizedRemoteArch)
+				fmt.Printf("  - Network connectivity issues\n")
+				fmt.Printf("  - Authentication required for private registry\n")
+				fmt.Println("\nTo fix architecture issues:")
+				fmt.Printf("  1. Check available architectures: docker manifest inspect %s\n", deployOpt.Image)
+				fmt.Printf("  2. Pull specific architecture: docker pull --platform linux/%s %s\n", normalizedRemoteArch, deployOpt.Image)
+				log.Fatalf("Docker pull failed")
 			}
-		}
 
-		s.Suffix = fmt.Sprintf(" Uploading Docker image to remote VM (%.1f MB)...", fileSizeMB)
-		s.Restart()
-
-		remoteImagePath := "image.tar.gz"
-
-		// Upload using SCP
-		if deployOpt.TransferMethod == "sftp" {
-			err = remote.SSHCopyFileWithProgress(imageTarPath, remoteImagePath, progressCallback)
+			s.Suffix = " Docker image pulled on remote VM"
+			s.Stop()
+			fmt.Println("\033[32m\u2714\033[0m Docker image pulled on remote VM\033[?25h")
 		} else {
-			// Default to SCP
+			// Step 2: Save Docker image locally
+			s.Suffix = " Saving Docker image locally..."
+			s.Start()
+
+			tempDir, err := os.MkdirTemp("", "onctl-deploy")
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer os.RemoveAll(tempDir)
+
+			imageTarPath := filepath.Join(tempDir, "image.tar.gz")
+			dockerSaveCmd := exec.Command("sh", "-c", fmt.Sprintf("docker save %s | gzip > %s", deployOpt.Image, imageTarPath))
+			if err := dockerSaveCmd.Run(); err != nil {
+				s.Stop()
+				fmt.Print("\033[?25h") // Ensure cursor is visible on error
+				log.Fatalf("Failed to save and compress Docker image: %v", err)
+			}
+
+			// Get file size for display
+			fileInfo, err := os.Stat(imageTarPath)
+			if err != nil {
+				log.Printf("Warning: Could not get file size: %v", err)
+			}
+			fileSize := fileInfo.Size()
+			fileSizeMB := float64(fileSize) / (1024 * 1024)
+
+			s.Suffix = " Docker image saved locally"
+			s.Stop()
+			fmt.Printf("\033[32m\u2714\033[0m Docker image saved locally (%.1f MB)\033[?25h\n", fileSizeMB)
+
+			// Step 3: Upload image to remote VM with progress bar
+			var totalBytes = fileSize
+			startTime := time.Now()
+
+			// Progress callback function
+			progressCallback := func(current, total int64) {
+				percentage := float64(current) / float64(total) * 100
+
+				// Calculate speed in MBit/s
+				elapsed := time.Since(startTime)
+				if elapsed.Seconds() > 0 {
+					bytesPerSecond := float64(current) / elapsed.Seconds()
+					mbitsPerSecond := (bytesPerSecond * 8) / (1024 * 1024) // Convert to MBit/s
+					if mbitsPerSecond < 1 {
+						mbitsPerSecond = 0 // Don't show very low speeds
+					}
+
+					// Create progress bar (20 characters wide)
+					progressBarWidth := 20
+					filled := int(float64(current) / float64(total) * float64(progressBarWidth))
+					bar := strings.Repeat("█", filled) + strings.Repeat("░", progressBarWidth-filled)
+
+					s.Suffix = fmt.Sprintf(" Uploading... %.1f%% [%s] (%.1f/%.1f MB) %.1f MBit/s",
+						percentage, bar, float64(current)/(1024*1024), fileSizeMB, mbitsPerSecond)
+				} else {
+					// First callback, speed not yet available
+					progressBarWidth := 20
+					filled := int(float64(current) / float64(total) * float64(progressBarWidth))
+					bar := strings.Repeat("█", filled) + strings.Repeat("░", progressBarWidth-filled)
+
+					s.Suffix = fmt.Sprintf(" Uploading... %.1f%% [%s] (%.1f/%.1f MB)",
+						percentage, bar, float64(current)/(1024*1024), fileSizeMB)
+				}
+			}
+
+			s.Suffix = fmt.Sprintf(" Uploading Docker image to remote VM (%.1f MB)...", fileSizeMB)
+			s.Restart()
+
+			remoteImagePath := "image.tar.gz"
+
+			// Upload using SCP
 			err = remote.SCPCopyFileWithProgress(imageTarPath, remoteImagePath, progressCallback)
-		}
 
-		if err != nil {
+			if err != nil {
+				s.Stop()
+				fmt.Print("\033[?25h") // Ensure cursor is visible on error
+				log.Fatalf("Failed to upload Docker image: %v", err)
+			}
+
+			// Final progress update
+			progressCallback(totalBytes, totalBytes)
+			time.Sleep(100 * time.Millisecond) // Brief pause to show 100%
+
+			s.Suffix = " Docker image uploaded to remote VM"
 			s.Stop()
-			fmt.Print("\033[?25h") // Ensure cursor is visible on error
-			log.Fatalf("Failed to upload Docker image: %v", err)
-		}
+			fmt.Println("\033[32m\u2714\033[0m Docker image uploaded to remote VM\033[?25h")
 
-		// Final progress update
-		progressCallback(totalBytes, totalBytes)
-		time.Sleep(100 * time.Millisecond) // Brief pause to show 100%
+			// Step 4: Load Docker image on remote VM
+			s.Restart()
+			s.Suffix = " Loading Docker image on remote VM..."
 
-		s.Suffix = " Docker image uploaded to remote VM"
-		s.Stop()
-		fmt.Println("\033[32m\u2714\033[0m Docker image uploaded to remote VM\033[?25h")
+			loadCmd := "gunzip -c image.tar.gz | docker load"
+			_, err = remote.RemoteRun(&tools.RemoteRunConfig{
+				Command: loadCmd,
+			})
+			if err != nil {
+				s.Stop()
+				fmt.Print("\033[?25h") // Ensure cursor is visible on error
+				log.Fatalf("Failed to load Docker image on remote: %v", err)
+			}
 
-		// Step 3: Load Docker image on remote VM
-		s.Restart()
-		s.Suffix = " Loading Docker image on remote VM..."
-
-		loadCmd := "gunzip -c image.tar.gz | docker load"
-		_, err = remote.RemoteRun(&tools.RemoteRunConfig{
-			Command: loadCmd,
-		})
-		if err != nil {
+			s.Suffix = " Docker image loaded on remote VM"
 			s.Stop()
-			fmt.Print("\033[?25h") // Ensure cursor is visible on error
-			log.Fatalf("Failed to load Docker image on remote: %v", err)
+			fmt.Println("\033[32m\u2714\033[0m Docker image loaded on remote VM\033[?25h")
 		}
-
-		s.Suffix = " Docker image loaded on remote VM"
-		s.Stop()
-		fmt.Println("\033[32m\u2714\033[0m Docker image loaded on remote VM\033[?25h")
 
 		// Step 4: Run Docker container on remote VM
 		runContainer(remote, s, deployOpt.Image, deployOpt.Env, deployOpt.Name)
