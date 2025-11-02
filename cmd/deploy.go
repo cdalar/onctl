@@ -163,7 +163,9 @@ func init() {
 	deployCmd.Flags().StringVarP(&deployOpt.Image, "image", "i", "", "Docker image to deploy (required)")
 	deployCmd.Flags().StringSliceVarP(&deployOpt.Env, "env", "e", []string{}, "Environment variables for the container")
 	deployCmd.Flags().StringVarP(&deployOpt.Name, "name", "n", "", "Name for the Docker container")
-	deployCmd.MarkFlagRequired("image")
+	if err := deployCmd.MarkFlagRequired("image"); err != nil {
+		log.Fatalf("Failed to mark image flag as required: %v", err)
+	}
 	rootCmd.AddCommand(deployCmd)
 }
 
@@ -356,7 +358,11 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 			if err != nil {
 				log.Fatal(err)
 			}
-			defer os.RemoveAll(tempDir)
+			defer func() {
+				if removeErr := os.RemoveAll(tempDir); removeErr != nil {
+					log.Printf("Warning: failed to remove temporary directory: %v", removeErr)
+				}
+			}()
 
 			imageTarPath := filepath.Join(tempDir, "image.tar.gz")
 			dockerSaveCmd := exec.Command("sh", "-c", fmt.Sprintf("docker save %s | gzip > %s", deployOpt.Image, imageTarPath))

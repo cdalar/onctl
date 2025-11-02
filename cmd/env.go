@@ -30,7 +30,9 @@ var envCreateCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if envCreateTemplateFile == "" {
 			fmt.Println("Error: --template (-t) file must be specified")
-			cmd.Usage()
+			if err := cmd.Usage(); err != nil {
+				log.Printf("Failed to display usage: %v", err)
+			}
 			os.Exit(1)
 		}
 		// Create the environment (alias for create with config file)
@@ -51,7 +53,9 @@ var envDestroyCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if envDestroyTemplateFile == "" {
 			fmt.Println("Error: --template (-t) file must be specified")
-			cmd.Usage()
+			if err := cmd.Usage(); err != nil {
+				log.Printf("Failed to display usage: %v", err)
+			}
 			os.Exit(1)
 		}
 		// Parse template to get VM name

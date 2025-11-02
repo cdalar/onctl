@@ -16,7 +16,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/ec2" //nolint:staticcheck // TODO: migrate to AWS SDK v2
 	"github.com/cdalar/onctl/internal/files"
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/gofrs/uuid/v5"

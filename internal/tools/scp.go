@@ -159,8 +159,14 @@ func (r *Remote) SCPCopyFileWithProgress(srcPath, dstPath string, progressCallba
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmpKeyFile.Name())
-	defer tmpKeyFile.Close()
+	defer func() {
+		if removeErr := os.Remove(tmpKeyFile.Name()); removeErr != nil {
+			log.Printf("Warning: failed to remove temporary key file: %v", removeErr)
+		}
+		if closeErr := tmpKeyFile.Close(); closeErr != nil {
+			log.Printf("Warning: failed to close temporary key file: %v", closeErr)
+		}
+	}()
 
 	// Write private key to temp file
 	if _, err := tmpKeyFile.WriteString(r.PrivateKey); err != nil {
