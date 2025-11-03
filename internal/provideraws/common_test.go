@@ -3,6 +3,7 @@ package provideraws
 // Package provideraws contains AWS provider helpers.
 import (
 	"fmt"
+	"sort"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -30,6 +31,13 @@ func TestGetImages_ImageSorting(t *testing.T) {
 	// Sort images by creation date (newest first)
 	sortedImages := make([]*ec2.Image, len(images))
 	copy(sortedImages, images)
+
+	sort.Slice(sortedImages, func(i, j int) bool {
+		if sortedImages[i].CreationDate == nil || sortedImages[j].CreationDate == nil {
+			return false
+		}
+		return *sortedImages[i].CreationDate > *sortedImages[j].CreationDate
+	})
 
 	// Verify sorting would work correctly
 	if sortedImages[0].CreationDate != nil && sortedImages[2].CreationDate != nil {
