@@ -2,10 +2,10 @@ package provideraws
 
 import (
 	"fmt"
-	"strings"
-
 	"log"
 	"os"
+	"sort"
+	"strings"
 
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/spf13/viper"
@@ -393,16 +393,12 @@ func GetImages() ([]*ec2.Image, error) {
 
 	// Sort images by creation date (newest first) if using wildcard
 	if strings.Contains(imageName, "*") && len(result.Images) > 0 {
-		// Sort by creation date descending
-		for i := 0; i < len(result.Images)-1; i++ {
-			for j := i + 1; j < len(result.Images); j++ {
-				if result.Images[i].CreationDate != nil && result.Images[j].CreationDate != nil {
-					if *result.Images[i].CreationDate < *result.Images[j].CreationDate {
-						result.Images[i], result.Images[j] = result.Images[j], result.Images[i]
-					}
-				}
+		sort.Slice(result.Images, func(i, j int) bool {
+			if result.Images[i].CreationDate == nil || result.Images[j].CreationDate == nil {
+				return false
 			}
-		}
+			return *result.Images[i].CreationDate > *result.Images[j].CreationDate
+		})
 	}
 
 	return result.Images, nil

@@ -2,6 +2,7 @@ package tools
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -132,7 +133,7 @@ func (r *Remote) SSHCopyFileWithProgress(srcPath, dstPath string, progressCallba
 		}
 
 		if readErr != nil {
-			if readErr.Error() == "EOF" {
+			if readErr == io.EOF {
 				// Final progress update
 				if progressCallback != nil {
 					progressCallback(totalWritten, fileSize)
@@ -163,9 +164,6 @@ func (r *Remote) SCPCopyFileWithProgress(srcPath, dstPath string, progressCallba
 		if removeErr := os.Remove(tmpKeyFile.Name()); removeErr != nil {
 			log.Printf("Warning: failed to remove temporary key file: %v", removeErr)
 		}
-		if closeErr := tmpKeyFile.Close(); closeErr != nil {
-			log.Printf("Warning: failed to close temporary key file: %v", closeErr)
-		}
 	}()
 
 	// Write private key to temp file
@@ -190,8 +188,8 @@ func (r *Remote) SCPCopyFileWithProgress(srcPath, dstPath string, progressCallba
 		srcPath,
 		fmt.Sprintf("%s@%s:%s", r.Username, r.IPAddress, dstPath))
 
-	// For progress tracking with scp, we'll use a polling approach
-	// since scp doesn't have built-in progress reporting like rsync
+	// Execute scp command for file transfer
+	// Note: scp doesn't provide built-in progress reporting, so we report completion after transfer
 	err = scpCmd.Run()
 	if err != nil {
 		return err
