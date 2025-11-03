@@ -25,14 +25,14 @@ func TestSCPCopyFileWithProgress_EmptyCallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	// Write some content
 	content := []byte("test content for scp")
 	if _, err := tmpFile.Write(content); err != nil {
 		t.Fatalf("Failed to write to temp file: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	r := &Remote{
 		Username:   "test",
@@ -57,14 +57,14 @@ func TestSCPCopyFileWithProgress_WithCallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	// Write some content
 	content := []byte("test content for scp")
 	if _, err := tmpFile.Write(content); err != nil {
 		t.Fatalf("Failed to write to temp file: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	callbackCalled := false
 	progressCallback := func(current, total int64) {
@@ -101,14 +101,14 @@ func TestSSHCopyFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	// Write some content
 	content := []byte("test content")
 	if _, err := tmpFile.Write(content); err != nil {
 		t.Fatalf("Failed to write to temp file: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	r := &Remote{
 		Username:   "test",
@@ -130,8 +130,8 @@ func TestSSHCopyFileWithProgress_EmptyFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Close()
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	_ = tmpFile.Close()
 
 	progressCallback := func(current, total int64) {
 		if total != 0 {
