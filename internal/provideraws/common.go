@@ -394,10 +394,16 @@ func GetImages() ([]*ec2.Image, error) {
 	// Sort images by creation date (newest first) if using wildcard
 	if strings.Contains(imageName, "*") && len(result.Images) > 0 {
 		sort.Slice(result.Images, func(i, j int) bool {
-			if result.Images[i].CreationDate == nil || result.Images[j].CreationDate == nil {
-				return false
+			switch {
+			case result.Images[i].CreationDate == nil && result.Images[j].CreationDate != nil:
+				return false // i is older, push to end
+			case result.Images[i].CreationDate != nil && result.Images[j].CreationDate == nil:
+				return true // i is newer, keep at front
+			case result.Images[i].CreationDate == nil && result.Images[j].CreationDate == nil:
+				return false // equal, keep order
+			default:
+				return *result.Images[i].CreationDate > *result.Images[j].CreationDate
 			}
-			return *result.Images[i].CreationDate > *result.Images[j].CreationDate
 		})
 	}
 
