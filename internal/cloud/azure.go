@@ -379,6 +379,9 @@ func createPublicIP(ctx context.Context, p *ProviderAzure, server Vm) (*armnetwo
 
 	parameters := armnetwork.PublicIPAddress{
 		Location: to.Ptr(viper.GetString("azure.location")),
+		SKU: &armnetwork.PublicIPAddressSKU{
+			Name: to.Ptr(armnetwork.PublicIPAddressSKUNameStandard),
+		},
 		Properties: &armnetwork.PublicIPAddressPropertiesFormat{
 			PublicIPAllocationMethod: to.Ptr(armnetwork.IPAllocationMethodStatic), // Static or Dynamic
 		},
