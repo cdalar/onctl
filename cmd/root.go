@@ -96,6 +96,7 @@ func Execute() error {
 			PublicIPClient:      providerazure.GetIPClient(),
 			SSHKeyClient:        providerazure.GetSSHKeyClient(),
 			VnetClient:          providerazure.GetVnetClient(),
+			NSGClient:           providerazure.GetNSGClient(),
 		}
 	}
 	return rootCmd.Execute()
