@@ -390,6 +390,11 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 
 			// Progress callback function
 			progressCallback := func(current, total int64) {
+				// Guard against division by zero
+				if total == 0 {
+					return
+				}
+
 				percentage := float64(current) / float64(total) * 100
 
 				// Calculate speed in MBit/s
