@@ -16,7 +16,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/ec2" //nolint:staticcheck // TODO: migrate to AWS SDK v2
 	"github.com/cdalar/onctl/internal/files"
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/gofrs/uuid/v5"
@@ -361,6 +361,9 @@ func MergeConfig(opt *cmdCreateOptions, config *cmdCreateOptions) {
 	}
 	if opt.Vm.Name == "" && config.Vm.Name != "" {
 		opt.Vm.Name = config.Vm.Name
+	}
+	if opt.Vm.Type == "" && config.Vm.Type != "" {
+		opt.Vm.Type = config.Vm.Type
 	}
 	if opt.Vm.SSHPort == 22 && config.Vm.SSHPort != 0 { // Default SSH port is 22
 		opt.Vm.SSHPort = config.Vm.SSHPort

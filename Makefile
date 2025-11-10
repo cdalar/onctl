@@ -2,7 +2,7 @@ GO_CMD=go
 BINARY_NAME=onctl
 
 # Mark targets as phony (not files)
-.PHONY: all build clean run test
+.PHONY: all build clean run test lint
 
 # Default target
 all: build
@@ -24,3 +24,7 @@ clean:
 # Test the application
 test:
 	$(GO_CMD) test ./...
+
+# Lint the application
+lint:
+	golangci-lint run

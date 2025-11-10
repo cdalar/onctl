@@ -69,6 +69,8 @@ func init() {
 	createCmd.Flags().StringVar(&opt.Domain, "domain", "", "request a domain name for the VM")
 	createCmd.Flags().StringSliceVarP(&opt.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
 	createCmd.Flags().StringVarP(&opt.ConfigFile, "file", "f", "", "Path to configuration YAML file")
+	// Register create command at root level for convenience
+	rootCmd.AddCommand(createCmd)
 	createCmd.SetUsageTemplate(createCmd.UsageTemplate() + `
 Environment Variables:
   CLOUDFLARE_API_TOKEN  Cloudflare API Token (required for --domain)

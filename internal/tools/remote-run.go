@@ -80,15 +80,14 @@ func (r *Remote) NewSSHConnection() error {
 				r.Spinner.Restart()
 			}
 			if err != nil {
-				log.Fatalln("Error reading passphrase: ", err)
+				return fmt.Errorf("error reading passphrase: %w", err)
 			}
 			key, err = ssh.ParsePrivateKeyWithPassphrase([]byte(r.PrivateKey), []byte(passphrase))
 			if err != nil {
-				log.Fatalln("Error parsing private key: ", err)
+				return fmt.Errorf("error parsing private key with passphrase: %w", err)
 			}
 		} else {
-			log.Fatalln("Error parsing private key: ", err)
-			return err
+			return fmt.Errorf("error parsing private key: %w", err)
 		}
 	}
 	// Authentication
@@ -242,7 +241,7 @@ func (r *Remote) RemoteRun(remoteRunConfig *RemoteRunConfig) (string, error) {
 		return "", err
 	}
 	defer func() {
-		if err := session.Close(); err != nil {
+		if err := session.Close(); err != nil && err != io.EOF {
 			log.Printf("Failed to close session: %v", err)
 		}
 	}()
