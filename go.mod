@@ -9,7 +9,7 @@ require (
 	github.com/briandowns/spinner v1.23.2
 	github.com/cloudflare/cloudflare-go v0.116.0
 	github.com/gofrs/uuid/v5 v5.4.0
-	github.com/hetznercloud/hcloud-go/v2 v2.31.0
+	github.com/hetznercloud/hcloud-go/v2 v2.32.0
 	github.com/manifoldco/promptui v0.9.0
 	github.com/spf13/cobra v1.10.1
 	github.com/stretchr/testify v1.11.1
@@ -89,6 +89,6 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/pkg/sftp v1.13.10
 	github.com/spf13/viper v1.21.0
-	golang.org/x/crypto v0.44.0
+	golang.org/x/crypto v0.45.0
 	golang.org/x/text v0.31.0 // indirect
 )
