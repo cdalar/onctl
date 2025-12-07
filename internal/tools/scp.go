@@ -157,7 +157,6 @@ func (r *Remote) SSHCopyFileWithProgress(srcPath, dstPath string, progressCallba
 		}
 	}
 
-	_ = totalWritten // Suppress unused variable warning when no progress callback
 	return nil
 }
 
