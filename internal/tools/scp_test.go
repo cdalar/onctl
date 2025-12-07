@@ -2,6 +2,7 @@ package tools
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -16,6 +17,9 @@ func TestSCPCopyFileWithProgress_NonExistentFile(t *testing.T) {
 	err := r.SCPCopyFileWithProgress("nonexistent-file.txt", "remote.txt", nil)
 	if err == nil {
 		t.Error("Expected error for non-existent file, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to stat source file nonexistent-file.txt") {
+		t.Errorf("Expected specific error message, got: %v", err)
 	}
 }
 
@@ -95,7 +99,7 @@ func TestSCPCopyFileWithProgress_WithCallback(t *testing.T) {
 	}
 }
 
-func TestSSHCopyFile(t *testing.T) {
+func TestSSHCopyFileWithProgress_NoCallback(t *testing.T) {
 	// Create a temporary file
 	tmpFile, err := os.CreateTemp("", "scp-test-")
 	if err != nil {
@@ -118,9 +122,12 @@ func TestSSHCopyFile(t *testing.T) {
 	}
 
 	// This will fail because we can't actually connect
-	err = r.SSHCopyFile(tmpFile.Name(), "remote.txt")
+	err = r.SSHCopyFileWithProgress(tmpFile.Name(), "remote.txt", nil)
 	if err == nil {
 		t.Error("Expected error without valid SSH connection, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to create SFTP client for upload") {
+		t.Errorf("Expected specific error message, got: %v", err)
 	}
 }
 
@@ -165,5 +172,8 @@ func TestDownloadFile_NonExistentFile(t *testing.T) {
 	err := r.DownloadFile("remote.txt", "local.txt")
 	if err == nil {
 		t.Error("Expected error without valid SSH connection, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to create SFTP client for download") {
+		t.Errorf("Expected specific error message, got: %v", err)
 	}
 }

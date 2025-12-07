@@ -296,7 +296,7 @@ func (r *Remote) CopyAndRunRemoteFile(config *CopyAndRunRemoteFileConfig) error 
 	}
 	dstPath := ONCTLDIR + "/" + nextApplyDir + "/" + fileBaseName
 	log.Println("[DEBUG] dstPath:", dstPath)
-	err = r.SSHCopyFile(config.File, dstPath)
+	err = r.SSHCopyFileWithProgress(config.File, dstPath, nil)
 	if err != nil {
 		log.Println("RemoteRun error: ", err)
 		return err

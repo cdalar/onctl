@@ -280,36 +280,73 @@ func getSSHKeyFilePaths(filename string) (publicKeyFile, privateKeyFile string) 
 }
 
 func ProcessUploadSlice(uploadSlice []string, remote tools.Remote) {
-	if len(uploadSlice) > 0 {
-		var wg sync.WaitGroup
-		for _, dfile := range uploadSlice {
-			wg.Add(1)
-			go func(dfile string) {
-				defer wg.Done()
+	if len(uploadSlice) == 0 {
+		return
+	}
 
-				var localFile, remoteFile string
-				// Split by colon to determine if a rename is required
-				if strings.Contains(dfile, ":") {
-					parts := strings.SplitN(dfile, ":", 2)
-					localFile = parts[0]
-					remoteFile = parts[1]
-				} else {
-					localFile = dfile
-					remoteFile = filepath.Base(dfile)
-				}
+	spinnerWasActive := remote.Spinner != nil && remote.Spinner.Active()
+	if spinnerWasActive {
+		remote.Spinner.Stop()
+	}
 
-				log.Println("[DEBUG] localFile: " + localFile)
-				log.Println("[DEBUG] remoteFile: " + remoteFile)
-
-				fmt.Printf("Uploading file: %s -> %s\n", localFile, remoteFile)
-
-				err := remote.SSHCopyFile(localFile, remoteFile)
-				if err != nil {
-					log.Printf("[ERROR] Failed to upload %s: %v", localFile, err)
-				}
-			}(dfile)
+	for _, dfile := range uploadSlice {
+		var localFile, remoteFile string
+		if strings.Contains(dfile, ":") {
+			parts := strings.SplitN(dfile, ":", 2)
+			localFile = parts[0]
+			remoteFile = parts[1]
+		} else {
+			localFile = dfile
+			remoteFile = filepath.Base(dfile)
 		}
-		wg.Wait() // Wait for all goroutines to finish
+
+		log.Println("[DEBUG] localFile: " + localFile)
+		log.Println("[DEBUG] remoteFile: " + remoteFile)
+
+		fileInfo, err := os.Stat(localFile)
+		if err != nil {
+			log.Printf("[ERROR] Failed to stat %s: %v", localFile, err)
+			continue
+		}
+		totalBytes := fileInfo.Size()
+		fmt.Printf("Uploading file: %s -> %s (%.1f MB)\n", localFile, remoteFile, float64(totalBytes)/(1024*1024))
+
+		startTime := time.Now()
+		progressCallback := func(current, total int64) {
+			if total == 0 {
+				return
+			}
+
+			percentage := float64(current) / float64(total) * 100
+			progressBarWidth := 20
+			filled := int(float64(progressBarWidth) * float64(current) / float64(total))
+			if filled > progressBarWidth {
+				filled = progressBarWidth
+			}
+			bar := strings.Repeat("=", filled) + strings.Repeat(".", progressBarWidth-filled)
+
+			var mbPerSecond float64
+			elapsed := time.Since(startTime)
+			if elapsed.Seconds() > 0 {
+				mbPerSecond = float64(current) / elapsed.Seconds() / (1024 * 1024)
+			}
+
+			fmt.Printf("\r[%s] %5.1f%% (%.1f/%.1f MB) %.1f MB/s", bar, percentage, float64(current)/(1024*1024), float64(total)/(1024*1024), mbPerSecond)
+		}
+
+		err = remote.SSHCopyFileWithProgress(localFile, remoteFile, progressCallback)
+		if err != nil {
+			fmt.Print("\n")
+			log.Printf("[ERROR] Failed to upload %s: %v", localFile, err)
+			continue
+		}
+
+		progressCallback(totalBytes, totalBytes)
+		fmt.Printf("\n\033[32m\u2714\033[0m Uploaded %s\n", remoteFile)
+	}
+
+	if spinnerWasActive {
+		remote.Spinner.Restart()
 	}
 }
 
