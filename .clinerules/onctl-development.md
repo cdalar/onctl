@@ -7,6 +7,12 @@ Guidelines for developing the onctl CLI tool, a Go-based utility for managing cl
 - Use meaningful variable and function names that reflect their purpose in cloud management context
 - Prefer early returns and avoid nested if statements for cleaner control flow
 
+## Linting practices
+- Use `golangci-lint` for comprehensive code quality checking
+- Run `make lint` or `golangci-lint run` before committing changes
+- Address all lint warnings and errors to maintain code quality standards
+- Configure linters in `.golangci.yml` with project-specific settings when needed
+
 ## Error handling
 - Return errors from functions rather than panicking, allowing callers to handle appropriately
 - Use `fmt.Errorf` with `%w` verb for error wrapping to preserve error chains
@@ -18,6 +24,7 @@ Guidelines for developing the onctl CLI tool, a Go-based utility for managing cl
 - Use test helpers and fixtures for common setup/teardown operations
 - Include integration tests for end-to-end CLI command validation
 - Aim for good test coverage, especially for cloud provider implementations
+- Ensure test coverage does not decrease; cover all new lines added with tests to prevent codecov from blocking PR merges
 
 ## CLI design patterns
 - Use cobra framework for command structure with consistent flag naming
