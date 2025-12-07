@@ -303,7 +303,7 @@ func ProcessUploadSlice(uploadSlice []string, remote tools.Remote) {
 
 				fmt.Printf("Uploading file: %s -> %s\n", localFile, remoteFile)
 
-				err := remote.SSHCopyFile(localFile, remoteFile)
+				err := remote.SSHCopyFileWithProgress(localFile, remoteFile, nil)
 				if err != nil {
 					log.Printf("[ERROR] Failed to upload %s: %v", localFile, err)
 				}

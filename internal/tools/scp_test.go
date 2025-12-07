@@ -95,7 +95,7 @@ func TestSCPCopyFileWithProgress_WithCallback(t *testing.T) {
 	}
 }
 
-func TestSSHCopyFile(t *testing.T) {
+func TestSSHCopyFileWithProgress_NoCallback(t *testing.T) {
 	// Create a temporary file
 	tmpFile, err := os.CreateTemp("", "scp-test-")
 	if err != nil {
@@ -118,7 +118,7 @@ func TestSSHCopyFile(t *testing.T) {
 	}
 
 	// This will fail because we can't actually connect
-	err = r.SSHCopyFile(tmpFile.Name(), "remote.txt")
+	err = r.SSHCopyFileWithProgress(tmpFile.Name(), "remote.txt", nil)
 	if err == nil {
 		t.Error("Expected error without valid SSH connection, got nil")
 	}

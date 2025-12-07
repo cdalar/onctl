@@ -62,10 +62,6 @@ func (r *Remote) DownloadFile(srcPath, dstPath string) error {
 	return nil
 }
 
-func (r *Remote) SSHCopyFile(srcPath, dstPath string) error {
-	return r.SSHCopyFileWithProgress(srcPath, dstPath, nil)
-}
-
 func (r *Remote) SSHCopyFileWithProgress(srcPath, dstPath string, progressCallback func(current, total int64)) error {
 	// Get file size for progress reporting
 	srcStat, err := os.Stat(srcPath)
