@@ -117,13 +117,13 @@ func (r *Remote) SSHCopyFileWithProgress(srcPath, dstPath string, progressCallba
 
 	// Use ReadFrom for optimized transfer with concurrent writes
 	// The SFTP client will handle buffering and concurrent requests efficiently
-	var totalWritten int64
 	if progressCallback != nil {
 		// Copy with progress reporting
 		// Use 32KB buffer to match SFTP default packet size for compatibility
 		const bufferSize = 32 * 1024
 		buffer := make([]byte, bufferSize)
 		var lastProgressUpdate int64
+		var totalWritten int64
 
 		for {
 			n, readErr := srcFile.Read(buffer)
