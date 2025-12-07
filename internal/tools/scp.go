@@ -10,6 +10,11 @@ import (
 	"github.com/pkg/sftp"
 )
 
+const (
+	progressReportInterval = 1 << 20  // 1MB reporting increments
+	progressCopyBufferSize = 16 << 20 // 16MB buffer for higher throughput
+)
+
 // newSFTPClient creates a new SFTP client with optimized settings for concurrent operations
 func (r *Remote) newSFTPClient(useConcurrentReads, useConcurrentWrites bool) (*sftp.Client, error) {
 	err := r.NewSSHConnection()
@@ -118,35 +123,47 @@ func (r *Remote) SSHCopyFileWithProgress(srcPath, dstPath string, progressCallba
 	// Use ReadFrom for optimized transfer with concurrent writes
 	// The SFTP client will handle buffering and concurrent requests efficiently
 	if progressCallback != nil {
-		// Copy with progress reporting
-		// Use 32KB buffer to match SFTP default packet size for compatibility
-		const bufferSize = 32 * 1024
-		buffer := make([]byte, bufferSize)
-		var lastProgressUpdate int64
-		var totalWritten int64
+		// Copy with progress reporting while keeping larger buffers for speed
+		type progressReader struct {
+			r             io.Reader
+			totalRead     int64
+			lastReported  int64
+			totalExpected int64
+			cb            func(current, total int64)
+		}
 
-		for {
-			n, readErr := srcFile.Read(buffer)
+		// Report progress roughly every 1MB
+		pr := &progressReader{
+			r:             srcFile,
+			totalExpected: fileSize,
+			cb:            progressCallback,
+		}
+		buffer := make([]byte, progressCopyBufferSize)
+
+		var copyErr error
+		for copyErr == nil {
+			n, err := pr.r.Read(buffer)
 			if n > 0 {
-				_, writeErr := dstFile.Write(buffer[:n])
+				written, writeErr := dstFile.Write(buffer[:n])
 				if writeErr != nil {
 					return writeErr
 				}
-				totalWritten += int64(n)
-
-				// Report progress at reasonable intervals (every 1MB or when complete)
-				if totalWritten-lastProgressUpdate >= 1024*1024 || totalWritten == fileSize {
-					progressCallback(totalWritten, fileSize)
-					lastProgressUpdate = totalWritten
+				pr.totalRead += int64(written)
+				if pr.totalRead-pr.lastReported >= progressReportInterval || pr.totalRead == pr.totalExpected {
+					pr.cb(pr.totalRead, pr.totalExpected)
+					pr.lastReported = pr.totalRead
 				}
 			}
 
-			if readErr != nil {
-				if readErr == io.EOF {
+			if err != nil {
+				if err == io.EOF {
 					break
 				}
-				return readErr
+				copyErr = err
 			}
+		}
+		if copyErr != nil {
+			return copyErr
 		}
 	} else {
 		// No progress callback - use optimized ReadFrom for maximum throughput
