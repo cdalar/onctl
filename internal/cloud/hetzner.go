@@ -29,6 +29,13 @@ func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 	if err != nil {
 		log.Fatalln(err)
 	}
+
+	// Use server.Type if provided, otherwise fall back to config
+	serverType := server.Type
+	if serverType == "" {
+		serverType = viper.GetString("hetzner.vm.type")
+	}
+
 	result, _, err := p.Client.Server.Create(context.TODO(), hcloud.ServerCreateOpts{
 		Name: server.Name,
 		Location: &hcloud.Location{
@@ -38,7 +45,7 @@ func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 			Name: viper.GetString("hetzner.vm.image"),
 		},
 		ServerType: &hcloud.ServerType{
-			Name: viper.GetString("hetzner.vm.type"),
+			Name: serverType,
 		},
 		SSHKeys: []*hcloud.SSHKey{
 			{

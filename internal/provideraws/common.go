@@ -2,9 +2,10 @@ package provideraws
 
 import (
 	"fmt"
-
 	"log"
 	"os"
+	"sort"
+	"strings"
 
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/spf13/viper"
@@ -354,19 +355,23 @@ func GetClient() *ec2.EC2 {
 
 func GetImages() ([]*ec2.Image, error) {
 	svc := GetClient()
+
+	// Use configured image name, or fallback to a pattern for latest Ubuntu
+	imageName := viper.GetString("aws.vm.image")
+	if imageName == "" {
+		imageName = "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
+	}
+
 	input := &ec2.DescribeImagesInput{
+		Owners: []*string{aws.String("amazon")},
 		Filters: []*ec2.Filter{
 			{
-				Name: aws.String("owner-alias"),
-				Values: []*string{
-					aws.String("amazon"),
-				},
+				Name:   aws.String("name"),
+				Values: []*string{aws.String(imageName)},
 			},
 			{
-				Name: aws.String("name"),
-				Values: []*string{
-					aws.String("ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20230208"),
-				},
+				Name:   aws.String("state"),
+				Values: []*string{aws.String("available")},
 			},
 		},
 	}
@@ -385,6 +390,23 @@ func GetImages() ([]*ec2.Image, error) {
 		}
 		return nil, err
 	}
+
+	// Sort images by creation date (newest first) if using wildcard
+	if strings.Contains(imageName, "*") && len(result.Images) > 0 {
+		sort.Slice(result.Images, func(i, j int) bool {
+			switch {
+			case result.Images[i].CreationDate == nil && result.Images[j].CreationDate != nil:
+				return false // i is older, push to end
+			case result.Images[i].CreationDate != nil && result.Images[j].CreationDate == nil:
+				return true // i is newer, keep at front
+			case result.Images[i].CreationDate == nil && result.Images[j].CreationDate == nil:
+				return false // equal, keep order
+			default:
+				return *result.Images[i].CreationDate > *result.Images[j].CreationDate
+			}
+		})
+	}
+
 	return result.Images, nil
 }
 
@@ -519,7 +541,7 @@ func ImportKeyPair(svc *ec2.EC2, keyName string, publicKeyFile string) {
 	if err != nil {
 		log.Println(err)
 	}
-	log.Println(publicKey)
+	log.Println(string(publicKey))
 	input := &ec2.ImportKeyPairInput{
 		KeyName:           aws.String(keyName),
 		PublicKeyMaterial: []byte(publicKey),

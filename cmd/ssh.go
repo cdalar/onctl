@@ -10,24 +10,53 @@ import (
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v2"
 )
 
-var (
-	port          int
-	apply         []string
-	downloadSlice []string
-	uploadSlice   []string
-	key           string
-)
+type cmdSSHOptions struct {
+	Port          int      `yaml:"port"`
+	ApplyFiles    []string `yaml:"applyFiles"`
+	DownloadFiles []string `yaml:"downloadFiles"`
+	UploadFiles   []string `yaml:"uploadFiles"`
+	Key           string   `yaml:"key"`
+	DotEnvFile    string   `yaml:"dotEnvFile"`
+	Variables     []string `yaml:"variables"`
+	ConfigFile    string   `yaml:"configFile"`
+}
+
+var sshOpt cmdSSHOptions
+
+func parseSSHConfigFile(configFile string) (*cmdSSHOptions, error) {
+	file, err := os.Open(configFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open config file %q: %w", configFile, err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close config file: %v", err)
+		}
+	}()
+
+	var config cmdSSHOptions
+	decoder := yaml.NewDecoder(file)
+	if err := decoder.Decode(&config); err != nil {
+		return nil, fmt.Errorf("failed to parse config file %q: %w", configFile, err)
+	}
+
+	return &config, nil
+}
 
 func init() {
-	sshCmd.Flags().StringVarP(&key, "key", "k", "", "Path to privateKey file (default: ~/.ssh/id_rsa))")
-	sshCmd.Flags().IntVarP(&port, "port", "p", 22, "ssh port")
-	sshCmd.Flags().StringSliceVarP(&apply, "apply-file", "a", []string{}, "bash script file(s) to run on remote")
-	sshCmd.Flags().StringSliceVarP(&downloadSlice, "download", "d", []string{}, "List of files to download")
-	sshCmd.Flags().StringSliceVarP(&uploadSlice, "upload", "u", []string{}, "List of files to upload")
-	sshCmd.Flags().StringVar(&opt.DotEnvFile, "dot-env", "", "dot-env (.env) file")
-	sshCmd.Flags().StringSliceVarP(&opt.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
+	sshCmd.Flags().StringVarP(&sshOpt.Key, "key", "k", "", "Path to privateKey file (default: ~/.ssh/id_rsa))")
+	sshCmd.Flags().IntVarP(&sshOpt.Port, "port", "p", 22, "ssh port")
+	sshCmd.Flags().StringSliceVarP(&sshOpt.ApplyFiles, "apply-file", "a", []string{}, "bash script file(s) to run on remote")
+	sshCmd.Flags().StringSliceVarP(&sshOpt.DownloadFiles, "download", "d", []string{}, "List of files to download")
+	sshCmd.Flags().StringSliceVarP(&sshOpt.UploadFiles, "upload", "u", []string{}, "List of files to upload")
+	sshCmd.Flags().StringVar(&sshOpt.DotEnvFile, "dot-env", "", "dot-env (.env) file")
+	sshCmd.Flags().StringSliceVarP(&sshOpt.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
+	sshCmd.Flags().StringVarP(&sshOpt.ConfigFile, "file", "f", "", "Path to configuration YAML file")
+	// Register ssh command at root level for convenience
+	rootCmd.AddCommand(sshCmd)
 }
 
 var sshCmd = &cobra.Command{
@@ -51,19 +80,51 @@ var sshCmd = &cobra.Command{
 	},
 
 	Run: func(cmd *cobra.Command, args []string) {
+		if sshOpt.ConfigFile != "" {
+			config, err := parseSSHConfigFile(sshOpt.ConfigFile)
+			if err != nil {
+				log.Fatalf("Error parsing config file: %v", err)
+			}
+			log.Println("[DEBUG] config file: ", sshOpt.ConfigFile)
+			log.Printf("[DEBUG] Parsed config: %+v\n", config)
+
+			// Merge config file options into the command options
+			if config.Key != "" {
+				sshOpt.Key = config.Key
+			}
+			if config.Port != 0 {
+				sshOpt.Port = config.Port
+			}
+			if len(config.ApplyFiles) > 0 {
+				sshOpt.ApplyFiles = append(sshOpt.ApplyFiles, config.ApplyFiles...)
+			}
+			if len(config.DownloadFiles) > 0 {
+				sshOpt.DownloadFiles = append(sshOpt.DownloadFiles, config.DownloadFiles...)
+			}
+			if len(config.UploadFiles) > 0 {
+				sshOpt.UploadFiles = append(sshOpt.UploadFiles, config.UploadFiles...)
+			}
+			if config.DotEnvFile != "" {
+				sshOpt.DotEnvFile = config.DotEnvFile
+			}
+			if len(config.Variables) > 0 {
+				sshOpt.Variables = append(sshOpt.Variables, config.Variables...)
+			}
+		}
+
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
-		applyFileFound := findFile(apply)
+		applyFileFound := findFile(sshOpt.ApplyFiles)
 		log.Println("[DEBUG] args: ", args)
 
 		if len(args) == 0 {
 			fmt.Println("Please provide a VM id")
 			return
 		}
-		log.Println("[DEBUG] port: ", port)
-		log.Println("[DEBUG] filename: ", applyFileFound)
-		log.Println("[DEBUG] key: ", key)
-		_, privateKeyFile := getSSHKeyFilePaths(key)
-		log.Println("[DEBUG] privateKeyFile: ", privateKeyFile)
+		log.Println("[DEBUG] port:", sshOpt.Port)
+		log.Println("[DEBUG] filename:", applyFileFound)
+		log.Println("[DEBUG] key:", sshOpt.Key)
+		_, privateKeyFile := getSSHKeyFilePaths(sshOpt.Key)
+		log.Println("[DEBUG] privateKeyFile:", privateKeyFile)
 
 		privateKey, err := os.ReadFile(privateKeyFile)
 		if err != nil {
@@ -76,38 +137,46 @@ var sshCmd = &cobra.Command{
 		remote := tools.Remote{
 			Username:   viper.GetString(cloudProvider + ".vm.username"),
 			IPAddress:  vm.IP,
-			SSHPort:    port,
+			SSHPort:    sshOpt.Port,
 			PrivateKey: string(privateKey),
 			Spinner:    s,
 		}
 
-		if len(uploadSlice) > 0 {
-			ProcessUploadSlice(uploadSlice, remote)
+		if sshOpt.DotEnvFile != "" {
+			dotEnvVars, err := tools.ParseDotEnvFile(sshOpt.DotEnvFile)
+			if err != nil {
+				log.Println(err)
+			}
+			sshOpt.Variables = append(dotEnvVars, sshOpt.Variables...)
+		}
+
+		if len(sshOpt.UploadFiles) > 0 {
+			ProcessUploadSlice(sshOpt.UploadFiles, remote)
 		}
 
 		// BEGIN Apply File
 		for i, applyFile := range applyFileFound {
 			s.Restart()
-			s.Suffix = " Running " + apply[i] + " on Remote..."
+			s.Suffix = " Running " + sshOpt.ApplyFiles[i] + " on Remote..."
 
 			err = remote.CopyAndRunRemoteFile(&tools.CopyAndRunRemoteFileConfig{
 				File: applyFile,
-				Vars: opt.Variables,
+				Vars: sshOpt.Variables,
 			})
 			if err != nil {
 				log.Println(err)
 			}
 			s.Stop()
-			fmt.Println("\033[32m\u2714\033[0m " + apply[i] + " ran on Remote")
+			fmt.Println("\033[32m\u2714\033[0m " + sshOpt.ApplyFiles[i] + " ran on Remote")
 
 		}
 		// END Apply File
 
-		if len(downloadSlice) > 0 {
-			ProcessDownloadSlice(downloadSlice, remote)
+		if len(sshOpt.DownloadFiles) > 0 {
+			ProcessDownloadSlice(sshOpt.DownloadFiles, remote)
 		}
-		if len(applyFileFound) == 0 && len(downloadSlice) == 0 && len(uploadSlice) == 0 {
-			provider.SSHInto(args[0], port, privateKeyFile)
+		if sshOpt.ConfigFile == "" && len(applyFileFound) == 0 && len(sshOpt.DownloadFiles) == 0 && len(sshOpt.UploadFiles) == 0 {
+			provider.SSHInto(args[0], sshOpt.Port, privateKeyFile)
 		}
 	},
 }

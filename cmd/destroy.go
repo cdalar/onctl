@@ -19,6 +19,8 @@ var (
 
 func init() {
 	destroyCmd.Flags().BoolVarP(&force, "force", "f", false, "force destroy VM(s) without confirmation")
+	// Register destroy command at root level for convenience
+	rootCmd.AddCommand(destroyCmd)
 }
 
 var destroyCmd = &cobra.Command{

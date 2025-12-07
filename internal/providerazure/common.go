@@ -90,6 +90,19 @@ func GetVnetClient() (vnetClient *armnetwork.VirtualNetworksClient) {
 	return vnetClient
 }
 
+func GetNSGClient() (nsgClient *armnetwork.SecurityGroupsClient) {
+	cred, err := connectionAzure()
+	if err != nil {
+		log.Fatalf("cannot connect to Azure:%+v", err)
+	}
+	nsgClient, err = armnetwork.NewSecurityGroupsClient(viper.GetString("azure.subscriptionId"), cred, nil)
+	if err != nil {
+		return nil
+	}
+
+	return nsgClient
+}
+
 func connectionAzure() (azcore.TokenCredential, error) {
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {

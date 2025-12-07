@@ -26,6 +26,7 @@ type ProviderAzure struct {
 	PublicIPClient      *armnetwork.PublicIPAddressesClient
 	SSHKeyClient        *armcompute.SSHPublicKeysClient
 	VnetClient          *armnetwork.VirtualNetworksClient
+	NSGClient           *armnetwork.SecurityGroupsClient
 }
 
 type QueryResponse struct {
@@ -156,9 +157,10 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 	log.Println("[DEBUG] Deploy Server")
 
 	var vnet *armnetwork.VirtualNetwork
+	var err error
 	// Create the Vnet
 	if viper.GetString("azure.vm.vnet.create") == "true" {
-		vnet, err := createVirtualNetwork(context.Background(), &p)
+		vnet, err = createVirtualNetwork(context.Background(), &p)
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -168,7 +170,7 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 		if err != nil {
 			log.Fatalln(err)
 		}
-		log.Println("[DEBUG] ", vnet)
+		log.Println("[DEBUG] ", vnetResp)
 		vnet = &vnetResp.VirtualNetwork
 	}
 	pip, err := createPublicIP(context.Background(), &p, server)
@@ -176,7 +178,12 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 		log.Fatalln(err)
 	}
 	log.Println("[DEBUG] ", pip)
-	nic, err := createNic(context.Background(), &p, server, vnet, pip)
+	nsg, err := createNSG(context.Background(), &p, server)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	log.Println("[DEBUG] ", nsg)
+	nic, err := createNic(context.Background(), &p, server, vnet, pip, nsg)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -248,12 +255,12 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 		Frequency: time.Duration(3) * time.Second,
 	})
 	return Vm{
-		ID:        *resp.VirtualMachine.Properties.VMID,
-		Name:      *resp.VirtualMachine.Name,
+		ID:        *resp.Properties.VMID,
+		Name:      *resp.Name,
 		IP:        *pip.Properties.IPAddress,
-		Type:      string(*resp.VirtualMachine.Properties.HardwareProfile.VMSize),
-		Status:    *resp.VirtualMachine.Properties.ProvisioningState,
-		CreatedAt: *resp.VirtualMachine.Properties.TimeCreated,
+		Type:      string(*resp.Properties.HardwareProfile.VMSize),
+		Status:    *resp.Properties.ProvisioningState,
+		CreatedAt: *resp.Properties.TimeCreated,
 	}, err
 }
 
@@ -298,6 +305,21 @@ func (p ProviderAzure) Destroy(server Vm) error {
 		log.Fatalln(err)
 	}
 	log.Println("[DEBUG] ", pip)
+
+	nsg, err := p.NSGClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-nsg", nil)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	nsgDone, err := nsg.PollUntilDone(context.Background(), &runtime.PollUntilDoneOptions{
+		Frequency: time.Duration(3) * time.Second,
+	})
+	if err != nil {
+		log.Fatalln(err)
+	}
+	log.Println("[DEBUG] ", nsgDone)
+	if nsg.Done() {
+		log.Println("[DEBUG] NSG DONE")
+	}
 
 	return err
 
@@ -378,6 +400,9 @@ func createPublicIP(ctx context.Context, p *ProviderAzure, server Vm) (*armnetwo
 
 	parameters := armnetwork.PublicIPAddress{
 		Location: to.Ptr(viper.GetString("azure.location")),
+		SKU: &armnetwork.PublicIPAddressSKU{
+			Name: to.Ptr(armnetwork.PublicIPAddressSKUNameStandard),
+		},
 		Properties: &armnetwork.PublicIPAddressPropertiesFormat{
 			PublicIPAllocationMethod: to.Ptr(armnetwork.IPAllocationMethodStatic), // Static or Dynamic
 		},
@@ -401,11 +426,56 @@ func createPublicIP(ctx context.Context, p *ProviderAzure, server Vm) (*armnetwo
 	return &resp.PublicIPAddress, err
 }
 
-func createNic(ctx context.Context, p *ProviderAzure, server Vm, vnet *armnetwork.VirtualNetwork, pip *armnetwork.PublicIPAddress) (*armnetwork.Interface, error) {
+func createNSG(ctx context.Context, p *ProviderAzure, server Vm) (*armnetwork.SecurityGroup, error) {
+	fmt.Print("Creating network security group...")
+	nsgParameters := armnetwork.SecurityGroup{
+		Location: to.Ptr(viper.GetString("azure.location")),
+		Properties: &armnetwork.SecurityGroupPropertiesFormat{
+			SecurityRules: []*armnetwork.SecurityRule{
+				{
+					Name: to.Ptr("SSH"),
+					Properties: &armnetwork.SecurityRulePropertiesFormat{
+						Description:              to.Ptr("Allow SSH"),
+						Protocol:                 to.Ptr(armnetwork.SecurityRuleProtocolTCP),
+						SourcePortRange:          to.Ptr("*"),
+						DestinationPortRange:     to.Ptr("22"),
+						SourceAddressPrefix:      to.Ptr("*"),
+						DestinationAddressPrefix: to.Ptr("*"),
+						Access:                   to.Ptr(armnetwork.SecurityRuleAccessAllow),
+						Priority:                 to.Ptr[int32](100),
+						Direction:                to.Ptr(armnetwork.SecurityRuleDirectionInbound),
+					},
+				},
+			},
+		},
+	}
+
+	pollerResponse, err := p.NSGClient.BeginCreateOrUpdate(ctx, viper.GetString("azure.resourceGroup"), server.Name+"-nsg", nsgParameters, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := pollerResponse.PollUntilDone(ctx, &runtime.PollUntilDoneOptions{
+		Frequency: time.Duration(3) * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if pollerResponse.Done() {
+		log.Println("[DEBUG] NSG DONE")
+	}
+
+	return &resp.SecurityGroup, nil
+}
+
+func createNic(ctx context.Context, p *ProviderAzure, server Vm, vnet *armnetwork.VirtualNetwork, pip *armnetwork.PublicIPAddress, nsg *armnetwork.SecurityGroup) (*armnetwork.Interface, error) {
 	fmt.Print("Creating network interface...")
 	nicResp, err := p.NicClient.BeginCreateOrUpdate(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-nic", armnetwork.Interface{
 		Location: to.Ptr(viper.GetString("azure.location")),
 		Properties: &armnetwork.InterfacePropertiesFormat{
+			NetworkSecurityGroup: &armnetwork.SecurityGroup{
+				ID: nsg.ID,
+			},
 			IPConfigurations: []*armnetwork.InterfaceIPConfiguration{
 				{
 					Name: to.Ptr("ipConfig"),

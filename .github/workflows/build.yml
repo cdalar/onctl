@@ -1,13 +1,17 @@
 name: build
 
-permissions: 
+permissions:
   contents: read
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**' 
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
   schedule:
   - cron: '0 10 * * 1' # run "At 10:00 on Monday"
   workflow_call:
@@ -34,10 +38,10 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
           check-latest: true
@@ -75,11 +79,11 @@ jobs:
         if: ${{ !inputs.skipTests }}
         run: go test -v -shuffle=on -run=- -bench=. -benchtime=1x ./...
 
-      # - name: Upload Coverage
-      #   if: ${{ !inputs.skipTests }}
-      #   uses: codecov/codecov-action@v4
-      #   continue-on-error: true
-      #   with:
-      #     token: ${{secrets.CODECOV_TOKEN}}
-      #     file: ./coverage.txt
-      #     fail_ci_if_error: false
+      - name: Upload Coverage
+        if: ${{ !inputs.skipTests }}
+        uses: codecov/codecov-action@v4
+        continue-on-error: true
+        with:
+          token: ${{secrets.CODECOV_TOKEN}}
+          file: ./coverage.txt
+          fail_ci_if_error: false

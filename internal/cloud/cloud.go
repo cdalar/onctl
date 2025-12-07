@@ -23,13 +23,13 @@ type Vm struct {
 	// ID is the ID of the instance
 	ID string
 	// Name is the name of the instance
-	Name string
+	Name string `yaml:"name"`
 	// IP is the public IP of the instance
 	IP string
 	//LocalIP is the local IP of the instance
 	PrivateIP string
 	// Type is the type of the instance
-	Type string
+	Type string `yaml:"type"`
 	// Status is the status of the instance
 	Status string
 	// Location is the location of the instance
@@ -37,9 +37,9 @@ type Vm struct {
 	// SSHKeyID is the ID of the SSH key
 	SSHKeyID string
 	// SSHPort is the port to connect to the instance
-	SSHPort int
+	SSHPort int `yaml:"sshPort"`
 	// CloudInit is the cloud-init file
-	CloudInitFile string
+	CloudInitFile string `yaml:"cloudInitFile"`
 	// CreatedAt is the creation date of the instance
 	CreatedAt time.Time
 	// Provider is the cloud provider
@@ -58,7 +58,7 @@ type CostStruct struct {
 func (v Vm) String() string {
 	value := reflect.ValueOf(v)
 	typeOfS := value.Type()
-	var ret string = "\n"
+	ret := "\n"
 	for i := 0; i < value.NumField(); i++ {
 		ret = ret + fmt.Sprintf("%s:\t %v\n", typeOfS.Field(i).Name, value.Field(i).Interface())
 	}
