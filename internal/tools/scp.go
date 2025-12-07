@@ -151,7 +151,7 @@ func (r *Remote) SSHCopyFileWithProgress(srcPath, dstPath string, progressCallba
 	} else {
 		// No progress callback - use optimized ReadFrom for maximum throughput
 		// ReadFrom uses concurrent writes internally when UseConcurrentWrites is enabled
-		totalWritten, err = dstFile.ReadFrom(srcFile)
+		_, err = dstFile.ReadFrom(srcFile)
 		if err != nil {
 			return err
 		}
