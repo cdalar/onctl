@@ -17,19 +17,24 @@ func (r *Remote) DownloadFile(srcPath, dstPath string) error {
 		return err
 	}
 
-	// open an SFTP session over an existing ssh connection.
-	sftp, err := sftp.NewClient(r.Client)
+	// open an SFTP session over an existing ssh connection with optimized settings.
+	// UseConcurrentReads enables concurrent read requests for better throughput
+	// MaxConcurrentRequestsPerFile controls how many requests can be in-flight (default 64)
+	sftpClient, err := sftp.NewClient(r.Client,
+		sftp.UseConcurrentReads(true),
+		sftp.MaxConcurrentRequestsPerFile(64),
+	)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		if err := sftp.Close(); err != nil {
+		if err := sftpClient.Close(); err != nil {
 			log.Printf("Failed to close SFTP client: %v", err)
 		}
 	}()
 
 	// Open the source file
-	srcFile, err := sftp.Open(srcPath)
+	srcFile, err := sftpClient.Open(srcPath)
 	if err != nil {
 		return err
 	}
@@ -75,13 +80,18 @@ func (r *Remote) SSHCopyFileWithProgress(srcPath, dstPath string, progressCallba
 		return err
 	}
 
-	// open an SFTP session over an existing ssh connection.
-	sftp, err := sftp.NewClient(r.Client)
+	// open an SFTP session over an existing ssh connection with optimized settings.
+	// UseConcurrentWrites enables concurrent write requests for better throughput
+	// MaxConcurrentRequestsPerFile controls how many requests can be in-flight
+	sftpClient, err := sftp.NewClient(r.Client,
+		sftp.UseConcurrentWrites(true),
+		sftp.MaxConcurrentRequestsPerFile(64),
+	)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		if err := sftp.Close(); err != nil {
+		if err := sftpClient.Close(); err != nil {
 			log.Printf("Failed to close SFTP client: %v", err)
 		}
 	}()
@@ -99,7 +109,7 @@ func (r *Remote) SSHCopyFileWithProgress(srcPath, dstPath string, progressCallba
 	}()
 
 	// Create the destination file
-	dstFile, err := sftp.Create(dstPath)
+	dstFile, err := sftpClient.Create(dstPath)
 	if err != nil {
 		return err
 	}
@@ -109,41 +119,51 @@ func (r *Remote) SSHCopyFileWithProgress(srcPath, dstPath string, progressCallba
 		}
 	}()
 
-	// Copy file in larger chunks for better performance
-	const bufferSize = 1024 * 1024 // 1MB chunks for better throughput
-	buffer := make([]byte, bufferSize)
+	// Use ReadFrom for optimized transfer with concurrent writes
+	// The SFTP client will handle buffering and concurrent requests efficiently
 	var totalWritten int64
-	var lastProgressUpdate int64
+	if progressCallback != nil {
+		// Copy with progress reporting
+		// Use 32KB buffer to match SFTP default packet size for compatibility
+		const bufferSize = 32 * 1024
+		buffer := make([]byte, bufferSize)
+		var lastProgressUpdate int64
 
-	for {
-		n, readErr := srcFile.Read(buffer)
-		if n > 0 {
-			_, writeErr := dstFile.Write(buffer[:n])
-			if writeErr != nil {
-				return writeErr
+		for {
+			n, readErr := srcFile.Read(buffer)
+			if n > 0 {
+				_, writeErr := dstFile.Write(buffer[:n])
+				if writeErr != nil {
+					return writeErr
+				}
+				totalWritten += int64(n)
+
+				// Report progress at reasonable intervals (every 1MB or when complete)
+				if totalWritten-lastProgressUpdate >= 1024*1024 || totalWritten == fileSize {
+					progressCallback(totalWritten, fileSize)
+					lastProgressUpdate = totalWritten
+				}
 			}
-			totalWritten += int64(n)
 
-			// Report progress at reasonable intervals to balance responsiveness and performance
-			// Update every 1MB or when complete
-			if progressCallback != nil && (totalWritten-lastProgressUpdate >= 1024*1024 || totalWritten == fileSize) {
-				progressCallback(totalWritten, fileSize)
-				lastProgressUpdate = totalWritten
+			if readErr != nil {
+				if readErr == io.EOF {
+					// Final progress update
+					progressCallback(totalWritten, fileSize)
+					break
+				}
+				return readErr
 			}
 		}
-
-		if readErr != nil {
-			if readErr == io.EOF {
-				// Final progress update
-				if progressCallback != nil {
-					progressCallback(totalWritten, fileSize)
-				}
-				break
-			}
-			return readErr
+	} else {
+		// No progress callback - use optimized ReadFrom for maximum throughput
+		// ReadFrom uses concurrent writes internally when UseConcurrentWrites is enabled
+		totalWritten, err = dstFile.ReadFrom(srcFile)
+		if err != nil {
+			return err
 		}
 	}
 
+	_ = totalWritten // Suppress unused variable warning when no progress callback
 	return nil
 }
 
