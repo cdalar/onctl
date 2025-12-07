@@ -10,22 +10,34 @@ import (
 	"github.com/pkg/sftp"
 )
 
-func (r *Remote) DownloadFile(srcPath, dstPath string) error {
-	// Create a new SSH connection
+// newSFTPClient creates a new SFTP client with optimized settings for concurrent operations
+func (r *Remote) newSFTPClient(useConcurrentReads, useConcurrentWrites bool) (*sftp.Client, error) {
 	err := r.NewSSHConnection()
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to establish SSH connection: %w", err)
 	}
 
-	// open an SFTP session over an existing ssh connection with optimized settings.
-	// UseConcurrentReads enables concurrent read requests for better throughput
-	// MaxConcurrentRequestsPerFile controls how many requests can be in-flight (default 64)
-	sftpClient, err := sftp.NewClient(r.Client,
-		sftp.UseConcurrentReads(true),
-		sftp.MaxConcurrentRequestsPerFile(64),
-	)
+	var opts []sftp.ClientOption
+	if useConcurrentReads {
+		opts = append(opts, sftp.UseConcurrentReads(true))
+	}
+	if useConcurrentWrites {
+		opts = append(opts, sftp.UseConcurrentWrites(true))
+	}
+	opts = append(opts, sftp.MaxConcurrentRequestsPerFile(64))
+
+	sftpClient, err := sftp.NewClient(r.Client, opts...)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to create SFTP client: %w", err)
+	}
+	return sftpClient, nil
+}
+
+func (r *Remote) DownloadFile(srcPath, dstPath string) error {
+	// open an SFTP session over an existing ssh connection with optimized settings for reads
+	sftpClient, err := r.newSFTPClient(true, false)
+	if err != nil {
+		return fmt.Errorf("failed to create SFTP client for download: %w", err)
 	}
 	defer func() {
 		if err := sftpClient.Close(); err != nil {
@@ -36,7 +48,7 @@ func (r *Remote) DownloadFile(srcPath, dstPath string) error {
 	// Open the source file
 	srcFile, err := sftpClient.Open(srcPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open source file %s: %w", srcPath, err)
 	}
 	defer func() {
 		if err := srcFile.Close(); err != nil {
@@ -47,7 +59,7 @@ func (r *Remote) DownloadFile(srcPath, dstPath string) error {
 	// Create the destination file
 	dstFile, err := os.Create(dstPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create destination file %s: %w", dstPath, err)
 	}
 	defer func() {
 		if err := dstFile.Close(); err != nil {
@@ -55,9 +67,9 @@ func (r *Remote) DownloadFile(srcPath, dstPath string) error {
 		}
 	}()
 
-	// write to file
+	// transfer file contents
 	if _, err := srcFile.WriteTo(dstFile); err != nil {
-		return err
+		return fmt.Errorf("failed to transfer file contents: %w", err)
 	}
 	return nil
 }
@@ -66,25 +78,14 @@ func (r *Remote) SSHCopyFileWithProgress(srcPath, dstPath string, progressCallba
 	// Get file size for progress reporting
 	srcStat, err := os.Stat(srcPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to stat source file: %w", err)
 	}
 	fileSize := srcStat.Size()
 
-	// Create a new SSH connection
-	err = r.NewSSHConnection()
+	// open an SFTP session over an existing ssh connection with optimized settings for writes
+	sftpClient, err := r.newSFTPClient(false, true)
 	if err != nil {
-		return err
-	}
-
-	// open an SFTP session over an existing ssh connection with optimized settings.
-	// UseConcurrentWrites enables concurrent write requests for better throughput
-	// MaxConcurrentRequestsPerFile controls how many requests can be in-flight
-	sftpClient, err := sftp.NewClient(r.Client,
-		sftp.UseConcurrentWrites(true),
-		sftp.MaxConcurrentRequestsPerFile(64),
-	)
-	if err != nil {
-		return err
+		return fmt.Errorf("failed to create SFTP client for upload: %w", err)
 	}
 	defer func() {
 		if err := sftpClient.Close(); err != nil {
@@ -95,8 +96,7 @@ func (r *Remote) SSHCopyFileWithProgress(srcPath, dstPath string, progressCallba
 	// Open the source file
 	srcFile, err := os.Open(srcPath)
 	if err != nil {
-		log.Println(err)
-		return err
+		return fmt.Errorf("failed to open source file: %w", err)
 	}
 	defer func() {
 		if err := srcFile.Close(); err != nil {
@@ -107,7 +107,7 @@ func (r *Remote) SSHCopyFileWithProgress(srcPath, dstPath string, progressCallba
 	// Create the destination file
 	dstFile, err := sftpClient.Create(dstPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create destination file %s: %w", dstPath, err)
 	}
 	defer func() {
 		if err := dstFile.Close(); err != nil {
@@ -143,8 +143,6 @@ func (r *Remote) SSHCopyFileWithProgress(srcPath, dstPath string, progressCallba
 
 			if readErr != nil {
 				if readErr == io.EOF {
-					// Final progress update
-					progressCallback(totalWritten, fileSize)
 					break
 				}
 				return readErr
@@ -167,14 +165,14 @@ func (r *Remote) SCPCopyFileWithProgress(srcPath, dstPath string, progressCallba
 	// Get file size for progress reporting
 	srcStat, err := os.Stat(srcPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to stat source file %s: %w", srcPath, err)
 	}
 	fileSize := srcStat.Size()
 
 	// Create temporary file for private key
 	tmpKeyFile, err := os.CreateTemp("", "onctl-scp-key-")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create temporary key file: %w", err)
 	}
 	defer func() {
 		if removeErr := os.Remove(tmpKeyFile.Name()); removeErr != nil {
@@ -184,15 +182,15 @@ func (r *Remote) SCPCopyFileWithProgress(srcPath, dstPath string, progressCallba
 
 	// Write private key to temp file
 	if _, err := tmpKeyFile.WriteString(r.PrivateKey); err != nil {
-		return err
+		return fmt.Errorf("failed to write private key to temp file: %w", err)
 	}
 	if err := tmpKeyFile.Close(); err != nil {
-		return err
+		return fmt.Errorf("failed to close temp key file: %w", err)
 	}
 
 	// Set restrictive permissions on key file
 	if err := os.Chmod(tmpKeyFile.Name(), 0600); err != nil {
-		return err
+		return fmt.Errorf("failed to set permissions on temp key file: %w", err)
 	}
 
 	// Use scp command for faster transfer
@@ -208,7 +206,7 @@ func (r *Remote) SCPCopyFileWithProgress(srcPath, dstPath string, progressCallba
 	// Note: scp doesn't provide built-in progress reporting, so we report completion after transfer
 	err = scpCmd.Run()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to execute scp command: %w", err)
 	}
 
 	// Report completion
