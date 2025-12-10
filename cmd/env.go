@@ -59,7 +59,7 @@ var envDestroyCmd = &cobra.Command{
 			os.Exit(1)
 		}
 		// Parse template to get VM name
-		config, err := parseConfigFile(envDestroyTemplateFile)
+		config, err := parsePipelineConfigForCreate(envDestroyTemplateFile)
 		if err != nil {
 			log.Fatalf("Error parsing template file: %v", err)
 		}
@@ -87,7 +87,7 @@ func init() {
 	envCmd.AddCommand(envCreateCmd)
 	envCmd.AddCommand(envDestroyCmd)
 
-	envCreateCmd.Flags().StringVarP(&envCreateTemplateFile, "template", "t", "", "Path to environment template file")
-	envDestroyCmd.Flags().StringVarP(&envDestroyTemplateFile, "template", "t", "", "Path to environment template file")
-	envDestroyCmd.Flags().BoolVarP(&envDestroyForce, "force", "f", false, "force destroy environment without confirmation")
+	envCreateCmd.Flags().StringVarP(&envCreateTemplateFile, "config", "f", "", "Path to environment file")
+	envDestroyCmd.Flags().StringVarP(&envDestroyTemplateFile, "config", "f", "", "Path to environment file")
+	envDestroyCmd.Flags().BoolVarP(&envDestroyForce, "force", "F", false, "force destroy environment without confirmation")
 }

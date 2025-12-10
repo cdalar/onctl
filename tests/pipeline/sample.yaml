@@ -1,0 +1,13 @@
+apiVersion: onctl.io/v1alpha1
+kind: Bundle
+metadata:
+  name: k3s-single-vm
+spec:
+  steps:
+    - name: infra
+      type: bash
+      bash:
+        script: |
+          #!/bin/bash
+          set -e
+          onctl ls 

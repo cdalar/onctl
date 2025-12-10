@@ -9,19 +9,16 @@ import (
 	"github.com/briandowns/spinner"
 	"github.com/cdalar/onctl/internal/cloud"
 	"github.com/cdalar/onctl/internal/domain"
+	"github.com/cdalar/onctl/internal/pipeline"
 	"github.com/cdalar/onctl/internal/tools"
-	"gopkg.in/yaml.v2"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-// TODO: ? Struct for options. cmdCreateOptions
-// TODO: .env file support
-// TODO: remove initFile and implement ssh apply structure
-// TODO: ? Create Packages with cloud-init, apply Files, Variables. (cloud-init, apply, vars)
-
-type cmdCreateOptions struct {
+// CreateConfig holds configuration for VM creation
+type CreateConfig struct {
+	ConfigFile    string   `yaml:"configFile"`
 	PublicKeyFile string   `yaml:"publicKeyFile"`
 	ApplyFiles    []string `yaml:"applyFiles"`
 	DotEnvFile    string   `yaml:"dotEnvFile"`
@@ -30,45 +27,94 @@ type cmdCreateOptions struct {
 	Domain        string   `yaml:"domain"`
 	DownloadFiles []string `yaml:"downloadFiles"`
 	UploadFiles   []string `yaml:"uploadFiles"`
-	ConfigFile    string   `yaml:"configFile"`
 }
 
-var (
-	opt cmdCreateOptions
-)
+var createConfig CreateConfig
 
-func parseConfigFile(configFile string) (*cmdCreateOptions, error) {
-	file, err := os.Open(configFile)
+func parsePipelineConfigForCreate(configFile string) (*CreateConfig, error) {
+	pipelineConfig, err := pipeline.LoadConfig(configFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open config file %q: %w", configFile, err)
+		return nil, fmt.Errorf("failed to parse pipeline config file %q: %w", configFile, err)
 	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			log.Printf("Failed to close config file: %v", err)
+
+	// For single VM create, use the first target if there's only one, or require target specification
+	var targetName string
+	if len(pipelineConfig.Targets) == 1 {
+		targetName = pipelineConfig.Targets[0].Name
+	} else {
+		// If multiple targets, look for create steps and use their targets
+		for _, step := range pipelineConfig.Steps {
+			if step.Type == "create" {
+				targetName = step.Target
+				break
+			}
 		}
-	}()
-
-	var config cmdCreateOptions
-	decoder := yaml.NewDecoder(file)
-	if err := decoder.Decode(&config); err != nil {
-		return nil, fmt.Errorf("failed to parse config file %q: %w", configFile, err)
+		if targetName == "" {
+			targetName = pipelineConfig.Targets[0].Name // fallback to first target
+		}
 	}
 
-	return &config, nil
+	// Find target config
+	var target *pipeline.Target
+	var targetConfig *pipeline.TargetConfig
+	for _, t := range pipelineConfig.Targets {
+		if t.Name == targetName {
+			target = &t
+			targetConfig = &t.Config
+			break
+		}
+	}
+	if target == nil {
+		return nil, fmt.Errorf("target %q not found in pipeline configuration", targetName)
+	}
+
+	// Initialize create config from target
+	config := &CreateConfig{
+		PublicKeyFile: targetConfig.PublicKeyFile,
+		Vm:            targetConfig.Vm,
+	}
+
+	// Find apply/create steps for this target and merge their configs
+	for _, step := range pipelineConfig.Steps {
+		if step.Type == "apply" && step.Target == targetName {
+			if step.Config.DotEnvFile != "" {
+				config.DotEnvFile = step.Config.DotEnvFile
+			}
+			if len(step.Config.Variables) > 0 {
+				config.Variables = append(config.Variables, step.Config.Variables...)
+			}
+			// Apply steps can have files to run
+			if len(step.Config.Files) > 0 {
+				config.ApplyFiles = append(config.ApplyFiles, step.Config.Files...)
+			}
+		}
+		if step.Type == "upload" && step.Target == targetName {
+			if len(step.Config.Files) > 0 {
+				config.UploadFiles = append(config.UploadFiles, step.Config.Files...)
+			}
+		}
+		if step.Type == "download" && step.Target == targetName {
+			if len(step.Config.Files) > 0 {
+				config.DownloadFiles = append(config.DownloadFiles, step.Config.Files...)
+			}
+		}
+	}
+
+	return config, nil
 }
 
 func init() {
-	createCmd.Flags().StringVarP(&opt.PublicKeyFile, "publicKey", "k", "", "Path to publicKey file (default: ~/.ssh/id_rsa))")
-	createCmd.Flags().StringSliceVarP(&opt.ApplyFiles, "apply-file", "a", []string{}, "bash script file(s) to run on remote")
-	createCmd.Flags().StringSliceVarP(&opt.DownloadFiles, "download", "d", []string{}, "List of files to download")
-	createCmd.Flags().StringSliceVarP(&opt.UploadFiles, "upload", "u", []string{}, "List of files to upload")
-	createCmd.Flags().StringVarP(&opt.Vm.Name, "name", "n", "", "vm name")
-	createCmd.Flags().IntVarP(&opt.Vm.SSHPort, "ssh-port", "p", 22, "ssh port")
-	createCmd.Flags().StringVarP(&opt.Vm.CloudInitFile, "cloud-init", "i", "", "cloud-init file")
-	createCmd.Flags().StringVar(&opt.DotEnvFile, "dot-env", "", "dot-env (.env) file")
-	createCmd.Flags().StringVar(&opt.Domain, "domain", "", "request a domain name for the VM")
-	createCmd.Flags().StringSliceVarP(&opt.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
-	createCmd.Flags().StringVarP(&opt.ConfigFile, "file", "f", "", "Path to configuration YAML file")
+	createCmd.Flags().StringVarP(&createConfig.PublicKeyFile, "publicKey", "k", "", "Path to publicKey file (default: ~/.ssh/id_rsa))")
+	createCmd.Flags().StringSliceVarP(&createConfig.ApplyFiles, "apply-file", "a", []string{}, "bash script file(s) to run on remote")
+	createCmd.Flags().StringSliceVarP(&createConfig.DownloadFiles, "download", "d", []string{}, "List of files to download")
+	createCmd.Flags().StringSliceVarP(&createConfig.UploadFiles, "upload", "u", []string{}, "List of files to upload")
+	createCmd.Flags().StringVarP(&createConfig.Vm.Name, "name", "n", "", "vm name")
+	createCmd.Flags().IntVarP(&createConfig.Vm.SSHPort, "ssh-port", "p", 22, "ssh port")
+	createCmd.Flags().StringVarP(&createConfig.Vm.CloudInitFile, "cloud-init", "i", "", "cloud-init file")
+	createCmd.Flags().StringVar(&createConfig.DotEnvFile, "dot-env", "", "dot-env (.env) file")
+	createCmd.Flags().StringVar(&createConfig.Domain, "domain", "", "request a domain name for the VM")
+	createCmd.Flags().StringSliceVarP(&createConfig.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
+	createCmd.Flags().StringVarP(&createConfig.ConfigFile, "file", "f", "", "Path to configuration YAML file")
 	// Register create command at root level for convenience
 	rootCmd.AddCommand(createCmd)
 	createCmd.SetUsageTemplate(createCmd.UsageTemplate() + `
@@ -86,16 +132,45 @@ var createCmd = &cobra.Command{
 	Example: `  # Create a VM with docker installed and set ssh on port 443
   onctl create -n onctl-test -a docker/docker.sh -i cloud-init/ssh-443.config`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if opt.ConfigFile != "" {
-			config, err := parseConfigFile(opt.ConfigFile)
+		if createConfig.ConfigFile != "" {
+			config, err := parsePipelineConfigForCreate(createConfig.ConfigFile)
 			if err != nil {
 				log.Fatalf("Error parsing config file: %v", err)
 			}
-			log.Println("[DEBUG] config file: ", opt.ConfigFile)
+			log.Println("[DEBUG] config file: ", createConfig.ConfigFile)
 			log.Printf("[DEBUG] Parsed config: %+v\n", config)
 
-			// Use the new MergeConfig function
-			MergeConfig(&opt, config)
+			// Merge parsed config with CLI flags (CLI flags take precedence)
+			if createConfig.PublicKeyFile == "" && config.PublicKeyFile != "" {
+				createConfig.PublicKeyFile = config.PublicKeyFile
+			}
+			if len(createConfig.ApplyFiles) == 0 && len(config.ApplyFiles) > 0 {
+				createConfig.ApplyFiles = append(createConfig.ApplyFiles, config.ApplyFiles...)
+			}
+			if createConfig.DotEnvFile == "" && config.DotEnvFile != "" {
+				createConfig.DotEnvFile = config.DotEnvFile
+			}
+			if len(createConfig.Variables) == 0 && len(config.Variables) > 0 {
+				createConfig.Variables = append(createConfig.Variables, config.Variables...)
+			}
+			if createConfig.Vm.Name == "" && config.Vm.Name != "" {
+				createConfig.Vm.Name = config.Vm.Name
+			}
+			if createConfig.Vm.SSHPort == 22 && config.Vm.SSHPort != 0 {
+				createConfig.Vm.SSHPort = config.Vm.SSHPort
+			}
+			if createConfig.Vm.CloudInitFile == "" && config.Vm.CloudInitFile != "" {
+				createConfig.Vm.CloudInitFile = config.Vm.CloudInitFile
+			}
+			if createConfig.Domain == "" && config.Domain != "" {
+				createConfig.Domain = config.Domain
+			}
+			if len(createConfig.DownloadFiles) == 0 && len(config.DownloadFiles) > 0 {
+				createConfig.DownloadFiles = append(createConfig.DownloadFiles, config.DownloadFiles...)
+			}
+			if len(createConfig.UploadFiles) == 0 && len(config.UploadFiles) > 0 {
+				createConfig.UploadFiles = append(createConfig.UploadFiles, config.UploadFiles...)
+			}
 		}
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
 		s.Start()
@@ -107,9 +182,9 @@ var createCmd = &cobra.Command{
 		}
 
 		for _, vm := range list.List {
-			if vm.Name == opt.Vm.Name {
+			if vm.Name == createConfig.Vm.Name {
 				s.Stop()
-				fmt.Println("\033[31m\u2718\033[0m VM " + opt.Vm.Name + " exists. Aborting...")
+				fmt.Println("\033[31m\u2718\033[0m VM " + createConfig.Vm.Name + " exists. Aborting...")
 				os.Exit(1)
 			}
 		}
@@ -118,7 +193,7 @@ var createCmd = &cobra.Command{
 		fmt.Println("\033[32m\u2714\033[0m Creating VM...")
 
 		// Check Domain Env
-		if opt.Domain != "" {
+		if createConfig.Domain != "" {
 			s.Start()
 			s.Suffix = " --domain flag is set... Checking Domain Env..."
 			err := domain.NewCloudFlareService().CheckEnv()
@@ -129,18 +204,18 @@ var createCmd = &cobra.Command{
 			}
 		}
 
-		applyFileFound := findFile(opt.ApplyFiles)
+		applyFileFound := findFile(createConfig.ApplyFiles)
 		log.Println("[DEBUG] applyFileFound: ", applyFileFound)
-		opt.Vm.CloudInitFile = findSingleFile(opt.Vm.CloudInitFile)
+		createConfig.Vm.CloudInitFile = findSingleFile(createConfig.Vm.CloudInitFile)
 
 		// BEGIN SSH Key
-		publicKeyFile, privateKeyFile := getSSHKeyFilePaths(opt.PublicKeyFile)
+		publicKeyFile, privateKeyFile := getSSHKeyFilePaths(createConfig.PublicKeyFile)
 		log.Println("[DEBUG] publicKeyFile: ", publicKeyFile)
 		log.Println("[DEBUG] privateKeyFile: ", privateKeyFile)
 		fmt.Println("\033[32m\u2714\033[0m Using Public Key:", publicKeyFile)
 		s.Start()
 		s.Suffix = " Checking SSH Keys..."
-		opt.Vm.SSHKeyID, err = provider.CreateSSHKey(publicKeyFile)
+		createConfig.Vm.SSHKeyID, err = provider.CreateSSHKey(publicKeyFile)
 		if err != nil {
 			s.Stop()
 			fmt.Println("\033[32m\u2718\033[0m Checking SSH Keys...")
@@ -151,19 +226,19 @@ var createCmd = &cobra.Command{
 		// END SSH Key
 
 		// BEGIN Set VM Name
-		log.Printf("[DEBUG] keyID: %s", opt.Vm.SSHKeyID)
-		if opt.Vm.Name == "" {
+		log.Printf("[DEBUG] keyID: %s", createConfig.Vm.SSHKeyID)
+		if createConfig.Vm.Name == "" {
 			if viper.GetString("vm.name") != "" {
-				opt.Vm.Name = viper.GetString("vm.name")
+				createConfig.Vm.Name = viper.GetString("vm.name")
 			} else {
-				opt.Vm.Name = tools.GenerateMachineUniqueName()
+				createConfig.Vm.Name = tools.GenerateMachineUniqueName()
 			}
 		}
 		s.Restart()
 		s.Suffix = " VM Starting..."
 		// END Set VM Name
 
-		vm, err := provider.Deploy(opt.Vm)
+		vm, err := provider.Deploy(createConfig.Vm)
 		if err != nil {
 			log.Println(err)
 		}
@@ -180,23 +255,23 @@ var createCmd = &cobra.Command{
 
 		// BEGIN Cloud-init
 		log.Println("[DEBUG] waiting for cloud-init")
-		log.Println("[DEBUG] ssh port: ", opt.Vm.SSHPort)
+		log.Println("[DEBUG] ssh port: ", createConfig.Vm.SSHPort)
 		s.Stop()
 		// fmt.Println("\033[32m\u2714\033[0m VM Starting...")
 		remote := tools.Remote{
 			Username:   viper.GetString(cloudProvider + ".vm.username"),
 			IPAddress:  vm.IP,
-			SSHPort:    opt.Vm.SSHPort,
+			SSHPort:    createConfig.Vm.SSHPort,
 			PrivateKey: string(privateKey),
 			Spinner:    s,
 		}
 
 		// BEGIN Domain
-		if opt.Domain != "" {
+		if createConfig.Domain != "" {
 			s.Restart()
 			s.Suffix = " Requesting Domain..."
 			_, err := domain.NewCloudFlareService().SetRecord(&domain.SetRecordRequest{
-				Subdomain: opt.Domain,
+				Subdomain: createConfig.Domain,
 				Ipaddress: vm.IP,
 			})
 			s.Stop()
@@ -218,37 +293,37 @@ var createCmd = &cobra.Command{
 
 		s.Restart()
 		s.Suffix = " Configuring VM..."
-		if opt.DotEnvFile != "" {
-			dotEnvVars, err := tools.ParseDotEnvFile(opt.DotEnvFile)
+		if createConfig.DotEnvFile != "" {
+			dotEnvVars, err := tools.ParseDotEnvFile(createConfig.DotEnvFile)
 			if err != nil {
 				log.Println(err)
 			}
-			opt.Variables = append(dotEnvVars, opt.Variables...)
+			createConfig.Variables = append(dotEnvVars, createConfig.Variables...)
 		}
 
 		// Upload Files
-		if len(opt.UploadFiles) > 0 {
-			ProcessUploadSlice(opt.UploadFiles, remote)
+		if len(createConfig.UploadFiles) > 0 {
+			ProcessUploadSlice(createConfig.UploadFiles, remote)
 		}
 
 		// BEGIN Apply File
 		for i, applyFile := range applyFileFound {
 			s.Restart()
-			s.Suffix = " Running " + opt.ApplyFiles[i] + " on Remote..."
+			s.Suffix = " Running " + createConfig.ApplyFiles[i] + " on Remote..."
 
 			err = remote.CopyAndRunRemoteFile(&tools.CopyAndRunRemoteFileConfig{
 				File: applyFile,
-				Vars: opt.Variables,
+				Vars: createConfig.Variables,
 			})
 			if err != nil {
 				log.Println(err)
 			}
 			s.Stop()
-			fmt.Println("\033[32m\u2714\033[0m " + opt.ApplyFiles[i] + " ran on Remote")
+			fmt.Println("\033[32m\u2714\033[0m " + createConfig.ApplyFiles[i] + " ran on Remote")
 
 		}
-		if len(opt.DownloadFiles) > 0 {
-			ProcessDownloadSlice(opt.DownloadFiles, remote)
+		if len(createConfig.DownloadFiles) > 0 {
+			ProcessDownloadSlice(createConfig.DownloadFiles, remote)
 		}
 		s.Stop()
 		fmt.Println("\033[32m\u2714\033[0m VM Configured...")

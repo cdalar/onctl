@@ -1,0 +1,95 @@
+# Example pipeline configuration file for the 'onctl create' command
+# This file demonstrates multi-server orchestration with dependency management
+# Usage: onctl create -f example-create-config.yaml
+
+# Define target VMs/servers
+targets:
+  - name: web-server
+    config:
+      publicKeyFile: "~/.ssh/id_rsa.pub"
+      vm:
+        name: "web-prod-server"
+        SSHPort: 22
+        # cloudInitFile: "cloud-init.yaml"
+        # VM type and location defined in provider-specific configs
+
+  - name: db-server
+    config:
+      publicKeyFile: "~/.ssh/id_rsa.pub"
+      vm:
+        name: "db-prod-server"
+        SSHPort: 22
+        # cloudInitFile: "cloud-init.yaml"
+
+# Define execution pipeline steps with dependencies
+steps:
+  # Create VMs in parallel
+  - name: create_web_server
+    type: create
+    target: web-server
+
+  - name: create_db_server
+    type: create
+    target: db-server
+
+  # Upload configuration files (after VMs are ready)
+  - name: upload_web_config
+    type: upload
+    target: web-server
+    depends_on: ["create_web_server"]
+    config:
+      files:
+        - "web-nginx.conf:/etc/nginx/sites-available/default"
+        - "web-app.jar:/opt/app/app.jar"
+
+  - name: upload_db_config
+    type: upload
+    target: db-server
+    depends_on: ["create_db_server"]
+    config:
+      files:
+        - "db-config.sql:/tmp/setup.sql"
+
+  # Apply scripts to configure servers
+  - name: setup_web_server
+    type: apply
+    target: web-server
+    depends_on: ["upload_web_config"]
+    config:
+      dotEnvFile: ".env"
+      variables:
+        - "APP_ENV=production"
+        - "SERVICE_TYPE=web"
+        - "DEBUG=false"
+
+  - name: setup_db_server
+    type: apply
+    target: db-server
+    depends_on: ["upload_db_config"]
+    config:
+      files:
+        - "scripts/install-postgres.sh"
+        - "scripts/setup-db.sh"
+      dotEnvFile: ".env"
+      variables:
+        - "APP_ENV=production"
+        - "SERVICE_TYPE=db"
+        - "DB_PASSWORD=secure123"
+
+  # Optionally download logs or artifacts
+  - name: download_web_logs
+    type: download
+    target: web-server
+    depends_on: ["setup_web_server"]
+    config:
+      files:
+        - "/var/log/app.log:web-server.log"
+        - "/etc/nginx/error.log:nginx-error.log"
+
+  - name: download_db_logs
+    type: download
+    target: db-server
+    depends_on: ["setup_db_server"]
+    config:
+      files:
+        - "/var/log/postgresql/postgresql.log:db-server.log"

@@ -1,0 +1,23 @@
+targets:
+  - name: test-vm
+    config:
+      publicKeyFile: "~/.ssh/id_rsa.pub"
+      vm:
+        name: "test-pipeline-vm"
+        SSHPort: 22
+
+steps:
+  # Create the VM
+  - name: create_test_vm
+    type: create
+    target: test-vm
+
+  # Apply configuration
+  - name: setup_test_vm
+    type: apply
+    target: test-vm
+    depends_on: ["create_test_vm"]
+    config:
+      variables:
+        - "TEST_VAR=test_value"
+        - "APP_ENV=testing"
