@@ -29,7 +29,7 @@ var envCreateCmd = &cobra.Command{
 	Long:    `Create an entire environment defined in a template file.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if envCreateTemplateFile == "" {
-			fmt.Println("Error: --template (-t) file must be specified")
+			fmt.Println("Error: --config (-f) file must be specified")
 			if err := cmd.Usage(); err != nil {
 				log.Printf("Failed to display usage: %v", err)
 			}
@@ -52,7 +52,7 @@ var envDestroyCmd = &cobra.Command{
 	Long:    `Destroy an entire environment defined in a template file.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if envDestroyTemplateFile == "" {
-			fmt.Println("Error: --template (-t) file must be specified")
+			fmt.Println("Error: --config (-f) file must be specified")
 			if err := cmd.Usage(); err != nil {
 				log.Printf("Failed to display usage: %v", err)
 			}
