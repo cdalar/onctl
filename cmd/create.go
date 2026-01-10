@@ -11,6 +11,7 @@ import (
 	"github.com/cdalar/onctl/internal/domain"
 	"github.com/cdalar/onctl/internal/pipeline"
 	"github.com/cdalar/onctl/internal/tools"
+	"gopkg.in/yaml.v2"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -30,6 +31,26 @@ type CreateConfig struct {
 }
 
 var createConfig CreateConfig
+
+func parseConfigFile(configFile string) (*CreateConfig, error) {
+	file, err := os.Open(configFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open config file %q: %w", configFile, err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close config file: %v", err)
+		}
+	}()
+
+	var config CreateConfig
+	decoder := yaml.NewDecoder(file)
+	if err := decoder.Decode(&config); err != nil {
+		return nil, fmt.Errorf("failed to parse config file %q: %w", configFile, err)
+	}
+
+	return &config, nil
+}
 
 func parsePipelineConfigForCreate(configFile string) (*CreateConfig, error) {
 	pipelineConfig, err := pipeline.LoadConfig(configFile)

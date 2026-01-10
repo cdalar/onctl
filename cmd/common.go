@@ -380,3 +380,36 @@ func ProcessDownloadSlice(downloadSlice []string, remote tools.Remote) {
 		wg.Wait() // Wait for all goroutines to finish
 	}
 }
+
+func MergeConfig(opt *CreateConfig, config *CreateConfig) {
+	if opt.PublicKeyFile == "" {
+		opt.PublicKeyFile = config.PublicKeyFile
+	}
+	if len(opt.ApplyFiles) == 0 && len(config.ApplyFiles) > 0 {
+		opt.ApplyFiles = append(opt.ApplyFiles, config.ApplyFiles...)
+	}
+	if opt.DotEnvFile == "" {
+		opt.DotEnvFile = config.DotEnvFile
+	}
+	if len(opt.Variables) == 0 && len(config.Variables) > 0 {
+		opt.Variables = append(opt.Variables, config.Variables...)
+	}
+	if opt.Vm.Name == "" {
+		opt.Vm.Name = config.Vm.Name
+	}
+	if opt.Vm.SSHPort == 22 && config.Vm.SSHPort != 0 {
+		opt.Vm.SSHPort = config.Vm.SSHPort
+	}
+	if opt.Vm.CloudInitFile == "" {
+		opt.Vm.CloudInitFile = config.Vm.CloudInitFile
+	}
+	if opt.Domain == "" {
+		opt.Domain = config.Domain
+	}
+	if len(opt.DownloadFiles) == 0 && len(config.DownloadFiles) > 0 {
+		opt.DownloadFiles = append(opt.DownloadFiles, config.DownloadFiles...)
+	}
+	if len(opt.UploadFiles) == 0 && len(config.UploadFiles) > 0 {
+		opt.UploadFiles = append(opt.UploadFiles, config.UploadFiles...)
+	}
+}

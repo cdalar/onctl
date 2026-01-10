@@ -2,19 +2,20 @@ package cmd
 
 import (
 	"bytes"
-	"log"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws" //nolint:staticcheck // TODO: migrate to AWS SDK v2
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/cdalar/onctl/internal/cloud"
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/gofrs/uuid/v5"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/util/duration"
+	"log"
+	"os"
+	"path/filepath"
 )
 
 func TestGenerateIDToken(t *testing.T) {
@@ -336,7 +337,7 @@ func TestProcessDownloadSlice(t *testing.T) {
 
 func TestMergeConfig(t *testing.T) {
 	// Create test configs
-	opt := &cmdCreateOptions{
+	opt := &CreateConfig{
 		PublicKeyFile: "",
 		ApplyFiles:    []string{},
 		DotEnvFile:    "",
@@ -344,12 +345,10 @@ func TestMergeConfig(t *testing.T) {
 		Domain:        "",
 		DownloadFiles: []string{},
 		UploadFiles:   []string{},
+		Vm:            cloud.Vm{},
 	}
-	opt.Vm.Name = ""
-	opt.Vm.SSHPort = 22
-	opt.Vm.CloudInitFile = ""
 
-	config := &cmdCreateOptions{
+	config := &CreateConfig{
 		PublicKeyFile: "config-key.pub",
 		ApplyFiles:    []string{"config-script.sh"},
 		DotEnvFile:    "config.env",
@@ -357,12 +356,9 @@ func TestMergeConfig(t *testing.T) {
 		Domain:        "config.example.com",
 		DownloadFiles: []string{"config-download.txt"},
 		UploadFiles:   []string{"config-upload.txt"},
+		Vm:            cloud.Vm{Name: "config-vm", SSHPort: 2222, CloudInitFile: "config-cloud-init.yaml"},
 	}
-	config.Vm.Name = "config-vm"
-	config.Vm.SSHPort = 2222
-	config.Vm.CloudInitFile = "config-cloud-init.yaml"
 
-	// Test merging
 	MergeConfig(opt, config)
 
 	// Verify merge results
@@ -380,7 +376,7 @@ func TestMergeConfig(t *testing.T) {
 
 func TestMergeConfig_PreferCmdLineOptions(t *testing.T) {
 	// Test that command line options take precedence
-	opt := &cmdCreateOptions{
+	opt := &CreateConfig{
 		PublicKeyFile: "cmd-key.pub",
 		ApplyFiles:    []string{"cmd-script.sh"},
 		DotEnvFile:    "cmd.env",
@@ -388,12 +384,10 @@ func TestMergeConfig_PreferCmdLineOptions(t *testing.T) {
 		Domain:        "cmd.example.com",
 		DownloadFiles: []string{"cmd-download.txt"},
 		UploadFiles:   []string{"cmd-upload.txt"},
+		Vm:            cloud.Vm{Name: "cmd-vm", SSHPort: 443, CloudInitFile: "cmd-cloud-init.yaml"},
 	}
-	opt.Vm.Name = "cmd-vm"
-	opt.Vm.SSHPort = 443
-	opt.Vm.CloudInitFile = "cmd-cloud-init.yaml"
 
-	config := &cmdCreateOptions{
+	config := &CreateConfig{
 		PublicKeyFile: "config-key.pub",
 		ApplyFiles:    []string{"config-script.sh"},
 		DotEnvFile:    "config.env",
@@ -401,12 +395,9 @@ func TestMergeConfig_PreferCmdLineOptions(t *testing.T) {
 		Domain:        "config.example.com",
 		DownloadFiles: []string{"config-download.txt"},
 		UploadFiles:   []string{"config-upload.txt"},
+		Vm:            cloud.Vm{Name: "config-vm", SSHPort: 2222, CloudInitFile: "config-cloud-init.yaml"},
 	}
-	config.Vm.Name = "config-vm"
-	config.Vm.SSHPort = 2222
-	config.Vm.CloudInitFile = "config-cloud-init.yaml"
 
-	// Test merging - cmd options should be preserved
 	MergeConfig(opt, config)
 
 	// Verify cmd line options are preserved

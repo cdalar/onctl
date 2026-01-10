@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cdalar/onctl/internal/cloud"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -50,10 +51,11 @@ domain: "example.com"
 	assert.Equal(t, []string{"script1.sh", "script2.sh"}, config.ApplyFiles)
 	assert.Equal(t, ".env", config.DotEnvFile)
 	assert.Equal(t, []string{"VAR1=value1", "VAR2=value2"}, config.Variables)
-	assert.Equal(t, "test-vm", config.Vm.Name)
-	assert.Equal(t, 2222, config.Vm.SSHPort)
-	assert.Equal(t, "cloud-init.yaml", config.Vm.CloudInitFile)
+	expectedVm := cloud.Vm{Name: "test-vm", SSHPort: 2222, CloudInitFile: "cloud-init.yaml"}
+	assert.Equal(t, expectedVm, config.Vm)
 	assert.Equal(t, "example.com", config.Domain)
+	assert.Equal(t, []string(nil), config.DownloadFiles)
+	assert.Equal(t, []string(nil), config.UploadFiles)
 }
 
 func TestParseConfigFile_NonExistentFile(t *testing.T) {
@@ -179,8 +181,17 @@ func TestCmdCreateOptions_StructBasics(t *testing.T) {
 }
 
 func TestCmdCreateOptions_ZeroValues(t *testing.T) {
-	// Test zero value cmdCreateOptions
-	var opts cmdCreateOptions
+	// Test zero value CreateConfig
+	opts := CreateConfig{}
+	assert.Equal(t, "", opts.ConfigFile)
+	assert.Equal(t, "", opts.PublicKeyFile)
+	assert.Equal(t, []string(nil), opts.ApplyFiles)
+	assert.Equal(t, []string(nil), opts.DownloadFiles)
+	assert.Equal(t, []string(nil), opts.UploadFiles)
+	assert.Equal(t, []string(nil), opts.Variables)
+	assert.Equal(t, "", opts.DotEnvFile)
+	assert.Equal(t, "", opts.Domain)
+	assert.Equal(t, cloud.Vm{}, opts.Vm)
 
 	assert.Equal(t, "", opts.PublicKeyFile)
 	assert.Nil(t, opts.ApplyFiles)

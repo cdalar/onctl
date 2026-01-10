@@ -1,5 +1,5 @@
 ## Brief overview
-Guidelines for developing the onctl CLI tool, a Go-based utility for managing cloud resources across multiple providers (AWS, Azure, GCP, Hetzner). These rules focus on Go best practices, CLI design patterns, and cloud integration approaches observed in the project.
+Guidelines for developing the onctl CLI tool, a Go-based utility for managing cloud resources and orchestrating deployment pipelines across multiple providers (AWS, Azure, GCP, Hetzner). These rules focus on Go best practices, CLI design patterns, cloud integration approaches, and pipeline orchestration observed in the project.
 
 ## Go coding conventions
 - Use `gofmt` and `goimports` for consistent code formatting and import organization
