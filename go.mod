@@ -3,7 +3,7 @@ module github.com/cdalar/onctl
 go 1.25.0
 
 require (
-	cloud.google.com/go/compute v1.53.0
+	cloud.google.com/go/compute v1.54.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.2.0
 	github.com/aws/aws-sdk-go v1.55.8
 	github.com/briandowns/spinner v1.23.2
