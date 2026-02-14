@@ -53,24 +53,25 @@ func TestInitializeOnctlEnv_GlobalAndLocalConfig(t *testing.T) {
 
 	// Save original home directory
 	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
+	defer func() { _ = os.Setenv("HOME", originalHome) }()
 
 	// Create temporary directories for testing
 	tempHome, err := os.MkdirTemp("", "onctl-test-home")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempHome)
+	defer func() { _ = os.RemoveAll(tempHome) }()
 
 	tempProject, err := os.MkdirTemp("", "onctl-test-project")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempProject)
+	defer func() { _ = os.RemoveAll(tempProject) }()
 
 	// Set temporary home directory
-	os.Setenv("HOME", tempHome)
+	err = os.Setenv("HOME", tempHome)
+	require.NoError(t, err)
 
 	// Change to project directory
 	originalWd, err := os.Getwd()
 	require.NoError(t, err)
-	defer os.Chdir(originalWd)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	err = os.Chdir(tempProject)
 	require.NoError(t, err)
@@ -116,15 +117,16 @@ func TestInitializeOnctlEnv_GlobalAndLocalConfig(t *testing.T) {
 func TestInitializeOnctlEnv_DirectoryStructure(t *testing.T) {
 	// Save original home directory
 	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
+	defer func() { _ = os.Setenv("HOME", originalHome) }()
 
 	// Create temporary home directory
 	tempHome, err := os.MkdirTemp("", "onctl-test-home")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempHome)
+	defer func() { _ = os.RemoveAll(tempHome) }()
 
 	// Set temporary home directory
-	os.Setenv("HOME", tempHome)
+	err = os.Setenv("HOME", tempHome)
+	require.NoError(t, err)
 
 	homeOnctlPath := filepath.Join(tempHome, onctlDirName)
 
