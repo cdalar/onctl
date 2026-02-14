@@ -15,6 +15,9 @@ const (
 	initDir      = "init"
 )
 
+// skipInteractivePrompt is used to skip interactive prompts during testing
+var skipInteractivePrompt = false
+
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "init onctl environment",
@@ -26,36 +29,53 @@ var initCmd = &cobra.Command{
 }
 
 func initializeOnctlEnv() error {
-	// Determine the target .onctl directory
-	localDir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get working directory: %v", err)
-	}
-	localOnctlPath := filepath.Join(localDir, onctlDirName)
-
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get home directory: %v", err)
 	}
 	homeOnctlPath := filepath.Join(homeDir, onctlDirName)
 
-	var targetPath string
-	if _, err := os.Stat(localOnctlPath); os.IsNotExist(err) {
-		// If .onctl doesn't exist in current directory, use home directory
-		targetPath = homeOnctlPath
-	} else {
-		targetPath = localOnctlPath
+	localDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get working directory: %v", err)
 	}
+	localOnctlPath := filepath.Join(localDir, onctlDirName)
 
-	// Create the .onctl directory if it doesn't exist
-	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
-		if err := os.Mkdir(targetPath, os.ModePerm); err != nil {
-			return fmt.Errorf("failed to create %s directory: %w", targetPath, err)
+	// Always ensure home .onctl directory exists
+	homeExists := false
+	if _, err := os.Stat(homeOnctlPath); os.IsNotExist(err) {
+		if err := os.Mkdir(homeOnctlPath, os.ModePerm); err != nil {
+			return fmt.Errorf("failed to create %s directory: %w", homeOnctlPath, err)
 		}
-		return populateOnctlEnv(targetPath)
+		if err := populateOnctlEnv(homeOnctlPath); err != nil {
+			return err
+		}
+		homeExists = true
+	} else {
+		fmt.Printf("Global onctl environment already initialized in %s\n", homeOnctlPath)
+		homeExists = true
 	}
 
-	fmt.Printf("onctl environment already initialized in %s\n", targetPath)
+	// Check if local .onctl already exists
+	if _, err := os.Stat(localOnctlPath); err == nil {
+		fmt.Printf("Project-based onctl environment already initialized in %s\n", localOnctlPath)
+		return nil
+	}
+
+	// Ask user if they want to create a project-based .onctl folder
+	if homeExists && !skipInteractivePrompt {
+		fmt.Printf("\nDo you want to create a project-based .onctl folder in the current directory?\n")
+		fmt.Printf("Project config will override global config settings.\n")
+		if yesNo() {
+			if err := os.Mkdir(localOnctlPath, os.ModePerm); err != nil {
+				return fmt.Errorf("failed to create %s directory: %w", localOnctlPath, err)
+			}
+			if err := populateOnctlEnv(localOnctlPath); err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 

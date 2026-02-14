@@ -170,6 +170,11 @@ func TestCheckCloudProvider_InvalidProviderSetup(t *testing.T) {
 }
 
 func TestInitializeOnctlEnv_Coverage(t *testing.T) {
+	// Skip interactive prompts during testing
+	originalSkip := skipInteractivePrompt
+	skipInteractivePrompt = true
+	defer func() { skipInteractivePrompt = originalSkip }()
+
 	// Test initializeOnctlEnv to improve coverage
 	tempDir, err := os.MkdirTemp("", "onctl-test")
 	assert.NoError(t, err)
