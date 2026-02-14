@@ -217,7 +217,6 @@ func TestIsInteractive(t *testing.T) {
 	assert.IsType(t, false, result)
 }
 
-
 func TestConstants(t *testing.T) {
 	// Test that constants are correctly defined
 	assert.Equal(t, ".onctl", onctlDirName)
@@ -325,4 +324,3 @@ func TestInitCmd_Run(t *testing.T) {
 		assert.True(t, os.IsNotExist(err))
 	}
 }
-
