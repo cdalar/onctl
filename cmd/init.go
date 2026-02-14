@@ -8,6 +8,7 @@ import (
 
 	"github.com/cdalar/onctl/internal/files"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 const (
@@ -42,28 +43,34 @@ func initializeOnctlEnv() error {
 	localOnctlPath := filepath.Join(localDir, onctlDirName)
 
 	// Always ensure home .onctl directory exists
-	homeExists := false
 	if _, err := os.Stat(homeOnctlPath); os.IsNotExist(err) {
 		if err := os.Mkdir(homeOnctlPath, os.ModePerm); err != nil {
 			return fmt.Errorf("failed to create %s directory: %w", homeOnctlPath, err)
 		}
 		if err := populateOnctlEnv(homeOnctlPath); err != nil {
+			// Clean up empty directory if population fails
+			_ = os.RemoveAll(homeOnctlPath)
 			return err
 		}
-		homeExists = true
+	} else if err != nil {
+		// Handle other os.Stat errors (not IsNotExist)
+		return fmt.Errorf("failed to check %s: %w", homeOnctlPath, err)
 	} else {
 		fmt.Printf("Global onctl environment already initialized in %s\n", homeOnctlPath)
-		homeExists = true
 	}
 
 	// Check if local .onctl already exists
 	if _, err := os.Stat(localOnctlPath); err == nil {
 		fmt.Printf("Project-based onctl environment already initialized in %s\n", localOnctlPath)
 		return nil
+	} else if !os.IsNotExist(err) {
+		// Handle other os.Stat errors (not IsNotExist)
+		return fmt.Errorf("failed to check %s: %w", localOnctlPath, err)
 	}
 
 	// Ask user if they want to create a project-based .onctl folder
-	if homeExists && !skipInteractivePrompt {
+	// Only prompt if in interactive mode (TTY available) or skipInteractivePrompt is false
+	if !skipInteractivePrompt && isInteractive() {
 		fmt.Printf("\nDo you want to create a project-based .onctl folder in the current directory?\n")
 		fmt.Printf("Project config will override global config settings.\n")
 		if yesNo() {
@@ -71,12 +78,19 @@ func initializeOnctlEnv() error {
 				return fmt.Errorf("failed to create %s directory: %w", localOnctlPath, err)
 			}
 			if err := populateOnctlEnv(localOnctlPath); err != nil {
+				// Clean up empty directory if population fails
+				_ = os.RemoveAll(localOnctlPath)
 				return err
 			}
 		}
 	}
 
 	return nil
+}
+
+// isInteractive checks if stdin is connected to a terminal (TTY)
+func isInteractive() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 func populateOnctlEnv(targetPath string) error {
