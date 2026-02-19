@@ -109,7 +109,6 @@ func runContainer(remote tools.Remote, s *spinner.Spinner, image string, env []s
 	})
 	if err != nil {
 		s.Stop()
-		fmt.Print("\033[?25h") // Ensure cursor is visible on error
 		log.Fatalf("Failed to run Docker container: %v", err)
 	}
 
@@ -130,7 +129,7 @@ func runContainer(remote tools.Remote, s *spinner.Spinner, image string, env []s
 			Command: logsCmd,
 		})
 
-		fmt.Printf("\033[31m\u2717\033[0m Docker container failed to start (ID: %s)\033[?25h\n", containerID)
+		fmt.Printf("\033[31m\u2717\033[0m Docker container failed to start (ID: %s)\n", containerID)
 		if logsErr == nil && logsOutput != "" {
 			fmt.Println("Container logs:")
 			fmt.Println(logsOutput)
@@ -140,7 +139,7 @@ func runContainer(remote tools.Remote, s *spinner.Spinner, image string, env []s
 		log.Fatalf("Container deployment failed")
 	}
 
-	fmt.Printf("\033[32m\u2714\033[0m Docker container started successfully (ID: %s)\033[?25h\n", containerID)
+	fmt.Printf("\033[32m\u2714\033[0m Docker container started successfully (ID: %s)\n", containerID)
 
 	// Step 4: Clean up uploaded tar file (only if it exists)
 	s.Restart()
@@ -156,7 +155,7 @@ func runContainer(remote tools.Remote, s *spinner.Spinner, image string, env []s
 
 	s.Suffix = " Cleanup completed"
 	s.Stop()
-	fmt.Println("\033[32m\u2714\033[0m Deployment completed successfully\033[?25h")
+	fmt.Println("\033[32m\u2714\033[0m Deployment completed successfully")
 }
 
 func init() {
@@ -208,6 +207,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 
 		// Setup spinner
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond)
+		defer ensureCursorVisible() // Ensure cursor is visible when function exits
 
 		// Get SSH key
 		_, privateKeyFile := getSSHKeyFilePaths("")
@@ -233,14 +233,13 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 		})
 		if err != nil {
 			s.Stop()
-			fmt.Print("\033[?25h")
 			log.Fatalf("Failed to get remote VM architecture: %v", err)
 		}
 		remoteArch := strings.TrimSpace(remoteArchOutput)
 		normalizedRemoteArch := normalizeArch(remoteArch)
 
 		s.Stop()
-		fmt.Printf("\033[32m\u2714\033[0m Remote VM architecture: %s\033[?25h\n", normalizedRemoteArch)
+		fmt.Printf("\033[32m\u2714\033[0m Remote VM architecture: %s\n", normalizedRemoteArch)
 
 		// Check if image exists on Docker Hub
 		s.Suffix = " Checking if Docker image exists on Docker Hub..."
@@ -255,7 +254,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 		var useDockerHub bool
 
 		if isDockerHubImage {
-			fmt.Printf("\033[32m\u2714\033[0m Docker image found on Docker Hub\033[?25h\n")
+			fmt.Printf("\033[32m\u2714\033[0m Docker image found on Docker Hub\n")
 			useDockerHub = true
 
 			// For Docker Hub images, skip local architecture check
@@ -264,7 +263,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 			imageArch = normalizedRemoteArch
 			normalizedImageArch = normalizedRemoteArch
 		} else {
-			fmt.Printf("\033[36m\u2139\033[0m Docker image not found on Docker Hub (assuming local/private image)\033[?25h\n")
+			fmt.Printf("\033[36m\u2139\033[0m Docker image not found on Docker Hub (assuming local/private image)\n")
 			useDockerHub = false
 
 			// Check local image
@@ -275,7 +274,6 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 			localArchOutput, err := localArchCmd.Output()
 			if err != nil {
 				s.Stop()
-				fmt.Print("\033[?25h")
 				log.Fatalf("Failed to inspect local Docker image: %v", err)
 			}
 			imageArch = strings.TrimSpace(string(localArchOutput))
@@ -287,7 +285,6 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 		// Check architecture compatibility (only for local/private images)
 		if !useDockerHub {
 			if normalizedImageArch != normalizedRemoteArch {
-				fmt.Print("\033[?25h")
 				fmt.Printf("\033[31m\u2717\033[0m Architecture mismatch detected!\n")
 				fmt.Printf("  Image architecture:  %s (%s)\n", imageArch, normalizedImageArch)
 				fmt.Printf("  Remote VM architecture: %s (%s)\n", remoteArch, normalizedRemoteArch)
@@ -296,7 +293,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 				fmt.Printf("  2. Then run the deploy command again\n")
 				log.Fatalf("Cannot deploy %s image to %s VM", normalizedImageArch, normalizedRemoteArch)
 			}
-			fmt.Printf("\033[32m\u2714\033[0m Architecture check passed: %s\033[?25h\n", normalizedImageArch)
+			fmt.Printf("\033[32m\u2714\033[0m Architecture check passed: %s\n", normalizedImageArch)
 		}
 
 		// Step 1: Check if image already exists on remote VM
@@ -314,12 +311,12 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 		s.Stop()
 
 		if imageExists {
-			fmt.Printf("\033[32m\u2714\033[0m Docker image already exists on remote VM\033[?25h\n")
+			fmt.Printf("\033[32m\u2714\033[0m Docker image already exists on remote VM\n")
 			// Skip download/upload and load, go directly to running container
 			runContainer(remote, s, deployOpt.Image, deployOpt.Env, deployOpt.Name)
 			return
 		} else {
-			fmt.Printf("\033[36m\u2139\033[0m Docker image not found on remote VM\033[?25h\n")
+			fmt.Printf("\033[36m\u2139\033[0m Docker image not found on remote VM\n")
 		}
 
 		if useDockerHub {
@@ -333,8 +330,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 			})
 			if err != nil {
 				s.Stop()
-				fmt.Print("\033[?25h")
-				fmt.Printf("\033[31m\u2717\033[0m Failed to pull Docker image on remote VM\033[?25h\n")
+				fmt.Printf("\033[31m\u2717\033[0m Failed to pull Docker image on remote VM\n")
 				fmt.Printf("Error: %v\n", err)
 				fmt.Println("\nPossible causes:")
 				fmt.Printf("  - Image doesn't support %s architecture\n", normalizedRemoteArch)
@@ -348,7 +344,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 
 			s.Suffix = " Docker image pulled on remote VM"
 			s.Stop()
-			fmt.Println("\033[32m\u2714\033[0m Docker image pulled on remote VM\033[?25h")
+			fmt.Println("\033[32m\u2714\033[0m Docker image pulled on remote VM")
 		} else {
 			// Step 2: Save Docker image locally
 			s.Suffix = " Saving Docker image locally..."
@@ -368,7 +364,6 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 			dockerSaveCmd := exec.Command("sh", "-c", fmt.Sprintf("docker save %s | gzip > %s", deployOpt.Image, imageTarPath))
 			if err := dockerSaveCmd.Run(); err != nil {
 				s.Stop()
-				fmt.Print("\033[?25h") // Ensure cursor is visible on error
 				log.Fatalf("Failed to save and compress Docker image: %v", err)
 			}
 
@@ -382,7 +377,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 
 			s.Suffix = " Docker image saved locally"
 			s.Stop()
-			fmt.Printf("\033[32m\u2714\033[0m Docker image saved locally (%.1f MB)\033[?25h\n", fileSizeMB)
+			fmt.Printf("\033[32m\u2714\033[0m Docker image saved locally (%.1f MB)\n", fileSizeMB)
 
 			// Step 3: Upload image to remote VM with progress bar
 			var totalBytes = fileSize
@@ -434,7 +429,6 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 
 			if err != nil {
 				s.Stop()
-				fmt.Print("\033[?25h") // Ensure cursor is visible on error
 				log.Fatalf("Failed to upload Docker image: %v", err)
 			}
 
@@ -444,7 +438,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 
 			s.Suffix = " Docker image uploaded to remote VM"
 			s.Stop()
-			fmt.Println("\033[32m\u2714\033[0m Docker image uploaded to remote VM\033[?25h")
+			fmt.Println("\033[32m\u2714\033[0m Docker image uploaded to remote VM")
 
 			// Step 4: Load Docker image on remote VM
 			s.Restart()
@@ -456,13 +450,12 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 			})
 			if err != nil {
 				s.Stop()
-				fmt.Print("\033[?25h") // Ensure cursor is visible on error
 				log.Fatalf("Failed to load Docker image on remote: %v", err)
 			}
 
 			s.Suffix = " Docker image loaded on remote VM"
 			s.Stop()
-			fmt.Println("\033[32m\u2714\033[0m Docker image loaded on remote VM\033[?25h")
+			fmt.Println("\033[32m\u2714\033[0m Docker image loaded on remote VM")
 		}
 
 		// Step 4: Run Docker container on remote VM

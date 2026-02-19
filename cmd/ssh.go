@@ -113,6 +113,7 @@ var sshCmd = &cobra.Command{
 		}
 
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
+		defer ensureCursorVisible()                                 // Ensure cursor is visible when function exits
 		applyFileFound := findFile(sshOpt.ApplyFiles)
 		log.Println("[DEBUG] args: ", args)
 

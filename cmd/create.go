@@ -98,6 +98,7 @@ var createCmd = &cobra.Command{
 			MergeConfig(&opt, config)
 		}
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
+		defer ensureCursorVisible()                                 // Ensure cursor is visible when function exits
 		s.Start()
 		s.Suffix = " Checking vm..."
 		list, err := provider.List()

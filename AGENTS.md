@@ -40,3 +40,23 @@ Guidelines for developing the onctl CLI tool, a Go-based utility for managing cl
 ## Build and language guidelines
 - Use `make` for building the project instead of direct `go build` commands
 - Write all code comments, messages, and logs in English
+
+## Session workflow and branching
+- Before starting work, ensure you're on an updated main/master branch:
+  - Switch to main branch: `git checkout main` (or `master`)
+  - Pull latest changes: `git pull origin main`
+  - Verify you're on the right branch with `git branch --show-current`
+- Create a new Git branch at the start of each development session before making the first code change
+- Branch naming convention: Use `ai/` prefix followed by a descriptive name (e.g., `ai/fix-cursor-visibility`, `ai/add-logging-support`)
+- Branch creation timing: Create the branch before making the first edit or code change in a session
+- This ensures each AI-assisted development session is tracked separately and can be reviewed independently
+
+## Verification and testing
+- After making code changes, always verify the code builds successfully:
+  - Run `make` to build the project
+  - Ensure there are no compilation errors or warnings
+- Run existing tests to ensure no regressions:
+  - Execute `go test ./cmd/...` or relevant test packages
+  - Verify all tests pass before considering the work complete
+- For bug fixes or new features, verify the actual behavior works as expected
+- Never assume code works without testing - always verify builds and test results
