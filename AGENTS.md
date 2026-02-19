@@ -60,3 +60,20 @@ Guidelines for developing the onctl CLI tool, a Go-based utility for managing cl
   - Verify all tests pass before considering the work complete
 - For bug fixes or new features, verify the actual behavior works as expected
 - Never assume code works without testing - always verify builds and test results
+
+## Pull request workflow
+- After completing and testing your changes, create a pull request:
+  - Stage and commit your changes with a clear, descriptive commit message
+  - Push the branch to GitHub: `git push -u origin <branch-name>`
+  - Create a PR using `gh pr create` with a detailed description including:
+    - Summary of changes
+    - Technical details
+    - Testing performed
+    - Related issues (if any)
+- Monitor automated CI/CD checks after PR creation:
+  - Use `gh pr checks <PR-number>` to view check status
+  - Common checks include: Build, Lint, Tests, Security scans, CodeQL
+  - Wait for all checks to complete and ensure they pass
+  - If checks fail, investigate the failure, fix issues, and push updates
+- Address any review comments or automated check failures promptly
+- Do not merge until all checks pass and any required reviews are approved
