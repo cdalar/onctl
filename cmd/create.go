@@ -110,6 +110,7 @@ var createCmd = &cobra.Command{
 		for _, vm := range list.List {
 			if vm.Name == opt.Vm.Name {
 				s.Stop()
+				ensureCursorVisible()
 				fmt.Println("\033[31m\u2718\033[0m VM " + opt.Vm.Name + " exists. Aborting...")
 				os.Exit(1)
 			}
@@ -125,6 +126,7 @@ var createCmd = &cobra.Command{
 			err := domain.NewCloudFlareService().CheckEnv()
 			if err != nil {
 				s.Stop()
+				ensureCursorVisible()
 				fmt.Println("\033[31m\u2718\033[0m Error on Domain: ", err)
 				os.Exit(1)
 			}
@@ -144,6 +146,7 @@ var createCmd = &cobra.Command{
 		opt.Vm.SSHKeyID, err = provider.CreateSSHKey(publicKeyFile)
 		if err != nil {
 			s.Stop()
+			ensureCursorVisible()
 			fmt.Println("\033[32m\u2718\033[0m Checking SSH Keys...")
 			log.Fatalln(err)
 		}

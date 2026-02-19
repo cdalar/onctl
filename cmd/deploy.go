@@ -109,6 +109,7 @@ func runContainer(remote tools.Remote, s *spinner.Spinner, image string, env []s
 	})
 	if err != nil {
 		s.Stop()
+		ensureCursorVisible()
 		log.Fatalf("Failed to run Docker container: %v", err)
 	}
 
@@ -136,6 +137,7 @@ func runContainer(remote tools.Remote, s *spinner.Spinner, image string, env []s
 		} else {
 			fmt.Println("Unable to retrieve container logs")
 		}
+		ensureCursorVisible()
 		log.Fatalf("Container deployment failed")
 	}
 
@@ -233,6 +235,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 		})
 		if err != nil {
 			s.Stop()
+			ensureCursorVisible()
 			log.Fatalf("Failed to get remote VM architecture: %v", err)
 		}
 		remoteArch := strings.TrimSpace(remoteArchOutput)
@@ -274,6 +277,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 			localArchOutput, err := localArchCmd.Output()
 			if err != nil {
 				s.Stop()
+				ensureCursorVisible()
 				log.Fatalf("Failed to inspect local Docker image: %v", err)
 			}
 			imageArch = strings.TrimSpace(string(localArchOutput))
@@ -291,6 +295,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 				fmt.Println("\nTo fix this issue:")
 				fmt.Printf("  1. Pull the correct architecture: docker pull --platform linux/%s %s\n", normalizedRemoteArch, deployOpt.Image)
 				fmt.Printf("  2. Then run the deploy command again\n")
+				ensureCursorVisible()
 				log.Fatalf("Cannot deploy %s image to %s VM", normalizedImageArch, normalizedRemoteArch)
 			}
 			fmt.Printf("\033[32m\u2714\033[0m Architecture check passed: %s\n", normalizedImageArch)
@@ -339,6 +344,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 				fmt.Println("\nTo fix architecture issues:")
 				fmt.Printf("  1. Check available architectures: docker manifest inspect %s\n", deployOpt.Image)
 				fmt.Printf("  2. Pull specific architecture: docker pull --platform linux/%s %s\n", normalizedRemoteArch, deployOpt.Image)
+				ensureCursorVisible()
 				log.Fatalf("Docker pull failed")
 			}
 
@@ -364,6 +370,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 			dockerSaveCmd := exec.Command("sh", "-c", fmt.Sprintf("docker save %s | gzip > %s", deployOpt.Image, imageTarPath))
 			if err := dockerSaveCmd.Run(); err != nil {
 				s.Stop()
+				ensureCursorVisible()
 				log.Fatalf("Failed to save and compress Docker image: %v", err)
 			}
 
@@ -429,6 +436,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 
 			if err != nil {
 				s.Stop()
+				ensureCursorVisible()
 				log.Fatalf("Failed to upload Docker image: %v", err)
 			}
 
@@ -450,6 +458,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 			})
 			if err != nil {
 				s.Stop()
+				ensureCursorVisible()
 				log.Fatalf("Failed to load Docker image on remote: %v", err)
 			}
 

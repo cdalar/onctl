@@ -420,10 +420,11 @@ func MergeConfig(opt *cmdCreateOptions, config *cmdCreateOptions) {
 	log.Println("[DEBUG] Merged options: ", opt)
 }
 
-// ensureCursorVisible ensures terminal cursor is visible when program exits.
-// This should be called with defer at the start of command functions that use spinners.
-// Spinners hide the cursor when started and may not restore it if the program exits
-// unexpectedly (e.g., via log.Fatal or panic).
+// ensureCursorVisible ensures terminal cursor is visible.
+// This should be called before log.Fatal* calls in command functions that use spinners.
+// Spinners hide the cursor when started, and since log.Fatal* calls os.Exit() which
+// does not run deferred functions, the cursor must be explicitly restored before fatal errors.
+// It can also be used with defer for panic recovery, though defer does not run on os.Exit().
 func ensureCursorVisible() {
 	fmt.Print("\033[?25h") // ANSI escape code to show cursor
 }

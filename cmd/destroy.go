@@ -54,6 +54,7 @@ var destroyCmd = &cobra.Command{
 			// Tear down all servers
 			if !force {
 				if !yesNo() {
+					ensureCursorVisible()
 					os.Exit(0)
 				}
 			}
@@ -88,6 +89,7 @@ var destroyCmd = &cobra.Command{
 			s.Suffix = " Destroying VM..."
 			if err := provider.Destroy(cloud.Vm{Name: serverName}); err != nil {
 				s.Stop()
+				ensureCursorVisible()
 				fmt.Println("\033[31m\u2718\033[0m Cannot destroy VM: " + serverName)
 				fmt.Println(err)
 				os.Exit(1)

@@ -129,10 +129,12 @@ var sshCmd = &cobra.Command{
 
 		privateKey, err := os.ReadFile(privateKeyFile)
 		if err != nil {
+			ensureCursorVisible()
 			log.Fatal(err)
 		}
 		vm, err := provider.GetByName(args[0])
 		if err != nil {
+			ensureCursorVisible()
 			log.Fatalln(err)
 		}
 		remote := tools.Remote{
