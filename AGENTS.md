@@ -40,3 +40,49 @@ Guidelines for developing the onctl CLI tool, a Go-based utility for managing cl
 ## Build and language guidelines
 - Use `make` for building the project instead of direct `go build` commands
 - Write all code comments, messages, and logs in English
+
+## Session workflow and branching
+- Before starting work, ensure you're on an updated main/master branch:
+  - Switch to main branch: `git checkout main` (or `master`)
+  - Pull latest changes: `git pull origin main`
+  - Verify you're on the right branch with `git branch --show-current`
+- Create a new Git branch at the start of each development session before making the first code change
+- Branch naming convention: Use `ai/` prefix followed by a descriptive name (e.g., `ai/fix-cursor-visibility`, `ai/add-logging-support`)
+- Branch creation timing: Create the branch before making the first edit or code change in a session
+- Check frequently with `git branch --show-current` to ensure you're on the correct branch
+- This ensures each AI-assisted development session is tracked separately and can be reviewed independently
+
+## Verification and testing
+- After making code changes, always verify the code builds successfully:
+  - Run `make` to build the project
+  - Ensure there are no compilation errors or warnings
+- Run existing tests to ensure no regressions:
+  - Execute `go test ./cmd/...` or relevant test packages
+  - Verify all tests pass before considering the work complete
+- For bug fixes or new features, verify the actual behavior works as expected
+- Never assume code works without testing - always verify builds and test results
+
+## Pull request workflow
+- After completing and testing your changes, create a pull request:
+  - Stage and commit your changes with a clear, descriptive commit message
+  - Push the branch to GitHub: `git push -u origin <branch-name>`
+  - Create a PR using `gh pr create` with a detailed description including:
+    - Summary of changes
+    - Technical details
+    - Testing performed
+    - Related issues (if any)
+- Monitor automated CI/CD checks after PR creation:
+  - Use `gh pr checks <PR-number>` to view check status
+  - Common checks include: Build, Lint, Tests, Security scans, CodeQL
+  - Wait for all checks to complete and ensure they pass
+  - If checks fail, investigate the failure, fix issues, and push updates
+- Address any review comments or automated check failures promptly:
+  - Read all comments carefully from both bots and human reviewers
+  - Understand the root cause before making changes
+  - Test fixes locally before pushing
+  - Reply to comments explaining how issues were addressed
+- Check if main branch has been updated while working:
+  - Before finalizing PR, check if new commits were merged to main
+  - If your PR conflicts or is superseded by other changes, close it with explanation
+  - Merge latest main if needed: `git fetch origin main && git merge origin/main`
+- Do not merge until all checks pass and any required reviews are approved
