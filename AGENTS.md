@@ -71,7 +71,7 @@ Guidelines for developing the onctl CLI tool, a Go-based utility for managing cl
     - Technical details
     - Testing performed
     - Related issues (if any)
-  - Enable auto-merge immediately after PR creation: `gh pr merge <PR-number> --auto --squash`
+  - Enable auto-merge immediately after PR creation: `gh pr merge <PR-number> --auto --squash --delete-branch`
 - Monitor automated CI/CD checks after PR creation:
   - Use `gh pr checks <PR-number>` to view check status
   - Common checks include: Build, Lint, Tests, Security scans, CodeQL
