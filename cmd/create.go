@@ -4,12 +4,11 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
-	"github.com/briandowns/spinner"
 	"github.com/cdalar/onctl/internal/cloud"
 	"github.com/cdalar/onctl/internal/domain"
 	"github.com/cdalar/onctl/internal/tools"
+	"github.com/cdalar/onctl/internal/ui"
 	"gopkg.in/yaml.v2"
 
 	"github.com/spf13/cobra"
@@ -97,7 +96,7 @@ var createCmd = &cobra.Command{
 			// Use the new MergeConfig function
 			MergeConfig(&opt, config)
 		}
-		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
+		s := ui.New() // Build our new spinner
 		s.Start()
 		s.Suffix = " Checking vm..."
 		list, err := provider.List()

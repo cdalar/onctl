@@ -28,6 +28,15 @@ import (
 // TODO decouple viper and use onctlConfig instead
 // var onctlConfig map[string]interface{}
 
+// ensureCursorVisible ensures terminal cursor is visible.
+// This should be called before log.Fatal* calls in command functions that use spinners.
+// Spinners hide the cursor when started, and since log.Fatal* calls os.Exit() which
+// does not run deferred functions, the cursor must be explicitly restored before fatal errors.
+// It can also be used with defer for panic recovery, though defer does not run on os.Exit().
+func ensureCursorVisible() {
+	fmt.Print("\033[?25h") // ANSI escape code to show cursor
+}
+
 func GenerateIDToken() uuid.UUID {
 	u1, err := uuid.NewV4()
 	if err != nil {

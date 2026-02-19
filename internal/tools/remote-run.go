@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/briandowns/spinner"
 	"github.com/cdalar/onctl/internal/files"
+	"github.com/cdalar/onctl/internal/ui"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
 )
@@ -28,7 +28,7 @@ type Remote struct {
 	SSHPort    int
 	PrivateKey string
 	Passphrase string
-	Spinner    *spinner.Spinner
+	Spinner    *ui.Spinner
 	Client     *ssh.Client
 }
 

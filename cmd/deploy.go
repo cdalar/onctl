@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/briandowns/spinner"
 	"github.com/cdalar/onctl/internal/tools"
+	"github.com/cdalar/onctl/internal/ui"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -70,7 +70,7 @@ func checkDockerHubImage(image string) bool {
 }
 
 // runContainer runs a Docker container on the remote VM
-func runContainer(remote tools.Remote, s *spinner.Spinner, image string, env []string, name string) {
+func runContainer(remote tools.Remote, s *ui.Spinner, image string, env []string, name string) {
 	// Step 3: Run Docker container on remote VM
 	s.Restart()
 	s.Suffix = " Starting Docker container on remote VM..."
@@ -207,7 +207,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 		}
 
 		// Setup spinner
-		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond)
+		s := ui.New()
 
 		// Get SSH key
 		_, privateKeyFile := getSSHKeyFilePaths("")
