@@ -523,3 +523,26 @@ func TestGenerateIDToken_Coverage(t *testing.T) {
 	assert.NotEqual(t, uuid.Nil, token1)
 	assert.NotEqual(t, uuid.Nil, token2)
 }
+
+func TestEnsureCursorVisible(t *testing.T) {
+	// Capture stdout to verify ANSI escape code is printed
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	// Call the function
+	ensureCursorVisible()
+
+	// Restore stdout
+	w.Close()
+	os.Stdout = oldStdout
+
+	// Read captured output
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	output := buf.String()
+
+	// Verify the ANSI escape code for showing cursor is printed
+	expectedCode := "\033[?25h"
+	assert.Equal(t, expectedCode, output, "ensureCursorVisible should print cursor show ANSI code")
+}
