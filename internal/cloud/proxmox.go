@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math"
 	"os"
 	"strconv"
 	"time"
@@ -136,15 +135,12 @@ func (p ProviderProxmox) Destroy(server Vm) error {
 		server.ID = s.ID
 	}
 
-	vmID64, err := strconv.ParseUint(server.ID, 10, 64)
+	vmID, err := strconv.ParseUint(server.ID, 10, 32)
 	if err != nil {
 		return fmt.Errorf("invalid VM ID: %v", err)
 	}
-	if vmID64 > math.MaxUint32 {
-		return fmt.Errorf("invalid VM ID: %d out of range", vmID64)
-	}
 
-	vmRef := pxapi.NewVmRef(pxapi.GuestID(vmID64))
+	vmRef := pxapi.NewVmRef(pxapi.GuestID(uint32(vmID)))
 	vmRef.SetNode(viper.GetString("proxmox.node"))
 
 	ctx := context.Background()
