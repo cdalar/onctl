@@ -18,8 +18,12 @@ func GetClient() *pxapi.Client {
 		os.Exit(1)
 	}
 
+	insecureSkipVerify := os.Getenv("PROXMOX_INSECURE_SKIP_VERIFY") == "true"
+	if insecureSkipVerify {
+		log.Println("WARNING: TLS verification disabled via PROXMOX_INSECURE_SKIP_VERIFY. This allows man-in-the-middle attacks.")
+	}
 	tlsConfig := &tls.Config{
-		InsecureSkipVerify: true, // For self-signed certificates
+		InsecureSkipVerify: insecureSkipVerify,
 	}
 
 	client, err := pxapi.NewClient(apiURL, nil, "", tlsConfig, "", 300)
