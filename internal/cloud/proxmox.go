@@ -2,10 +2,11 @@ package cloud
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"strconv"
 	"time"
@@ -65,25 +66,21 @@ func (p ProviderProxmox) Deploy(server Vm) (Vm, error) {
 	sourceVmr := pxapi.NewVmRef(pxapi.GuestID(templateVmID))
 	sourceVmr.SetNode(node)
 
-	// Configure clone parameters
-	cloneParams := map[string]interface{}{
-		"newid":   vmID,
-		"name":    server.Name,
-		"target":  node,
-		"full":    1,
-		"storage": storage,
-	}
-
-	// Clone the VM
+	// Clone the VM using the new VmRef API
 	log.Println("[DEBUG] Cloning template", template, "to new VM", server.Name)
-	_, err = p.Client.CloneQemuVm(ctx, sourceVmr, cloneParams)
+	guestID := pxapi.GuestID(vmID)
+	guestName := pxapi.GuestName(server.Name)
+	newVmRef, err := sourceVmr.CloneQemu(ctx, pxapi.CloneQemuTarget{
+		Full: &pxapi.CloneQemuFull{
+			Node:    pxapi.NodeName(node),
+			ID:      &guestID,
+			Name:    &guestName,
+			Storage: &storage,
+		},
+	}, p.Client)
 	if err != nil {
 		return Vm{}, fmt.Errorf("failed to clone VM: %v", err)
 	}
-
-	// Update VM configuration
-	newVmRef := pxapi.NewVmRef(pxapi.GuestID(vmID))
-	newVmRef.SetNode(node)
 
 	// Set basic configuration via API call
 	config := map[string]interface{}{
@@ -139,19 +136,21 @@ func (p ProviderProxmox) Destroy(server Vm) error {
 		server.ID = s.ID
 	}
 
-	vmID, err := strconv.Atoi(server.ID)
+	vmID64, err := strconv.ParseUint(server.ID, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid VM ID: %v", err)
 	}
+	if vmID64 > math.MaxUint32 {
+		return fmt.Errorf("invalid VM ID: %d out of range", vmID64)
+	}
 
-	vmRef := pxapi.NewVmRef(pxapi.GuestID(vmID))
+	vmRef := pxapi.NewVmRef(pxapi.GuestID(vmID64))
 	vmRef.SetNode(viper.GetString("proxmox.node"))
 
 	ctx := context.Background()
 
 	// Stop VM first
-	_, err = p.Client.StopVm(ctx, vmRef)
-	if err != nil {
+	if err = vmRef.Stop(ctx, p.Client); err != nil {
 		log.Println("[DEBUG] Failed to stop VM (may already be stopped):", err)
 	}
 
@@ -159,8 +158,7 @@ func (p ProviderProxmox) Destroy(server Vm) error {
 	time.Sleep(3 * time.Second)
 
 	// Delete VM
-	_, err = p.Client.DeleteVm(ctx, vmRef)
-	if err != nil {
+	if err = vmRef.Delete(ctx, p.Client); err != nil {
 		return fmt.Errorf("failed to delete VM: %v", err)
 	}
 
@@ -210,15 +208,15 @@ func (p ProviderProxmox) CreateSSHKey(publicKeyFile string) (keyID string, err e
 		return "", err
 	}
 
-	SSHKeyMD5 := fmt.Sprintf("%x", md5.Sum(publicKey))
+	SSHKeyHash := fmt.Sprintf("%x", sha256.Sum256(publicKey))
 	pk, _, _, _, err := ssh.ParseAuthorizedKey(publicKey)
 	if err != nil {
 		return "", err
 	}
 
-	SSHKeyFingerPrint := ssh.FingerprintLegacyMD5(pk)
+	SSHKeyFingerPrint := ssh.FingerprintSHA256(pk)
 	log.Println("[DEBUG] SSH Key Fingerprint:", SSHKeyFingerPrint)
-	log.Println("[DEBUG] SSH Key MD5:", SSHKeyMD5)
+	log.Println("[DEBUG] SSH Key SHA256:", SSHKeyHash)
 
 	// Return the public key file path
 	return publicKeyFile, nil
