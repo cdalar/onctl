@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws" //nolint:staticcheck // TODO: migrate to AWS SDK v2
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/gofrs/uuid/v5"

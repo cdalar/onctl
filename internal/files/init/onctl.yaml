@@ -7,3 +7,5 @@ ssh:
   # privateKey: ~/.ssh/id_ed25519
   publicKey: ~/.ssh/id_rsa.pub
   privateKey: ~/.ssh/id_rsa
+actions:
+  githubOwner: cdalar

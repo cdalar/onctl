@@ -1,5 +1,6 @@
 proxmox:
   node: pve
+  insecure: false
   vm:
     id: 100
     template: ubuntu-22.04-template

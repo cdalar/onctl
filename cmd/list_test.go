@@ -20,7 +20,7 @@ func TestListCmd_HasFlags(t *testing.T) {
 	assert.NotNil(t, flag, "list command should have 'output' flag")
 	assert.Equal(t, "o", flag.Shorthand, "output flag should have 'o' shorthand")
 	assert.Equal(t, "tab", flag.DefValue, "output flag should have 'tab' default value")
-	assert.Equal(t, "output format (tab, json, yaml, puppet, ansiable)", flag.Usage)
+	assert.Equal(t, "output format (tab, json, yaml, puppet, ansible)", flag.Usage)
 }
 
 func TestListCmd_FlagDefaults(t *testing.T) {

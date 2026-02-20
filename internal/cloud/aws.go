@@ -12,9 +12,9 @@ import (
 
 	"github.com/cdalar/onctl/internal/provideraws"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/aws"         //nolint:staticcheck // TODO: migrate to AWS SDK v2
+	"github.com/aws/aws-sdk-go/aws/awserr"  //nolint:staticcheck // TODO: migrate to AWS SDK v2
+	"github.com/aws/aws-sdk-go/service/ec2" //nolint:staticcheck // TODO: migrate to AWS SDK v2
 	"golang.org/x/crypto/ssh"
 )
 

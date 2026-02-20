@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
-	"github.com/briandowns/spinner"
 	"github.com/cdalar/onctl/internal/tools"
+	"github.com/cdalar/onctl/internal/ui"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
@@ -55,6 +54,8 @@ func init() {
 	sshCmd.Flags().StringVar(&sshOpt.DotEnvFile, "dot-env", "", "dot-env (.env) file")
 	sshCmd.Flags().StringSliceVarP(&sshOpt.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
 	sshCmd.Flags().StringVarP(&sshOpt.ConfigFile, "file", "f", "", "Path to configuration YAML file")
+	// Register ssh command at root level for convenience
+	rootCmd.AddCommand(sshCmd)
 }
 
 var sshCmd = &cobra.Command{
@@ -110,7 +111,7 @@ var sshCmd = &cobra.Command{
 			}
 		}
 
-		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
+		s := ui.New() // Build our new spinner
 		applyFileFound := findFile(sshOpt.ApplyFiles)
 		log.Println("[DEBUG] args: ", args)
 

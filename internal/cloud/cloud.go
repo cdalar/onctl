@@ -29,7 +29,7 @@ type Vm struct {
 	//LocalIP is the local IP of the instance
 	PrivateIP string
 	// Type is the type of the instance
-	Type string
+	Type string `yaml:"type"`
 	// Status is the status of the instance
 	Status string
 	// Location is the location of the instance

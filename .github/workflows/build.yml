@@ -1,6 +1,6 @@
 name: build
 
-permissions: 
+permissions:
   contents: read
 
 on:
@@ -38,10 +38,10 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
           check-latest: true

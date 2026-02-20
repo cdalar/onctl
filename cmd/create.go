@@ -4,12 +4,11 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
-	"github.com/briandowns/spinner"
 	"github.com/cdalar/onctl/internal/cloud"
 	"github.com/cdalar/onctl/internal/domain"
 	"github.com/cdalar/onctl/internal/tools"
+	"github.com/cdalar/onctl/internal/ui"
 	"gopkg.in/yaml.v2"
 
 	"github.com/spf13/cobra"
@@ -69,6 +68,8 @@ func init() {
 	createCmd.Flags().StringVar(&opt.Domain, "domain", "", "request a domain name for the VM")
 	createCmd.Flags().StringSliceVarP(&opt.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
 	createCmd.Flags().StringVarP(&opt.ConfigFile, "file", "f", "", "Path to configuration YAML file")
+	// Register create command at root level for convenience
+	rootCmd.AddCommand(createCmd)
 	createCmd.SetUsageTemplate(createCmd.UsageTemplate() + `
 Environment Variables:
   CLOUDFLARE_API_TOKEN  Cloudflare API Token (required for --domain)
@@ -95,7 +96,7 @@ var createCmd = &cobra.Command{
 			// Use the new MergeConfig function
 			MergeConfig(&opt, config)
 		}
-		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
+		s := ui.New() // Build our new spinner
 		s.Start()
 		s.Suffix = " Checking vm..."
 		list, err := provider.List()

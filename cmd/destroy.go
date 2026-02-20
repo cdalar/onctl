@@ -5,10 +5,9 @@ import (
 	"log"
 	"os"
 	"sync"
-	"time"
 
-	"github.com/briandowns/spinner"
 	"github.com/cdalar/onctl/internal/cloud"
+	"github.com/cdalar/onctl/internal/ui"
 
 	"github.com/spf13/cobra"
 )
@@ -19,6 +18,8 @@ var (
 
 func init() {
 	destroyCmd.Flags().BoolVarP(&force, "force", "f", false, "force destroy VM(s) without confirmation")
+	// Register destroy command at root level for convenience
+	rootCmd.AddCommand(destroyCmd)
 }
 
 var destroyCmd = &cobra.Command{
@@ -39,7 +40,8 @@ var destroyCmd = &cobra.Command{
 		return list, cobra.ShellCompDirectiveNoFileComp
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond) // Build our new spinner
+		s := ui.New()               // Build our new spinner
+		defer ensureCursorVisible() // Ensure cursor is visible when function exits
 		log.Println("[DEBUG] args: ", args)
 		if len(args) == 0 {
 			fmt.Println("Please provide a VM id or 'all' to destroy all VMs")

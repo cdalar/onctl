@@ -16,7 +16,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/ec2" //nolint:staticcheck // TODO: migrate to AWS SDK v2
 	"github.com/cdalar/onctl/internal/files"
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/gofrs/uuid/v5"
@@ -27,6 +27,15 @@ import (
 
 // TODO decouple viper and use onctlConfig instead
 // var onctlConfig map[string]interface{}
+
+// ensureCursorVisible ensures terminal cursor is visible.
+// This should be called before log.Fatal* calls in command functions that use spinners.
+// Spinners hide the cursor when started, and since log.Fatal* calls os.Exit() which
+// does not run deferred functions, the cursor must be explicitly restored before fatal errors.
+// It can also be used with defer for panic recovery, though defer does not run on os.Exit().
+func ensureCursorVisible() {
+	fmt.Print("\033[?25h") // ANSI escape code to show cursor
+}
 
 func GenerateIDToken() uuid.UUID {
 	u1, err := uuid.NewV4()
@@ -126,7 +135,6 @@ func PrettyPrint(v interface{}) (err error) {
 	return
 }
 
-//lint:ignore U1000 will use this function in the future
 func yesNo() bool {
 	prompt := promptui.Select{
 		Label:     "Please confirm [y/N]",
@@ -280,36 +288,73 @@ func getSSHKeyFilePaths(filename string) (publicKeyFile, privateKeyFile string) 
 }
 
 func ProcessUploadSlice(uploadSlice []string, remote tools.Remote) {
-	if len(uploadSlice) > 0 {
-		var wg sync.WaitGroup
-		for _, dfile := range uploadSlice {
-			wg.Add(1)
-			go func(dfile string) {
-				defer wg.Done()
+	if len(uploadSlice) == 0 {
+		return
+	}
 
-				var localFile, remoteFile string
-				// Split by colon to determine if a rename is required
-				if strings.Contains(dfile, ":") {
-					parts := strings.SplitN(dfile, ":", 2)
-					localFile = parts[0]
-					remoteFile = parts[1]
-				} else {
-					localFile = dfile
-					remoteFile = filepath.Base(dfile)
-				}
+	spinnerWasActive := remote.Spinner != nil && remote.Spinner.Active()
+	if spinnerWasActive {
+		remote.Spinner.Stop()
+	}
 
-				log.Println("[DEBUG] localFile: " + localFile)
-				log.Println("[DEBUG] remoteFile: " + remoteFile)
-
-				fmt.Printf("Uploading file: %s -> %s\n", localFile, remoteFile)
-
-				err := remote.SSHCopyFile(localFile, remoteFile)
-				if err != nil {
-					log.Printf("[ERROR] Failed to upload %s: %v", localFile, err)
-				}
-			}(dfile)
+	for _, dfile := range uploadSlice {
+		var localFile, remoteFile string
+		if strings.Contains(dfile, ":") {
+			parts := strings.SplitN(dfile, ":", 2)
+			localFile = parts[0]
+			remoteFile = parts[1]
+		} else {
+			localFile = dfile
+			remoteFile = filepath.Base(dfile)
 		}
-		wg.Wait() // Wait for all goroutines to finish
+
+		log.Println("[DEBUG] localFile: " + localFile)
+		log.Println("[DEBUG] remoteFile: " + remoteFile)
+
+		fileInfo, err := os.Stat(localFile)
+		if err != nil {
+			log.Printf("[ERROR] Failed to stat %s: %v", localFile, err)
+			continue
+		}
+		totalBytes := fileInfo.Size()
+		fmt.Printf("Uploading file: %s -> %s (%.1f MB)\n", localFile, remoteFile, float64(totalBytes)/(1024*1024))
+
+		startTime := time.Now()
+		progressCallback := func(current, total int64) {
+			if total == 0 {
+				return
+			}
+
+			percentage := float64(current) / float64(total) * 100
+			progressBarWidth := 20
+			filled := int(float64(progressBarWidth) * float64(current) / float64(total))
+			if filled > progressBarWidth {
+				filled = progressBarWidth
+			}
+			bar := strings.Repeat("=", filled) + strings.Repeat(".", progressBarWidth-filled)
+
+			var mbPerSecond float64
+			elapsed := time.Since(startTime)
+			if elapsed.Seconds() > 0 {
+				mbPerSecond = float64(current) / elapsed.Seconds() / (1024 * 1024)
+			}
+
+			fmt.Printf("\r[%s] %5.1f%% (%.1f/%.1f MB) %.1f MB/s", bar, percentage, float64(current)/(1024*1024), float64(total)/(1024*1024), mbPerSecond)
+		}
+
+		err = remote.SSHCopyFileWithProgress(localFile, remoteFile, progressCallback)
+		if err != nil {
+			fmt.Print("\n")
+			log.Printf("[ERROR] Failed to upload %s: %v", localFile, err)
+			continue
+		}
+
+		progressCallback(totalBytes, totalBytes)
+		fmt.Printf("\n\033[32m\u2714\033[0m Uploaded %s\n", remoteFile)
+	}
+
+	if spinnerWasActive {
+		remote.Spinner.Restart()
 	}
 }
 
@@ -361,6 +406,9 @@ func MergeConfig(opt *cmdCreateOptions, config *cmdCreateOptions) {
 	}
 	if opt.Vm.Name == "" && config.Vm.Name != "" {
 		opt.Vm.Name = config.Vm.Name
+	}
+	if opt.Vm.Type == "" && config.Vm.Type != "" {
+		opt.Vm.Type = config.Vm.Type
 	}
 	if opt.Vm.SSHPort == 22 && config.Vm.SSHPort != 0 { // Default SSH port is 22
 		opt.Vm.SSHPort = config.Vm.SSHPort

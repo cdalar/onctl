@@ -8,12 +8,16 @@ import (
 
 	"github.com/cdalar/onctl/internal/files"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 const (
 	onctlDirName = ".onctl"
 	initDir      = "init"
 )
+
+// skipInteractivePrompt is used to skip interactive prompts during testing
+var skipInteractivePrompt = false
 
 var initCmd = &cobra.Command{
 	Use:   "init",
@@ -26,37 +30,67 @@ var initCmd = &cobra.Command{
 }
 
 func initializeOnctlEnv() error {
-	// Determine the target .onctl directory
-	localDir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get working directory: %v", err)
-	}
-	localOnctlPath := filepath.Join(localDir, onctlDirName)
-
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get home directory: %v", err)
 	}
 	homeOnctlPath := filepath.Join(homeDir, onctlDirName)
 
-	var targetPath string
-	if _, err := os.Stat(localOnctlPath); os.IsNotExist(err) {
-		// If .onctl doesn't exist in current directory, use home directory
-		targetPath = homeOnctlPath
-	} else {
-		targetPath = localOnctlPath
+	localDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get working directory: %v", err)
 	}
+	localOnctlPath := filepath.Join(localDir, onctlDirName)
 
-	// Create the .onctl directory if it doesn't exist
-	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
-		if err := os.Mkdir(targetPath, os.ModePerm); err != nil {
-			return fmt.Errorf("failed to create %s directory: %w", targetPath, err)
+	// Always ensure home .onctl directory exists
+	if _, err := os.Stat(homeOnctlPath); os.IsNotExist(err) {
+		if err := os.Mkdir(homeOnctlPath, os.ModePerm); err != nil {
+			return fmt.Errorf("failed to create %s directory: %w", homeOnctlPath, err)
 		}
-		return populateOnctlEnv(targetPath)
+		if err := populateOnctlEnv(homeOnctlPath); err != nil {
+			// Clean up empty directory if population fails
+			_ = os.RemoveAll(homeOnctlPath)
+			return err
+		}
+	} else if err != nil {
+		// Handle other os.Stat errors (not IsNotExist)
+		return fmt.Errorf("failed to check %s: %w", homeOnctlPath, err)
+	} else {
+		fmt.Printf("Global onctl environment already initialized in %s\n", homeOnctlPath)
 	}
 
-	fmt.Printf("onctl environment already initialized in %s\n", targetPath)
+	// Check if local .onctl already exists
+	if _, err := os.Stat(localOnctlPath); err == nil {
+		fmt.Printf("Project-based onctl environment already initialized in %s\n", localOnctlPath)
+		return nil
+	} else if !os.IsNotExist(err) {
+		// Handle other os.Stat errors (not IsNotExist)
+		return fmt.Errorf("failed to check %s: %w", localOnctlPath, err)
+	}
+
+	// Ask user if they want to create a project-based .onctl folder
+	// Only prompt if in interactive mode (TTY available) or skipInteractivePrompt is false
+	if !skipInteractivePrompt && isInteractive() {
+		fmt.Printf("\nDo you want to create a project-based .onctl folder in the current directory?\n")
+		fmt.Printf("Project config will override global config settings.\n")
+		if yesNo() {
+			if err := os.Mkdir(localOnctlPath, os.ModePerm); err != nil {
+				return fmt.Errorf("failed to create %s directory: %w", localOnctlPath, err)
+			}
+			if err := populateOnctlEnv(localOnctlPath); err != nil {
+				// Clean up empty directory if population fails
+				_ = os.RemoveAll(localOnctlPath)
+				return err
+			}
+		}
+	}
+
 	return nil
+}
+
+// isInteractive checks if stdin is connected to a terminal (TTY)
+func isInteractive() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 func populateOnctlEnv(targetPath string) error {
