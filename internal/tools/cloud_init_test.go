@@ -21,12 +21,12 @@ func TestFileToBase64_NonExistentFile(t *testing.T) {
 func TestFileToBase64_ValidFile(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "cloud-init-test-*.txt")
 	assert.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	content := []byte("#!/bin/bash\necho hello")
 	_, err = tmpFile.Write(content)
 	assert.NoError(t, err)
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	result := FileToBase64(tmpFile.Name())
 	assert.NotEmpty(t, result)
@@ -39,8 +39,8 @@ func TestFileToBase64_ValidFile(t *testing.T) {
 func TestFileToBase64_EmptyFile(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "cloud-init-empty-*.txt")
 	assert.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Close()
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	_ = tmpFile.Close()
 
 	result := FileToBase64(tmpFile.Name())
 	assert.Equal(t, "", result)

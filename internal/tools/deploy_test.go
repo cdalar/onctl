@@ -33,11 +33,11 @@ func TestCreateDeployOutputFile(t *testing.T) {
 	// Change to temp dir to avoid polluting project
 	tmpDir, err := os.MkdirTemp("", "deploy-test-*")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	origDir, err := os.Getwd()
 	assert.NoError(t, err)
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 
 	err = os.Chdir(tmpDir)
 	assert.NoError(t, err)

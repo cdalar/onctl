@@ -68,11 +68,11 @@ func TestPrettyPrint_ValidStruct(t *testing.T) {
 	data := testData{Name: "Alice", Age: 30}
 	err := PrettyPrint(data)
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	output := buf.String()
 
 	assert.NoError(t, err)
@@ -92,11 +92,11 @@ func TestPrettyPrint_Map(t *testing.T) {
 	data := map[string]string{"key": "value"}
 	err := PrettyPrint(data)
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	output := buf.String()
 
 	assert.NoError(t, err)
@@ -233,7 +233,7 @@ func TestGetSSHKeyFilePaths_TildeExpansion(t *testing.T) {
 func TestParseConfigFile_ValidFile(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "config-test-*.yaml")
 	assert.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	content := `publicKeyFile: ~/.ssh/id_rsa.pub
 applyFiles:
@@ -249,7 +249,7 @@ domain: example.com
 `
 	_, err = tmpFile.WriteString(content)
 	assert.NoError(t, err)
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	config, err := parseConfigFile(tmpFile.Name())
 	assert.NoError(t, err)
@@ -272,11 +272,11 @@ func TestParseConfigFile_NonExistentFile(t *testing.T) {
 func TestParseConfigFile_InvalidYAML(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "config-invalid-*.yaml")
 	assert.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	_, err = tmpFile.WriteString("this: is: not: valid: yaml: !!!")
 	assert.NoError(t, err)
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	config, err := parseConfigFile(tmpFile.Name())
 	assert.Error(t, err)
@@ -291,8 +291,8 @@ func TestFindFile_EmptySlice(t *testing.T) {
 func TestFindFile_ExistingFiles(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "findfile-test-*")
 	assert.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Close()
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	_ = tmpFile.Close()
 
 	result := findFile([]string{tmpFile.Name()})
 	assert.Len(t, result, 1)
@@ -307,8 +307,8 @@ func TestFindSingleFile_Empty(t *testing.T) {
 func TestFindSingleFile_ExistingFile(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "findsingle-test-*")
 	assert.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Close()
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	_ = tmpFile.Close()
 
 	result := findSingleFile(tmpFile.Name())
 	assert.Equal(t, tmpFile.Name(), result)
@@ -327,16 +327,15 @@ func TestTabWriter_SimpleTemplate(t *testing.T) {
 	TabWriter(data, `{{range .}}{{.Name}}\t{{.Val}}
 {{end}}`)
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	output := buf.String()
 	assert.Contains(t, output, "alice")
 	assert.Contains(t, output, "bob")
 }
-
 
 func TestEnsureCursorVisible(t *testing.T) {
 	// Capture stdout
@@ -346,11 +345,11 @@ func TestEnsureCursorVisible(t *testing.T) {
 
 	ensureCursorVisible()
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	output := buf.String()
 
 	assert.Equal(t, "\033[?25h", output)

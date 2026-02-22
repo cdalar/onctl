@@ -10,8 +10,8 @@ import (
 func TestExists_FileExists(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "exists-test-*")
 	assert.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Close()
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	_ = tmpFile.Close()
 
 	ok, err := exists(tmpFile.Name())
 	assert.NoError(t, err)
@@ -27,7 +27,7 @@ func TestExists_FileNotExists(t *testing.T) {
 func TestExists_Directory(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "exists-dir-test-*")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	ok, err := exists(tmpDir)
 	assert.NoError(t, err)
@@ -37,7 +37,7 @@ func TestExists_Directory(t *testing.T) {
 func TestParseDotEnvFile_ValidFile(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "dotenv-test-*.env")
 	assert.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	content := `# This is a comment
 KEY1=value1
@@ -48,7 +48,7 @@ KEY3=value with spaces
 `
 	_, err = tmpFile.WriteString(content)
 	assert.NoError(t, err)
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	vars, err := ParseDotEnvFile(tmpFile.Name())
 	assert.NoError(t, err)
@@ -64,8 +64,8 @@ func TestParseDotEnvFile_NonExistentFile(t *testing.T) {
 func TestParseDotEnvFile_EmptyFile(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "dotenv-empty-*.env")
 	assert.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Close()
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	_ = tmpFile.Close()
 
 	vars, err := ParseDotEnvFile(tmpFile.Name())
 	assert.NoError(t, err)
@@ -75,11 +75,11 @@ func TestParseDotEnvFile_EmptyFile(t *testing.T) {
 func TestParseDotEnvFile_OnlyComments(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "dotenv-comments-*.env")
 	assert.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	_, err = tmpFile.WriteString("# just a comment\n# another comment\n")
 	assert.NoError(t, err)
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	vars, err := ParseDotEnvFile(tmpFile.Name())
 	assert.NoError(t, err)
@@ -89,11 +89,11 @@ func TestParseDotEnvFile_OnlyComments(t *testing.T) {
 func TestNextApplyDir_NewDirectory(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "nextapply-test-*")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	origDir, err := os.Getwd()
 	assert.NoError(t, err)
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 
 	err = os.Chdir(tmpDir)
 	assert.NoError(t, err)
@@ -111,11 +111,11 @@ func TestNextApplyDir_NewDirectory(t *testing.T) {
 func TestNextApplyDir_ExistingApplyDirs(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "nextapply-existing-*")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	origDir, err := os.Getwd()
 	assert.NoError(t, err)
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 
 	err = os.Chdir(tmpDir)
 	assert.NoError(t, err)
@@ -135,11 +135,11 @@ func TestNextApplyDir_EmptyPath(t *testing.T) {
 	// We need to work in a temp dir
 	tmpDir, err := os.MkdirTemp("", "nextapply-empty-*")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	origDir, err := os.Getwd()
 	assert.NoError(t, err)
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 
 	err = os.Chdir(tmpDir)
 	assert.NoError(t, err)
