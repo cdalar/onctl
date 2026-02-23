@@ -193,6 +193,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 	},
 
 	Run: func(cmd *cobra.Command, args []string) {
+		defer ensureCursorVisible()
 		if len(args) == 0 {
 			fmt.Println("Please provide a VM name")
 			return

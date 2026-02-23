@@ -19,6 +19,7 @@ type Spinner struct {
 	Suffix     string // Public field to match briandowns/spinner API
 	isRunning  bool
 	hideOutput bool
+	done       chan struct{} // closed when the program goroutine exits
 }
 
 type model struct {
@@ -75,12 +76,14 @@ func (s *Spinner) Start() {
 	s.model.suffix = s.Suffix
 
 	s.program = tea.NewProgram(s.model, tea.WithOutput(os.Stderr))
+	s.done = make(chan struct{})
 	s.isRunning = true
 
 	go func() {
 		if _, err := s.program.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error running spinner: %v\n", err)
 		}
+		close(s.done)
 	}()
 
 	// Give the program a moment to start
@@ -90,19 +93,28 @@ func (s *Spinner) Start() {
 // Stop stops the spinner animation
 func (s *Spinner) Stop() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	if !s.isRunning {
+		s.mu.Unlock()
 		return
 	}
 
+	// Mark as stopped and capture state before releasing the lock
+	s.isRunning = false
+	done := s.done
 	if s.program != nil {
 		s.program.Quit()
-		// Give the program a moment to clean up
-		time.Sleep(10 * time.Millisecond)
 	}
+	s.mu.Unlock()
 
-	s.isRunning = false
+	// Wait for bubbletea to finish restoring the terminal (cursor, echo, raw mode).
+	// This must happen outside the lock to avoid blocking other callers.
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
 }
 
 // Restart stops and starts the spinner

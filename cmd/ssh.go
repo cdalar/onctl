@@ -79,6 +79,7 @@ var sshCmd = &cobra.Command{
 	},
 
 	Run: func(cmd *cobra.Command, args []string) {
+		defer ensureCursorVisible()
 		if sshOpt.ConfigFile != "" {
 			config, err := parseSSHConfigFile(sshOpt.ConfigFile)
 			if err != nil {

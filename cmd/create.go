@@ -85,6 +85,7 @@ var createCmd = &cobra.Command{
 	Example: `  # Create a VM with docker installed and set ssh on port 443
   onctl create -n onctl-test -a docker/docker.sh -i cloud-init/ssh-443.config`,
 	Run: func(cmd *cobra.Command, args []string) {
+		defer ensureCursorVisible()
 		if opt.ConfigFile != "" {
 			config, err := parseConfigFile(opt.ConfigFile)
 			if err != nil {
