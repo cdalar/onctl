@@ -13,6 +13,7 @@ type SSHIntoVMRequest struct {
 	User           string
 	Port           int
 	PrivateKeyFile string
+	Command        []string
 }
 
 func SSHIntoVM(request SSHIntoVMRequest) {
@@ -24,8 +25,11 @@ func SSHIntoVM(request SSHIntoVMRequest) {
 		request.IPAddress,
 		"-p", fmt.Sprint(request.Port),
 	}
+	if len(request.Command) > 0 {
+		sshArgs = append(sshArgs, "--")
+		sshArgs = append(sshArgs, request.Command...)
+	}
 	log.Println("[DEBUG] sshArgs: ", sshArgs)
-	// sshCommand := exec.Command("ssh", append(sshArgs, args[1:]...)...)
 	sshCommand := exec.Command("ssh", sshArgs...)
 	sshCommand.Stdin = os.Stdin
 	sshCommand.Stdout = os.Stdout

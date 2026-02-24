@@ -325,7 +325,7 @@ func (p ProviderAzure) Destroy(server Vm) error {
 
 }
 
-func (p ProviderAzure) SSHInto(serverName string, port int, privateKey string) {
+func (p ProviderAzure) SSHInto(serverName string, port int, privateKey string, command []string) {
 	s, err := p.GetByName(serverName)
 	if err != nil || s.ID == "" {
 		log.Fatalln(err)
@@ -340,6 +340,7 @@ func (p ProviderAzure) SSHInto(serverName string, port int, privateKey string) {
 		User:           viper.GetString("azure.vm.username"),
 		Port:           port,
 		PrivateKeyFile: privateKey,
+		Command:        command,
 	})
 
 }

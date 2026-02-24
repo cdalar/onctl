@@ -59,7 +59,7 @@ func init() {
 }
 
 var sshCmd = &cobra.Command{
-	Use:                   "ssh VM_NAME",
+	Use:                   "ssh VM_NAME [-- COMMAND [ARGS...]]",
 	Short:                 "Spawn an SSH connection to a VM",
 	Args:                  cobra.MinimumNArgs(1),
 	TraverseChildren:      true,
@@ -176,7 +176,7 @@ var sshCmd = &cobra.Command{
 			ProcessDownloadSlice(sshOpt.DownloadFiles, remote)
 		}
 		if sshOpt.ConfigFile == "" && len(applyFileFound) == 0 && len(sshOpt.DownloadFiles) == 0 && len(sshOpt.UploadFiles) == 0 {
-			provider.SSHInto(args[0], sshOpt.Port, privateKeyFile)
+			provider.SSHInto(args[0], sshOpt.Port, privateKeyFile, args[1:])
 		}
 	},
 }

@@ -320,7 +320,7 @@ func (p ProviderAws) GetByName(serverName string) (Vm, error) {
 	return mapAwsServer(s.Reservations[0].Instances[0]), nil
 }
 
-func (p ProviderAws) SSHInto(serverName string, port int, privateKey string) {
+func (p ProviderAws) SSHInto(serverName string, port int, privateKey string, command []string) {
 
 	s, err := p.GetByName(serverName)
 	if err != nil || s.ID == "" {
@@ -336,5 +336,6 @@ func (p ProviderAws) SSHInto(serverName string, port int, privateKey string) {
 		User:           viper.GetString("aws.vm.username"),
 		Port:           port,
 		PrivateKeyFile: privateKey,
+		Command:        command,
 	})
 }
