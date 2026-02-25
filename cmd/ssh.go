@@ -176,7 +176,14 @@ var sshCmd = &cobra.Command{
 			ProcessDownloadSlice(sshOpt.DownloadFiles, remote)
 		}
 		if sshOpt.ConfigFile == "" && len(applyFileFound) == 0 && len(sshOpt.DownloadFiles) == 0 && len(sshOpt.UploadFiles) == 0 {
-			provider.SSHInto(args[0], sshOpt.Port, privateKeyFile, args[1:])
+			var remoteCmd []string
+			for i, a := range os.Args {
+				if a == "--" {
+					remoteCmd = os.Args[i+1:]
+					break
+				}
+			}
+			provider.SSHInto(args[0], sshOpt.Port, privateKeyFile, remoteCmd)
 		}
 	},
 }
