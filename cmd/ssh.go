@@ -25,6 +25,15 @@ type cmdSSHOptions struct {
 
 var sshOpt cmdSSHOptions
 
+func parseRemoteCmd(osArgs []string) []string {
+	for i, a := range osArgs {
+		if a == "--" {
+			return osArgs[i+1:]
+		}
+	}
+	return nil
+}
+
 func parseSSHConfigFile(configFile string) (*cmdSSHOptions, error) {
 	file, err := os.Open(configFile)
 	if err != nil {
@@ -176,14 +185,7 @@ var sshCmd = &cobra.Command{
 			ProcessDownloadSlice(sshOpt.DownloadFiles, remote)
 		}
 		if sshOpt.ConfigFile == "" && len(applyFileFound) == 0 && len(sshOpt.DownloadFiles) == 0 && len(sshOpt.UploadFiles) == 0 {
-			var remoteCmd []string
-			for i, a := range os.Args {
-				if a == "--" {
-					remoteCmd = os.Args[i+1:]
-					break
-				}
-			}
-			provider.SSHInto(args[0], sshOpt.Port, privateKeyFile, remoteCmd)
+			provider.SSHInto(args[0], sshOpt.Port, privateKeyFile, parseRemoteCmd(os.Args))
 		}
 	},
 }

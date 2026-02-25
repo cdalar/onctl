@@ -149,6 +149,46 @@ func TestCmdSSHOptions_StructBasics(t *testing.T) {
 	assert.Equal(t, "config.yaml", opts.ConfigFile)
 }
 
+func TestParseRemoteCmd(t *testing.T) {
+	tests := []struct {
+		name     string
+		osArgs   []string
+		expected []string
+	}{
+		{
+			name:     "no separator returns nil",
+			osArgs:   []string{"onctl", "ssh", "vm"},
+			expected: nil,
+		},
+		{
+			name:     "extra args without separator returns nil",
+			osArgs:   []string{"onctl", "ssh", "vm", "uptime"},
+			expected: nil,
+		},
+		{
+			name:     "separator with single command",
+			osArgs:   []string{"onctl", "ssh", "vm", "--", "uptime"},
+			expected: []string{"uptime"},
+		},
+		{
+			name:     "separator with command and args",
+			osArgs:   []string{"onctl", "ssh", "vm", "--", "systemctl", "status", "nginx"},
+			expected: []string{"systemctl", "status", "nginx"},
+		},
+		{
+			name:     "separator at end returns empty slice",
+			osArgs:   []string{"onctl", "ssh", "vm", "--"},
+			expected: []string{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseRemoteCmd(tt.osArgs)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestCmdSSHOptions_ZeroValues(t *testing.T) {
 	// Test zero value cmdSSHOptions
 	var opts cmdSSHOptions
