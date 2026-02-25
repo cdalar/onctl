@@ -151,7 +151,7 @@ func (p ProviderGcp) Deploy(server Vm) (Vm, error) {
 	return p.GetByName(server.Name)
 }
 
-func (p ProviderGcp) SSHInto(serverName string, port int, privateKey string) {
+func (p ProviderGcp) SSHInto(serverName string, port int, privateKey string, command []string) {
 	server, err := p.GetByName(serverName)
 	if err != nil {
 		log.Fatalln(err)
@@ -164,6 +164,7 @@ func (p ProviderGcp) SSHInto(serverName string, port int, privateKey string) {
 		User:           viper.GetString("gcp.vm.username"),
 		Port:           port,
 		PrivateKeyFile: privateKey,
+		Command:        command,
 	})
 }
 

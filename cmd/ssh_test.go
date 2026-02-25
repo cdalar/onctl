@@ -91,7 +91,7 @@ applyFiles:
 
 func TestSSHCmd_CommandProperties(t *testing.T) {
 	// Test that the command has the expected properties
-	assert.Equal(t, "ssh VM_NAME", sshCmd.Use)
+	assert.Equal(t, "ssh VM_NAME [-- COMMAND [ARGS...]]", sshCmd.Use)
 	assert.Equal(t, "Spawn an SSH connection to a VM", sshCmd.Short)
 	assert.NotNil(t, sshCmd.Args)
 	assert.True(t, sshCmd.TraverseChildren)
@@ -147,6 +147,46 @@ func TestCmdSSHOptions_StructBasics(t *testing.T) {
 	assert.Equal(t, ".env", opts.DotEnvFile)
 	assert.Equal(t, []string{"VAR1=value1"}, opts.Variables)
 	assert.Equal(t, "config.yaml", opts.ConfigFile)
+}
+
+func TestParseRemoteCmd(t *testing.T) {
+	tests := []struct {
+		name     string
+		osArgs   []string
+		expected []string
+	}{
+		{
+			name:     "no separator returns nil",
+			osArgs:   []string{"onctl", "ssh", "vm"},
+			expected: nil,
+		},
+		{
+			name:     "extra args without separator returns nil",
+			osArgs:   []string{"onctl", "ssh", "vm", "uptime"},
+			expected: nil,
+		},
+		{
+			name:     "separator with single command",
+			osArgs:   []string{"onctl", "ssh", "vm", "--", "uptime"},
+			expected: []string{"uptime"},
+		},
+		{
+			name:     "separator with command and args",
+			osArgs:   []string{"onctl", "ssh", "vm", "--", "systemctl", "status", "nginx"},
+			expected: []string{"systemctl", "status", "nginx"},
+		},
+		{
+			name:     "separator at end returns empty slice",
+			osArgs:   []string{"onctl", "ssh", "vm", "--"},
+			expected: []string{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseRemoteCmd(tt.osArgs)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 func TestCmdSSHOptions_ZeroValues(t *testing.T) {

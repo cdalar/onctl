@@ -226,7 +226,7 @@ func (p ProviderHetzner) GetByName(serverName string) (Vm, error) {
 	return mapHetznerServer(*s), nil
 }
 
-func (p ProviderHetzner) SSHInto(serverName string, port int, privateKey string) {
+func (p ProviderHetzner) SSHInto(serverName string, port int, privateKey string, command []string) {
 	server, _, err := p.Client.Server.GetByName(context.TODO(), serverName)
 	if server == nil {
 		fmt.Println("No Server found with name: " + serverName)
@@ -254,5 +254,6 @@ func (p ProviderHetzner) SSHInto(serverName string, port int, privateKey string)
 		User:           viper.GetString("hetzner.vm.username"),
 		Port:           port,
 		PrivateKeyFile: privateKey,
+		Command:        command,
 	})
 }
