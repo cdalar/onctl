@@ -91,7 +91,7 @@ applyFiles:
 
 func TestSSHCmd_CommandProperties(t *testing.T) {
 	// Test that the command has the expected properties
-	assert.Equal(t, "ssh VM_NAME", sshCmd.Use)
+	assert.Equal(t, "ssh VM_NAME [-- COMMAND [ARGS...]]", sshCmd.Use)
 	assert.Equal(t, "Spawn an SSH connection to a VM", sshCmd.Short)
 	assert.NotNil(t, sshCmd.Args)
 	assert.True(t, sshCmd.TraverseChildren)
