@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	cloud.google.com/go/compute v1.55.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.2.0
+	github.com/Telmate/proxmox-api-go v0.0.0-20251006192222-4174b8ef68b4
 	github.com/aws/aws-sdk-go v1.55.8
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
