@@ -11,12 +11,12 @@ import (
 func TestParseDotEnvFile_Basic(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "dotenv-test-")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { require.NoError(t, os.Remove(tmpFile.Name())) }()
 
 	content := "KEY1=value1\nKEY2=value2\n# comment\n\nKEY3=value3\n"
 	_, err = tmpFile.WriteString(content)
 	require.NoError(t, err)
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	vars, err := ParseDotEnvFile(tmpFile.Name())
 	require.NoError(t, err)
@@ -31,12 +31,12 @@ func TestParseDotEnvFile_NonExistent(t *testing.T) {
 func TestParseDotEnvFile_SkipsComments(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "dotenv-comments-")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { require.NoError(t, os.Remove(tmpFile.Name())) }()
 
 	content := "# this is a comment\nFOO=bar\n# another comment\n  # indented comment\nBAZ=qux\n"
 	_, err = tmpFile.WriteString(content)
 	require.NoError(t, err)
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	vars, err := ParseDotEnvFile(tmpFile.Name())
 	require.NoError(t, err)
@@ -46,8 +46,8 @@ func TestParseDotEnvFile_SkipsComments(t *testing.T) {
 func TestParseDotEnvFile_Empty(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "dotenv-empty-")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Close()
+	defer func() { require.NoError(t, os.Remove(tmpFile.Name())) }()
+	require.NoError(t, tmpFile.Close())
 
 	vars, err := ParseDotEnvFile(tmpFile.Name())
 	require.NoError(t, err)
@@ -57,8 +57,8 @@ func TestParseDotEnvFile_Empty(t *testing.T) {
 func TestExists_ExistingFile(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "exists-test-")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Close()
+	defer func() { require.NoError(t, os.Remove(tmpFile.Name())) }()
+	require.NoError(t, tmpFile.Close())
 
 	ok, err := exists(tmpFile.Name())
 	require.NoError(t, err)

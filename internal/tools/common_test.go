@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestContains(t *testing.T) {
@@ -35,7 +36,7 @@ func TestWhichCloudProvider(t *testing.T) {
 		"AZURE_CLIENT_ID", "GOOGLE_CREDENTIALS", "HCLOUD_TOKEN",
 	}
 	for _, v := range envVars {
-		os.Unsetenv(v)
+		require.NoError(t, os.Unsetenv(v))
 	}
 
 	t.Run("none", func(t *testing.T) {
@@ -50,28 +51,28 @@ func TestWhichCloudProvider(t *testing.T) {
 	})
 
 	t.Run("aws via profile", func(t *testing.T) {
-		os.Unsetenv("AWS_ACCESS_KEY_ID")
+		require.NoError(t, os.Unsetenv("AWS_ACCESS_KEY_ID"))
 		t.Setenv("AWS_PROFILE", "default")
 		result := WhichCloudProvider()
 		assert.Equal(t, "aws", result)
 	})
 
 	t.Run("azure", func(t *testing.T) {
-		os.Unsetenv("AWS_PROFILE")
+		require.NoError(t, os.Unsetenv("AWS_PROFILE"))
 		t.Setenv("AZURE_CLIENT_ID", "some-client-id")
 		result := WhichCloudProvider()
 		assert.Equal(t, "azure", result)
 	})
 
 	t.Run("gcp", func(t *testing.T) {
-		os.Unsetenv("AZURE_CLIENT_ID")
+		require.NoError(t, os.Unsetenv("AZURE_CLIENT_ID"))
 		t.Setenv("GOOGLE_CREDENTIALS", `{"type":"service_account"}`)
 		result := WhichCloudProvider()
 		assert.Equal(t, "gcp", result)
 	})
 
 	t.Run("hetzner", func(t *testing.T) {
-		os.Unsetenv("GOOGLE_CREDENTIALS")
+		require.NoError(t, os.Unsetenv("GOOGLE_CREDENTIALS"))
 		t.Setenv("HCLOUD_TOKEN", "some-hcloud-token")
 		result := WhichCloudProvider()
 		assert.Equal(t, "hetzner", result)

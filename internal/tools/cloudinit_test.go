@@ -22,12 +22,12 @@ func TestFileToBase64_NonExistent(t *testing.T) {
 func TestFileToBase64_ValidFile(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "base64-test-")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { require.NoError(t, os.Remove(tmpFile.Name())) }()
 
 	content := []byte("hello world")
 	_, err = tmpFile.Write(content)
 	require.NoError(t, err)
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	result := FileToBase64(tmpFile.Name())
 	expected := base64.StdEncoding.EncodeToString(content)
@@ -37,8 +37,8 @@ func TestFileToBase64_ValidFile(t *testing.T) {
 func TestFileToBase64_EmptyFile(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "base64-empty-")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Close()
+	defer func() { require.NoError(t, os.Remove(tmpFile.Name())) }()
+	require.NoError(t, tmpFile.Close())
 
 	result := FileToBase64(tmpFile.Name())
 	assert.Equal(t, base64.StdEncoding.EncodeToString([]byte{}), result)
