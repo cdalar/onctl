@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"os/user"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,6 +25,9 @@ func TestGenerateMachineUniqueName_Unique(t *testing.T) {
 }
 
 func TestGenerateUserName(t *testing.T) {
+	if _, err := user.Current(); err != nil {
+		t.Skipf("skipping: os/user.Current() unavailable: %v", err)
+	}
 	name := GenerateUserName()
 	assert.NotEmpty(t, name)
 	// Should not contain backslashes, spaces, forward slashes, or dots
