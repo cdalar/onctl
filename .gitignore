@@ -6,3 +6,4 @@ onctl-linux
 ip.txt
 tmp/*
 .env*
+k3s.yaml

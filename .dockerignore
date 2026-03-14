@@ -1,0 +1,5 @@
+.git
+*.md
+coverage.out
+k3s.yaml
+onctl
