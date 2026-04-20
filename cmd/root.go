@@ -11,6 +11,7 @@ import (
 	"github.com/cdalar/onctl/internal/providerazure"
 	"github.com/cdalar/onctl/internal/providergcp"
 	"github.com/cdalar/onctl/internal/providerhtz"
+	"github.com/cdalar/onctl/internal/providerpxmx"
 	"github.com/cdalar/onctl/internal/tools"
 
 	"github.com/spf13/cobra"
@@ -34,7 +35,7 @@ var (
   onctl destroy test`,
 	}
 	cloudProvider     string
-	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp"}
+	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "proxmox"}
 	provider          cloud.CloudProviderInterface
 )
 
@@ -97,6 +98,14 @@ func Execute() error {
 			SSHKeyClient:        providerazure.GetSSHKeyClient(),
 			VnetClient:          providerazure.GetVnetClient(),
 			NSGClient:           providerazure.GetNSGClient(),
+		}
+	case "proxmox":
+		proxmoxClient, err := providerpxmx.GetClient()
+		if err != nil {
+			log.Fatalln(err)
+		}
+		provider = &cloud.ProviderProxmox{
+			Client: proxmoxClient,
 		}
 	}
 	return rootCmd.Execute()
