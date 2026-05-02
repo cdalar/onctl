@@ -1,0 +1,48 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(golangci-lint run:*)",
+      "Bash(go tool cover:*)",
+      "Bash(go test:*)",
+      "Bash(git add:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh api:*)",
+      "Bash(git reset:*)",
+      "Bash(git commit:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh run view:*)",
+      "Bash(gofmt:*)",
+      "Bash(git push:*)",
+      "Bash(while true)",
+      "Bash(do gh pr view 783 --json state,merged --jq '{state, merged}')",
+      "Bash(done)",
+      "Bash(gh pr:*)",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git pull:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(go build:*)",
+      "WebSearch",
+      "Bash(git:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/lint-on-change.sh\"",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "everything-claude-code@everything-claude-code": true
+  }
+}
