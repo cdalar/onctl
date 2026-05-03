@@ -1,0 +1,11 @@
+proxmox:
+  node: pve
+  insecure: false
+  vm:
+    id: 100
+    template: ubuntu-22.04-template
+    username: root
+    cores: 2
+    memory: 2048
+    storage: local-lvm
+    network_bridge: vmbr0
