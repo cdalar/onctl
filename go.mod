@@ -9,7 +9,7 @@ require (
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/cloudflare/cloudflare-go v0.116.0
+	github.com/cloudflare/cloudflare-go v0.117.0
 	github.com/gofrs/uuid/v5 v5.4.0
 	github.com/hetznercloud/hcloud-go/v2 v2.41.1
 	github.com/manifoldco/promptui v0.9.0
