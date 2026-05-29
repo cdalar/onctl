@@ -125,7 +125,7 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 	waiter := ec2.NewInstanceRunningWaiter(p.Client)
 	err = waiter.Wait(context.TODO(), &ec2.DescribeInstancesInput{
 		InstanceIds: []string{*result.Instances[0].InstanceId},
-	}, 5*time.Minute)
+	}, 10*time.Minute)
 	if err != nil {
 		log.Fatalln(err)
 	}
