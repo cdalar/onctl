@@ -1,30 +1,29 @@
 package tools
 
 import (
+	"context"
+	"errors"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/smithy-go"
 )
 
-func GetSubnets(svc *ec2.EC2, vpcId *string) []*ec2.Subnet {
-	subnets, err := svc.DescribeSubnets(&ec2.DescribeSubnetsInput{
-		Filters: []*ec2.Filter{
+func GetSubnets(svc *ec2.Client, vpcId *string) []types.Subnet {
+	subnets, err := svc.DescribeSubnets(context.TODO(), &ec2.DescribeSubnetsInput{
+		Filters: []types.Filter{
 			{Name: aws.String("vpc-id"),
-				Values: []*string{vpcId},
+				Values: []string{*vpcId},
 			},
 		},
 	})
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) {
+			fmt.Println(apiErr.Error())
 		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
 			fmt.Println(err.Error())
 		}
 	}

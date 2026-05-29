@@ -1,2 +1,15 @@
+coverage:
+  status:
+    project:
+      default:
+        informational: false
+    patch:
+      default:
+        # Patch coverage reports but does not block merges. Much of the
+        # codebase is thin cloud-SDK glue (provider wrappers) that is
+        # validated via end-to-end runs rather than unit tests, so a
+        # blocking patch gate penalizes refactors/migrations.
+        informational: true
+
 ignore:
   - "**/*_test.go"

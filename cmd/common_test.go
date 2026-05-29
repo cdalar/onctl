@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws" //nolint:staticcheck // TODO: migrate to AWS SDK v2
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/gofrs/uuid/v5"
 	"github.com/stretchr/testify/assert"
@@ -157,12 +157,12 @@ func TestPrettyPrint(t *testing.T) {
 func TestGetNameFromTags(t *testing.T) {
 	tests := []struct {
 		name     string
-		tags     []*ec2.Tag
+		tags     []types.Tag
 		expected string
 	}{
 		{
 			name: "Tag with Name key",
-			tags: []*ec2.Tag{
+			tags: []types.Tag{
 				{Key: aws.String("Name"), Value: aws.String("test-vm")},
 				{Key: aws.String("Environment"), Value: aws.String("prod")},
 			},
@@ -170,7 +170,7 @@ func TestGetNameFromTags(t *testing.T) {
 		},
 		{
 			name: "No Name tag",
-			tags: []*ec2.Tag{
+			tags: []types.Tag{
 				{Key: aws.String("Environment"), Value: aws.String("prod")},
 				{Key: aws.String("Owner"), Value: aws.String("admin")},
 			},
@@ -178,7 +178,7 @@ func TestGetNameFromTags(t *testing.T) {
 		},
 		{
 			name:     "Empty tags",
-			tags:     []*ec2.Tag{},
+			tags:     []types.Tag{},
 			expected: "",
 		},
 		{
@@ -449,10 +449,10 @@ func TestOpenbrowser(t *testing.T) {
 func TestTabWriter_WithFunctions(t *testing.T) {
 	// Test TabWriter with template functions
 	data := struct {
-		Tags      []*ec2.Tag
+		Tags      []types.Tag
 		CreatedAt time.Time
 	}{
-		Tags: []*ec2.Tag{
+		Tags: []types.Tag{
 			{Key: aws.String("Name"), Value: aws.String("test-vm")},
 		},
 		CreatedAt: time.Now().Add(-time.Hour),

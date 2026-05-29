@@ -6,13 +6,14 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
 func TestGetImages_ImageSorting(t *testing.T) {
 	// Test that images are sorted by creation date when using wildcards
-	images := []*ec2.Image{
+	images := []types.Image{
 		{
 			ImageId:      aws.String("ami-old"),
 			CreationDate: aws.String("2023-01-01T00:00:00.000Z"),
@@ -29,7 +30,7 @@ func TestGetImages_ImageSorting(t *testing.T) {
 
 	// Manually test the sorting logic used in GetImages
 	// Sort images by creation date (newest first)
-	sortedImages := make([]*ec2.Image, len(images))
+	sortedImages := make([]types.Image, len(images))
 	copy(sortedImages, images)
 
 	sort.Slice(sortedImages, func(i, j int) bool {
@@ -60,7 +61,7 @@ func TestCheckIfKeyPairExists_Logic(t *testing.T) {
 	// Test the logic that would be used in checkIfKeyPairExists
 	// When result has key pairs, function should return true
 	resultWithKeys := &ec2.DescribeKeyPairsOutput{
-		KeyPairs: []*ec2.KeyPairInfo{
+		KeyPairs: []types.KeyPairInfo{
 			{KeyName: aws.String("test-key")},
 		},
 	}
@@ -73,7 +74,7 @@ func TestCheckIfKeyPairExists_Logic(t *testing.T) {
 
 	// When result has no key pairs, function should return false
 	resultWithoutKeys := &ec2.DescribeKeyPairsOutput{
-		KeyPairs: []*ec2.KeyPairInfo{},
+		KeyPairs: []types.KeyPairInfo{},
 	}
 
 	if len(resultWithoutKeys.KeyPairs) > 0 {
@@ -84,7 +85,7 @@ func TestCheckIfKeyPairExists_Logic(t *testing.T) {
 func TestGetAvailabilityZones_ResultProcessing(t *testing.T) {
 	// Test the logic for processing availability zones
 	mockResult := &ec2.DescribeAvailabilityZonesOutput{
-		AvailabilityZones: []*ec2.AvailabilityZone{
+		AvailabilityZones: []types.AvailabilityZone{
 			{ZoneName: aws.String("us-east-1a")},
 			{ZoneName: aws.String("us-east-1b")},
 			{ZoneName: aws.String("us-east-1c")},

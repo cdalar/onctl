@@ -3,3 +3,4 @@ aws:
   vm:
     type: t2.micro
     username: ubuntu
+    image: ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*
