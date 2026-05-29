@@ -1,25 +1,29 @@
 package cloud
 
 import (
+	"context"
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/spf13/viper"
 
 	"github.com/cdalar/onctl/internal/provideraws"
 
-	"github.com/aws/aws-sdk-go/aws"         //nolint:staticcheck // TODO: migrate to AWS SDK v2
-	"github.com/aws/aws-sdk-go/aws/awserr"  //nolint:staticcheck // TODO: migrate to AWS SDK v2
-	"github.com/aws/aws-sdk-go/service/ec2" //nolint:staticcheck // TODO: migrate to AWS SDK v2
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/smithy-go"
 	"golang.org/x/crypto/ssh"
 )
 
 type ProviderAws struct {
-	Client *ec2.EC2
+	Client *ec2.Client
 }
 
 func (p ProviderAws) Deploy(server Vm) (Vm, error) {
@@ -31,8 +35,8 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 		log.Println(err)
 	}
 
-	keyPairs, err := p.Client.DescribeKeyPairs(&ec2.DescribeKeyPairsInput{
-		KeyPairIds: []*string{aws.String(server.SSHKeyID)},
+	keyPairs, err := p.Client.DescribeKeyPairs(context.TODO(), &ec2.DescribeKeyPairsInput{
+		KeyPairIds: []string{server.SSHKeyID},
 	})
 	if err != nil {
 		log.Fatalln(err)
@@ -52,29 +56,29 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 	// log.Println("[DEBUG] Security Group Ids: ", securityGroupIds)
 	input := &ec2.RunInstancesInput{
 		ImageId:      aws.String(*images[0].ImageId),
-		InstanceType: aws.String(server.Type),
-		// InstanceMarketOptions: &ec2.InstanceMarketOptionsRequest{
-		// 	MarketType: aws.String("spot"),
-		// 	SpotOptions: &ec2.SpotMarketOptions{
+		InstanceType: types.InstanceType(server.Type),
+		// InstanceMarketOptions: &types.InstanceMarketOptionsRequest{
+		// 	MarketType: types.MarketTypeSpot,
+		// 	SpotOptions: &types.SpotMarketOptions{
 		// 		MaxPrice: aws.String("0.02"),
 		// 	},
 		// },
-		MinCount: aws.Int64(1),
-		MaxCount: aws.Int64(1),
+		MinCount: aws.Int32(1),
+		MaxCount: aws.Int32(1),
 		KeyName:  aws.String(*keyPairs.KeyPairs[0].KeyName),
-		NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+		NetworkInterfaces: []types.InstanceNetworkInterfaceSpecification{
 			{
-				DeviceIndex: aws.Int64(0),
+				DeviceIndex: aws.Int32(0),
 				// SubnetId:                 aws.String(subnetIds[0]),
 				AssociatePublicIpAddress: aws.Bool(true),
 				DeleteOnTermination:      aws.Bool(true),
 				// Groups:                   securityGroupIds,
 			},
 		},
-		TagSpecifications: []*ec2.TagSpecification{
+		TagSpecifications: []types.TagSpecification{
 			{
-				ResourceType: aws.String("instance"),
-				Tags: []*ec2.Tag{
+				ResourceType: types.ResourceTypeInstance,
+				Tags: []types.Tag{
 					{
 						Key:   aws.String("Name"),
 						Value: aws.String(server.Name),
@@ -88,19 +92,19 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 		},
 	}
 
-	descOut, err := p.Client.DescribeInstances(&ec2.DescribeInstancesInput{
-		Filters: []*ec2.Filter{
+	descOut, err := p.Client.DescribeInstances(context.TODO(), &ec2.DescribeInstancesInput{
+		Filters: []types.Filter{
 			{
 				Name:   aws.String("tag:Name"),
-				Values: []*string{aws.String(server.Name)},
+				Values: []string{server.Name},
 			},
 			{
 				Name:   aws.String("tag:Owner"),
-				Values: []*string{aws.String("onctl")},
+				Values: []string{"onctl"},
 			},
 			{
 				Name:   aws.String("instance-state-name"),
-				Values: []*string{aws.String("running")},
+				Values: []string{"running"},
 			},
 		},
 	})
@@ -112,22 +116,16 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 		return mapAwsServer(descOut.Reservations[0].Instances[0]), nil
 	}
 
-	result, err := p.Client.RunInstances(input)
+	result, err := p.Client.RunInstances(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 		return Vm{}, err
 	}
-	log.Println("[DEBUG] " + result.String())
-	err = p.Client.WaitUntilInstanceRunning(&ec2.DescribeInstancesInput{
-		InstanceIds: []*string{result.Instances[0].InstanceId},
-	})
+	log.Printf("[DEBUG] %+v", result)
+	waiter := ec2.NewInstanceRunningWaiter(p.Client)
+	err = waiter.Wait(context.TODO(), &ec2.DescribeInstancesInput{
+		InstanceIds: []string{*result.Instances[0].InstanceId},
+	}, 5*time.Minute)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -147,53 +145,35 @@ func (p ProviderAws) Destroy(server Vm) error {
 	}
 	log.Println("[DEBUG] Terminating Instance: " + server.ID)
 	input := &ec2.TerminateInstancesInput{
-		InstanceIds: []*string{
-			aws.String(server.ID),
+		InstanceIds: []string{
+			server.ID,
 		},
 	}
-	result, err := p.Client.TerminateInstances(input)
+	result, err := p.Client.TerminateInstances(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 		return err
 	}
-	log.Println("[DEBUG] " + result.String())
+	log.Printf("[DEBUG] %+v", result)
 	return nil
 }
 
 func (p ProviderAws) List() (VmList, error) {
 
 	input := &ec2.DescribeInstancesInput{
-		Filters: []*ec2.Filter{
+		Filters: []types.Filter{
 			{
 				Name:   aws.String("tag:Owner"),
-				Values: []*string{aws.String("onctl")},
+				Values: []string{"onctl"},
 			},
 		},
 	}
-	instances, err := p.Client.DescribeInstances(input)
+	instances, err := p.Client.DescribeInstances(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 		return VmList{}, err
 	}
-	log.Println("[DEBUG] " + instances.String())
+	log.Printf("[DEBUG] %+v", instances)
 
 	if len(instances.Reservations) > 0 {
 		log.Println("[DEBUG] # of Instances:" + strconv.Itoa(len(instances.Reservations[0].Instances)))
@@ -228,19 +208,19 @@ func (p ProviderAws) CreateSSHKey(publicKeyFile string) (keyID string, err error
 	// Print the fingerprint
 	log.Println("[DEBUG] SSH Key Fingerpring: " + SSHKeyFingerPrint)
 	log.Println("[DEBUG] SSH Key MD5: " + SSHKeyMD5)
-	importKeyPairOutput, err := p.Client.ImportKeyPair(&ec2.ImportKeyPairInput{
+	importKeyPairOutput, err := p.Client.ImportKeyPair(context.TODO(), &ec2.ImportKeyPairInput{
 		PublicKeyMaterial: publicKey,
 		KeyName:           aws.String("onctl-" + SSHKeyMD5[:8]),
 	})
-	log.Println("[DEBUG] " + importKeyPairOutput.String())
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			log.Println("[DEBUG] AWS Error: " + aerr.Code())
-			switch aerr.Code() {
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) {
+			log.Println("[DEBUG] AWS Error: " + apiErr.ErrorCode())
+			switch apiErr.ErrorCode() {
 			case "InvalidKeyPair.Duplicate":
 				log.Println("[DEBUG] SSH Key already exists")
-				keyPair, err := p.Client.DescribeKeyPairs(&ec2.DescribeKeyPairsInput{
-					KeyNames: []*string{aws.String("onctl-" + SSHKeyMD5[:8])},
+				keyPair, err := p.Client.DescribeKeyPairs(context.TODO(), &ec2.DescribeKeyPairsInput{
+					KeyNames: []string{"onctl-" + SSHKeyMD5[:8]},
 				})
 				if err != nil {
 					log.Fatalln(err)
@@ -248,17 +228,18 @@ func (p ProviderAws) CreateSSHKey(publicKeyFile string) (keyID string, err error
 				log.Println("[DEBUG] SSH Key ID: " + *keyPair.KeyPairs[0].KeyPairId)
 				return *keyPair.KeyPairs[0].KeyPairId, nil
 			default:
-				fmt.Println(aerr.Error())
+				fmt.Println(apiErr.Error())
 			}
 		} else {
 			fmt.Println(err.Error())
 		}
 		log.Fatalln(err)
 	}
+	log.Printf("[DEBUG] %+v", importKeyPairOutput)
 	return *importKeyPairOutput.KeyPairId, nil
 }
 
-func mapAwsServer(server *ec2.Instance) Vm {
+func mapAwsServer(server types.Instance) Vm {
 	var serverName = ""
 
 	for _, tag := range server.Tags {
@@ -266,7 +247,7 @@ func mapAwsServer(server *ec2.Instance) Vm {
 			serverName = *tag.Value
 		}
 	}
-	// log.Println("[DEBUG] " + server.String())
+	// log.Printf("[DEBUG] %+v", server)
 	if server.PublicIpAddress == nil {
 		server.PublicIpAddress = aws.String("")
 	}
@@ -279,8 +260,8 @@ func mapAwsServer(server *ec2.Instance) Vm {
 		Name:      serverName,
 		IP:        *server.PublicIpAddress,
 		PrivateIP: *server.PrivateIpAddress,
-		Type:      *server.InstanceType,
-		Status:    *server.State.Name,
+		Type:      string(server.InstanceType),
+		Status:    string(server.State.Name),
 		CreatedAt: *server.LaunchTime,
 		Location:  *server.Placement.AvailabilityZone,
 		Cost: CostStruct{
@@ -293,19 +274,19 @@ func mapAwsServer(server *ec2.Instance) Vm {
 }
 
 func (p ProviderAws) GetByName(serverName string) (Vm, error) {
-	s, err := p.Client.DescribeInstances(&ec2.DescribeInstancesInput{
-		Filters: []*ec2.Filter{
+	s, err := p.Client.DescribeInstances(context.TODO(), &ec2.DescribeInstancesInput{
+		Filters: []types.Filter{
 			{
 				Name:   aws.String("tag:Name"),
-				Values: []*string{aws.String(serverName)},
+				Values: []string{serverName},
 			},
 			{
 				Name:   aws.String("tag:Owner"),
-				Values: []*string{aws.String("onctl")},
+				Values: []string{"onctl"},
 			},
 			{
 				Name:   aws.String("instance-state-name"),
-				Values: []*string{aws.String("running")},
+				Values: []string{"running"},
 			},
 		},
 	})
@@ -338,4 +319,14 @@ func (p ProviderAws) SSHInto(serverName string, port int, privateKey string, com
 		PrivateKeyFile: privateKey,
 		Command:        command,
 	})
+}
+
+// printAwsError prints an AWS API error, falling back to the raw error.
+func printAwsError(err error) {
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		fmt.Println(apiErr.Error())
+	} else {
+		fmt.Println(err.Error())
+	}
 }

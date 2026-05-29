@@ -1,6 +1,8 @@
 package provideraws
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -10,13 +12,24 @@ import (
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/spf13/viper"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/smithy-go"
 )
 
-func SetDefaultRouteToMainRouteTable(svc *ec2.EC2, routeTableId *string, internetGatewayId *string) {
+// printAwsError prints an AWS API error, falling back to the raw error.
+func printAwsError(err error) {
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		fmt.Println(apiErr.Error())
+	} else {
+		fmt.Println(err.Error())
+	}
+}
+
+func SetDefaultRouteToMainRouteTable(svc *ec2.Client, routeTableId *string, internetGatewayId *string) {
 
 	input := &ec2.CreateRouteInput{
 		DestinationCidrBlock: aws.String("0.0.0.0/0"), // Required
@@ -24,64 +37,37 @@ func SetDefaultRouteToMainRouteTable(svc *ec2.EC2, routeTableId *string, interne
 		GatewayId:            internetGatewayId,
 	}
 
-	_, err := svc.CreateRoute(input)
+	_, err := svc.CreateRoute(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 	}
 }
 
-func DefaultRouteTable(svc *ec2.EC2, vpcId *string) *string {
+func DefaultRouteTable(svc *ec2.Client, vpcId *string) *string {
 
 	input := &ec2.DescribeRouteTablesInput{
-		Filters: []*ec2.Filter{
+		Filters: []types.Filter{
 			{
 				Name:   aws.String("vpc-id"),
-				Values: []*string{vpcId},
+				Values: []string{*vpcId},
 			},
 		},
 	}
-	result, err := svc.DescribeRouteTables(input)
+	result, err := svc.DescribeRouteTables(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 	}
 	return result.RouteTables[0].RouteTableId
 }
 
-func CreateSecurityGroupSSH(svc *ec2.EC2, vpcId *string) *string {
+func CreateSecurityGroupSSH(svc *ec2.Client, vpcId *string) *string {
 
-	sgs, err := svc.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
-		Filters: []*ec2.Filter{
-			{Name: aws.String("tag:Name"), Values: []*string{aws.String("onkube-sg-ssh")}}},
+	sgs, err := svc.DescribeSecurityGroups(context.TODO(), &ec2.DescribeSecurityGroupsInput{
+		Filters: []types.Filter{
+			{Name: aws.String("tag:Name"), Values: []string{"onkube-sg-ssh"}}},
 	})
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 	}
 
 	if len(sgs.SecurityGroups) > 0 {
@@ -93,39 +79,30 @@ func CreateSecurityGroupSSH(svc *ec2.EC2, vpcId *string) *string {
 			Description: aws.String("onkube-sg-ssh"), // Required
 			GroupName:   aws.String("onkube-sg-ssh"), // Required
 			VpcId:       vpcId,                       // Required
-			TagSpecifications: []*ec2.TagSpecification{
-				{ResourceType: aws.String("security-group"), Tags: []*ec2.Tag{{
+			TagSpecifications: []types.TagSpecification{
+				{ResourceType: types.ResourceTypeSecurityGroup, Tags: []types.Tag{{
 					Key: aws.String("Name"), Value: aws.String("onkube-sg-ssh")}}},
 			},
 		}
-		result, err := svc.CreateSecurityGroup(input)
+		result, err := svc.CreateSecurityGroup(context.TODO(), input)
 		if err != nil {
-			if aerr, ok := err.(awserr.Error); ok {
-				switch aerr.Code() {
-				default:
-					fmt.Println(aerr.Error())
-				}
-			} else {
-				// Print the error, cast err to awserr.Error to get the Code and
-				// Message from an error.
-				fmt.Println(err.Error())
-			}
+			printAwsError(err)
 		}
-		_, err = svc.AuthorizeSecurityGroupIngress(&ec2.AuthorizeSecurityGroupIngressInput{
+		_, err = svc.AuthorizeSecurityGroupIngress(context.TODO(), &ec2.AuthorizeSecurityGroupIngressInput{
 			GroupId:    result.GroupId,
 			IpProtocol: aws.String("tcp"),
-			FromPort:   aws.Int64(22),
-			ToPort:     aws.Int64(22),
+			FromPort:   aws.Int32(22),
+			ToPort:     aws.Int32(22),
 			CidrIp:     aws.String("0.0.0.0/0"),
 		})
 		if err != nil {
 			log.Println(err)
 		}
-		// _, err = svc.AuthorizeSecurityGroupIngress(&ec2.AuthorizeSecurityGroupIngressInput{
+		// _, err = svc.AuthorizeSecurityGroupIngress(context.TODO(), &ec2.AuthorizeSecurityGroupIngressInput{
 		// 	GroupId:    result.GroupId,
 		// 	IpProtocol: aws.String("tcp"),
-		// 	FromPort:   aws.Int64(80),
-		// 	ToPort:     aws.Int64(80),
+		// 	FromPort:   aws.Int32(80),
+		// 	ToPort:     aws.Int32(80),
 		// 	CidrIp:     aws.String("0.0.0.0/0"),
 		// })
 		// if err != nil {
@@ -137,21 +114,12 @@ func CreateSecurityGroupSSH(svc *ec2.EC2, vpcId *string) *string {
 	}
 }
 
-func getAvailabilityZones(svc *ec2.EC2) []string {
+func getAvailabilityZones(svc *ec2.Client) []string {
 	input := &ec2.DescribeAvailabilityZonesInput{}
 
-	result, err := svc.DescribeAvailabilityZones(input)
+	result, err := svc.DescribeAvailabilityZones(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 		return nil
 	}
 	var zones []string
@@ -161,7 +129,7 @@ func getAvailabilityZones(svc *ec2.EC2) []string {
 	return zones
 }
 
-func createSubnets(svc *ec2.EC2, vpcId string) []string {
+func createSubnets(svc *ec2.Client, vpcId string) []string {
 
 	log.Println("Creating subnets...")
 	var subnets = []string{"10.174.0.0/20", "10.174.16.0/20", "10.174.32.0/20"}
@@ -173,22 +141,13 @@ func createSubnets(svc *ec2.EC2, vpcId string) []string {
 			CidrBlock:        aws.String(v),     // Required
 			VpcId:            aws.String(vpcId), // Required
 			AvailabilityZone: aws.String(subnetsAz[k]),
-			TagSpecifications: []*ec2.TagSpecification{
-				{ResourceType: aws.String("subnet"), Tags: []*ec2.Tag{{
+			TagSpecifications: []types.TagSpecification{
+				{ResourceType: types.ResourceTypeSubnet, Tags: []types.Tag{{
 					Key: aws.String("Name"), Value: aws.String("onkube-subnet-" + subnetsAz[k])}}},
 			}}
-		subnet, err := svc.CreateSubnet(input)
+		subnet, err := svc.CreateSubnet(context.TODO(), input)
 		if err != nil {
-			if aerr, ok := err.(awserr.Error); ok {
-				switch aerr.Code() {
-				default:
-					fmt.Println(aerr.Error())
-				}
-			} else {
-				// Print the error, cast err to awserr.Error to get the Code and
-				// Message from an error.
-				fmt.Println(err.Error())
-			}
+			printAwsError(err)
 		}
 		subnetIds = append(subnetIds, *subnet.Subnet.SubnetId)
 	}
@@ -196,27 +155,18 @@ func createSubnets(svc *ec2.EC2, vpcId string) []string {
 	return subnetIds
 }
 
-func AttachInternetGateway(svc *ec2.EC2, vpcId *string, internetGatewayId *string) {
+func AttachInternetGateway(svc *ec2.Client, vpcId *string, internetGatewayId *string) {
 
-	igws, err := svc.DescribeInternetGateways(&ec2.DescribeInternetGatewaysInput{
-		Filters: []*ec2.Filter{
-			{Name: aws.String("tag:Name"), Values: []*string{aws.String("onkube-internet-gateway")}}},
+	igws, err := svc.DescribeInternetGateways(context.TODO(), &ec2.DescribeInternetGatewaysInput{
+		Filters: []types.Filter{
+			{Name: aws.String("tag:Name"), Values: []string{"onkube-internet-gateway"}}},
 	})
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 	}
 	if len(igws.InternetGateways) > 0 {
 		if len(igws.InternetGateways[0].Attachments) > 0 {
-			if *igws.InternetGateways[0].Attachments[0].State == "available" {
+			if string(igws.InternetGateways[0].Attachments[0].State) == "available" {
 				log.Println("InternetGateway already attached")
 				return
 			}
@@ -227,40 +177,22 @@ func AttachInternetGateway(svc *ec2.EC2, vpcId *string, internetGatewayId *strin
 		InternetGatewayId: internetGatewayId, // Required
 		VpcId:             vpcId,             // Required
 	}
-	_, err = svc.AttachInternetGateway(input)
+	_, err = svc.AttachInternetGateway(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 	}
 }
 
-func CreateInternetGateway(svc *ec2.EC2) *string {
+func CreateInternetGateway(svc *ec2.Client) *string {
 
 	igws_input := &ec2.DescribeInternetGatewaysInput{
-		Filters: []*ec2.Filter{
-			{Name: aws.String("tag:Name"), Values: []*string{aws.String("onkube-internet-gateway")}}},
+		Filters: []types.Filter{
+			{Name: aws.String("tag:Name"), Values: []string{"onkube-internet-gateway"}}},
 	}
 
-	igws, err := svc.DescribeInternetGateways(igws_input)
+	igws, err := svc.DescribeInternetGateways(context.TODO(), igws_input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 	}
 
 	if len(igws.InternetGateways) > 0 {
@@ -270,58 +202,40 @@ func CreateInternetGateway(svc *ec2.EC2) *string {
 
 	log.Println("Creating InternetGateway...")
 	input := &ec2.CreateInternetGatewayInput{
-		TagSpecifications: []*ec2.TagSpecification{
-			{ResourceType: aws.String("internet-gateway"), Tags: []*ec2.Tag{{
+		TagSpecifications: []types.TagSpecification{
+			{ResourceType: types.ResourceTypeInternetGateway, Tags: []types.Tag{{
 				Key: aws.String("Name"), Value: aws.String("onkube-internet-gateway")}}},
 		},
 	}
-	internetGateway, err := svc.CreateInternetGateway(input)
+	internetGateway, err := svc.CreateInternetGateway(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 	}
 	log.Println("InternetGateway created: " + *internetGateway.InternetGateway.InternetGatewayId)
 	return internetGateway.InternetGateway.InternetGatewayId
 }
 
-func createVpc(svc *ec2.EC2) *string {
+func createVpc(svc *ec2.Client) *string {
 	input := &ec2.CreateVpcInput{
 		CidrBlock: aws.String("10.174.0.0/16"), // Required
-		TagSpecifications: []*ec2.TagSpecification{
-			{Tags: []*ec2.Tag{
+		TagSpecifications: []types.TagSpecification{
+			{Tags: []types.Tag{
 				{Key: aws.String("Name"), Value: aws.String("onkube-vpc")}},
-				ResourceType: aws.String("vpc"),
+				ResourceType: types.ResourceTypeVpc,
 			},
 		},
 	}
 	log.Println("Creating VPC...")
-	vpc, err := svc.CreateVpc(input)
+	vpc, err := svc.CreateVpc(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 	}
 	log.Println("VPC created: ", *vpc.Vpc.VpcId)
 	return vpc.Vpc.VpcId
 }
 
 // vpcId, subnetId
-func CreateVpcAndSubnet(svc *ec2.EC2) (*string, []string) {
+func CreateVpcAndSubnet(svc *ec2.Client) (*string, []string) {
 
 	var vpcId *string
 	var subnetIds []string
@@ -342,18 +256,16 @@ func CreateVpcAndSubnet(svc *ec2.EC2) (*string, []string) {
 	return vpcId, subnetIds
 }
 
-func GetClient() *ec2.EC2 {
-	sess, err := session.NewSessionWithOptions(session.Options{
-		SharedConfigState: session.SharedConfigEnable,
-		Config:            aws.Config{Region: aws.String(viper.GetString("aws.location"))},
-	})
+func GetClient() *ec2.Client {
+	cfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithRegion(viper.GetString("aws.location")))
 	if err != nil {
 		log.Println(err)
 	}
-	return ec2.New(sess)
+	return ec2.NewFromConfig(cfg)
 }
 
-func GetImages() ([]*ec2.Image, error) {
+func GetImages() ([]types.Image, error) {
 	svc := GetClient()
 
 	// Use configured image name, or fallback to a pattern for latest Ubuntu
@@ -363,31 +275,22 @@ func GetImages() ([]*ec2.Image, error) {
 	}
 
 	input := &ec2.DescribeImagesInput{
-		Owners: []*string{aws.String("amazon")},
-		Filters: []*ec2.Filter{
+		Owners: []string{"amazon"},
+		Filters: []types.Filter{
 			{
 				Name:   aws.String("name"),
-				Values: []*string{aws.String(imageName)},
+				Values: []string{imageName},
 			},
 			{
 				Name:   aws.String("state"),
-				Values: []*string{aws.String("available")},
+				Values: []string{"available"},
 			},
 		},
 	}
 
-	result, err := svc.DescribeImages(input)
+	result, err := svc.DescribeImages(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 		return nil, err
 	}
 
@@ -410,33 +313,24 @@ func GetImages() ([]*ec2.Image, error) {
 	return result.Images, nil
 }
 
-func AddSecurityGroupToInstance(svc *ec2.EC2, instanceId *string, securityGroupId *string) {
+func AddSecurityGroupToInstance(svc *ec2.Client, instanceId *string, securityGroupId *string) {
 	instace := DescribeInstance(*instanceId)
-	sgs := make([]*string, 0, 5)
-	sgs = append(sgs, instace.SecurityGroups[0].GroupId)
-	sgs = append(sgs, securityGroupId)
+	sgs := make([]string, 0, 5)
+	sgs = append(sgs, *instace.SecurityGroups[0].GroupId)
+	sgs = append(sgs, *securityGroupId)
 	input := &ec2.ModifyInstanceAttributeInput{
 		Groups:     sgs,
 		InstanceId: instanceId,
 	}
-	_, err := svc.ModifyInstanceAttribute(input)
+	_, err := svc.ModifyInstanceAttribute(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 	}
 }
 
 // CreateSecurityGroupForPort creates a security group for a given port
 // and returns the security group id
-func CreateSecurityGroupForPort(svc *ec2.EC2, vpcId *string, port int64) (groupId *string) {
+func CreateSecurityGroupForPort(svc *ec2.Client, vpcId *string, port int64) (groupId *string) {
 	securityGroups := GetSecurityGroups(svc, vpcId)
 	for _, v := range securityGroups {
 		if *v.GroupName == "onkube-sg-"+fmt.Sprint(port) {
@@ -449,29 +343,20 @@ func CreateSecurityGroupForPort(svc *ec2.EC2, vpcId *string, port int64) (groupI
 		Description: aws.String("onkube security group for port " + fmt.Sprint(port)),
 		GroupName:   aws.String("onkube-sg-" + fmt.Sprint(port)),
 		VpcId:       vpcId,
-		TagSpecifications: []*ec2.TagSpecification{
-			{ResourceType: aws.String("security-group"), Tags: []*ec2.Tag{{
+		TagSpecifications: []types.TagSpecification{
+			{ResourceType: types.ResourceTypeSecurityGroup, Tags: []types.Tag{{
 				Key: aws.String("Name"), Value: aws.String("onkube-sg-" + fmt.Sprint(port))}}},
 		},
 	}
-	result, err := svc.CreateSecurityGroup(input)
+	result, err := svc.CreateSecurityGroup(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 	}
-	_, err = svc.AuthorizeSecurityGroupIngress(&ec2.AuthorizeSecurityGroupIngressInput{
+	_, err = svc.AuthorizeSecurityGroupIngress(context.TODO(), &ec2.AuthorizeSecurityGroupIngressInput{
 		GroupId:    result.GroupId,
 		IpProtocol: aws.String("tcp"),
-		FromPort:   aws.Int64(port),
-		ToPort:     aws.Int64(port),
+		FromPort:   aws.Int32(int32(port)),
+		ToPort:     aws.Int32(int32(port)),
 		CidrIp:     aws.String("0.0.0.0/0"),
 	})
 	if err != nil {
@@ -480,59 +365,41 @@ func CreateSecurityGroupForPort(svc *ec2.EC2, vpcId *string, port int64) (groupI
 	return result.GroupId
 }
 
-func DescribeInstance(instanceId string) *ec2.Instance {
+func DescribeInstance(instanceId string) types.Instance {
 	svc := GetClient()
 
 	input := &ec2.DescribeInstancesInput{
-		Filters: []*ec2.Filter{
+		Filters: []types.Filter{
 			{
 				Name:   aws.String("instance-id"),
-				Values: []*string{aws.String(instanceId)},
+				Values: []string{instanceId},
 			},
 		},
 	}
-	instances, err := svc.DescribeInstances(input)
+	instances, err := svc.DescribeInstances(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
-		return nil
+		printAwsError(err)
+		return types.Instance{}
 	}
 	// log.Println(instances)
 	return instances.Reservations[0].Instances[0]
 }
 
-func checkIfKeyPairExists(svc *ec2.EC2, keyName string) bool {
+func checkIfKeyPairExists(svc *ec2.Client, keyName string) bool {
 	input := &ec2.DescribeKeyPairsInput{
-		KeyNames: []*string{
-			aws.String(keyName),
+		KeyNames: []string{
+			keyName,
 		},
 	}
-	result, err := svc.DescribeKeyPairs(input)
+	result, err := svc.DescribeKeyPairs(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 		return false
 	}
 	return len(result.KeyPairs) > 0
 }
 
-func ImportKeyPair(svc *ec2.EC2, keyName string, publicKeyFile string) {
+func ImportKeyPair(svc *ec2.Client, keyName string, publicKeyFile string) {
 	if checkIfKeyPairExists(svc, keyName) {
 		log.Println("Key pair already exists")
 		return
@@ -546,93 +413,57 @@ func ImportKeyPair(svc *ec2.EC2, keyName string, publicKeyFile string) {
 		KeyName:           aws.String(keyName),
 		PublicKeyMaterial: []byte(publicKey),
 	}
-	result, err := svc.ImportKeyPair(input)
+	result, err := svc.ImportKeyPair(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 		return
 	}
 	log.Println(result)
 }
 
-func GetDefaultVpcId(svc *ec2.EC2) (vpcId *string) {
+func GetDefaultVpcId(svc *ec2.Client) (vpcId *string) {
 	input := &ec2.DescribeVpcsInput{
-		Filters: []*ec2.Filter{
+		Filters: []types.Filter{
 			{
 				Name:   aws.String("is-default"),
-				Values: []*string{aws.String("true")},
+				Values: []string{"true"},
 			},
 		},
 	}
-	result, err := svc.DescribeVpcs(input)
+	result, err := svc.DescribeVpcs(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 		return nil
 	}
 	return result.Vpcs[0].VpcId
 }
 
-func GetSecurityGroups(svc *ec2.EC2, vpcId *string) []*ec2.SecurityGroup {
-	sgs, err := svc.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
-		Filters: []*ec2.Filter{
+func GetSecurityGroups(svc *ec2.Client, vpcId *string) []types.SecurityGroup {
+	sgs, err := svc.DescribeSecurityGroups(context.TODO(), &ec2.DescribeSecurityGroupsInput{
+		Filters: []types.Filter{
 			{
 				Name:   aws.String("vpc-id"),
-				Values: []*string{vpcId},
+				Values: []string{*vpcId},
 			},
 		},
 	})
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 	}
 	return sgs.SecurityGroups
 }
 
-func GetSecurityGroupByName(svc *ec2.EC2, name string) []*ec2.SecurityGroup {
-	sgs, err := svc.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
-		Filters: []*ec2.Filter{
+func GetSecurityGroupByName(svc *ec2.Client, name string) []types.SecurityGroup {
+	sgs, err := svc.DescribeSecurityGroups(context.TODO(), &ec2.DescribeSecurityGroupsInput{
+		Filters: []types.Filter{
 			{
 				Name:   aws.String("group-name"),
-				Values: []*string{aws.String(name)},
+				Values: []string{name},
 			},
 		},
 	})
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
+		printAwsError(err)
 	}
 	return sgs.SecurityGroups
 }

@@ -16,7 +16,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/ec2" //nolint:staticcheck // TODO: migrate to AWS SDK v2
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/cdalar/onctl/internal/files"
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/gofrs/uuid/v5"
@@ -98,7 +98,7 @@ func ReadConfig(cloudProvider string) error {
 	return nil
 }
 
-func getNameFromTags(tags []*ec2.Tag) string {
+func getNameFromTags(tags []types.Tag) string {
 	for _, v := range tags {
 		if *v.Key == "Name" {
 			return *v.Value
