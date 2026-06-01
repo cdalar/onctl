@@ -101,19 +101,18 @@ This combination (per-agent worktrees + `ai/` branches + freeze) allows many ope
     - Technical details
     - Testing performed
     - Related issues (if any)
-  - Enable auto-merge immediately after PR creation: `gh pr merge <PR-number> --auto --squash --delete-branch`
-- Monitor automated CI/CD checks after PR creation:
-  - Use `gh pr checks <PR-number>` to view check status
-  - Common checks include: Build, Lint, Tests, Security scans, CodeQL
-  - Wait for all checks to complete and ensure they pass
-  - If checks fail, investigate the failure, fix issues, and push updates
-- Address any review comments or automated check failures promptly:
-  - Read all comments carefully from both bots and human reviewers
-  - Understand the root cause before making changes
-  - Test fixes locally before pushing
-  - Reply to comments explaining how issues were addressed
+- After PR creation, **do not merge yet**:
+  - Use `gh pr checks <PR-number>` repeatedly to monitor all automated pipelines.
+  - Wait until **every** required CI check (Build, Lint, Tests, Security, CodeQL, Analyze, etc.) is green/passed.
+  - Use `gh pr reviews <PR-number>` (or `gh pr view`) to inspect any review comments or change requests.
+  - Address failing checks and all review feedback before proceeding further.
+- Only enable auto-merge (or merge) when **both** of the following are true:
+  - All required CI checks have passed, **and**
+  - Any requested or required human/bot reviews have been approved (or the user has explicitly authorized the merge).
+  Then you may run:
+    `gh pr merge <PR-number> --auto --squash --delete-branch`
 - Check if main branch has been updated while working:
   - Before finalizing PR, check if new commits were merged to main
   - If your PR conflicts or is superseded by other changes, close it with explanation
   - Merge latest main if needed: `git fetch origin main && git merge origin/main`
-- Do not merge until all checks pass and any required reviews are approved
+- Do not merge until all checks pass and any required reviews are approved.
