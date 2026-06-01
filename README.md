@@ -109,6 +109,12 @@ Flags:
 Use "onctl [command] --help" for more information about a command.
 ```
 
+## Contributing
+
+For development guidelines — especially when using AI coding agents (opencode, Claude, etc.) — see [AGENTS.md](AGENTS.md).
+
+**Important:** When running multiple AI agents in parallel on this repo, you must use separate git worktrees (or clones) for isolation. See the "Coordinating multiple agents..." section in AGENTS.md.
+
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=cdalar/onctl&type=Date)](https://star-history.com/#cdalar/onctl&Date)
