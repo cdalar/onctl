@@ -316,10 +316,15 @@ func (p ProviderHetzner) Pause(server Vm, hot bool) error {
 
 	// Preserve the primary IP(s): disable auto-delete and tag them so Resume
 	// can find and re-attach them after the server is gone.
+	// This is best-effort for the IPs that exist, but we treat failure as fatal
+	// for the documented "keeps its IP" promise.
+	hasPrimaryIPs := false
+	preserveErrs := 0
 	for _, ipID := range []int64{s.PublicNet.IPv4.ID, s.PublicNet.IPv6.ID} {
 		if ipID == 0 {
 			continue
 		}
+		hasPrimaryIPs = true
 		_, _, err := p.Client.PrimaryIP.Update(context.TODO(), &hcloud.PrimaryIP{ID: ipID}, hcloud.PrimaryIPUpdateOpts{
 			AutoDelete: hcloud.Ptr(false),
 			Labels: hcloud.Ptr(map[string]string{
@@ -328,8 +333,13 @@ func (p ProviderHetzner) Pause(server Vm, hot bool) error {
 			}),
 		})
 		if err != nil {
+			preserveErrs++
 			log.Printf("[DEBUG] could not preserve primary IP %d: %v\n", ipID, err)
 		}
+	}
+
+	if hasPrimaryIPs && preserveErrs > 0 {
+		return fmt.Errorf("failed to preserve %d primary IP(s) — aborting pause to keep the IP reservation guarantee", preserveErrs)
 	}
 
 	// Delete the server. Its primary IPs survive because auto-delete is now off.
@@ -446,7 +456,7 @@ func (p ProviderHetzner) Resume(server Vm) (Vm, error) {
 	// the server boots from the snapshot, so deleting it prematurely breaks startup.
 	allActions := append([]*hcloud.Action{result.Action}, result.NextActions...)
 	if err := p.Client.Action.WaitFor(context.TODO(), allActions...); err != nil {
-		log.Println("[DEBUG] waiting for server actions after resume: ", err)
+		return Vm{}, fmt.Errorf("waiting for resume actions to complete: %w", err)
 	}
 
 	// Delete the pause snapshot now that the server is running — keeps
