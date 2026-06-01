@@ -83,6 +83,12 @@ var destroyCmd = &cobra.Command{
 			// Tear down specific server
 			serverName := args[0]
 			log.Println("[DEBUG] Tear down server: " + serverName)
+			if !force {
+				fmt.Printf("This will permanently destroy VM %q and all its data. This cannot be undone.\n", serverName)
+				if !yesNo() {
+					os.Exit(0)
+				}
+			}
 			s.Start()
 			s.Suffix = " Destroying VM..."
 			if err := provider.Destroy(cloud.Vm{Name: serverName}); err != nil {
