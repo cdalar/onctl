@@ -52,6 +52,36 @@ Guidelines for developing the onctl CLI tool, a Go-based utility for managing cl
 - Check frequently with `git branch --show-current` to ensure you're on the correct branch
 - This ensures each AI-assisted development session is tracked separately and can be reviewed independently
 
+## Coordinating multiple agents on the same codebase (no conflicts)
+Plain `git checkout -b ai/xxx` inside the *same directory* does **not** isolate agents. They will immediately see every file created or edited on other branches because they share one working tree.
+
+**Use isolated worktrees** (strongly preferred) or separate clones for true parallelism:
+
+1. From a clean main checkout create a dedicated worktree + branch for each agent:
+   ```
+   git worktree add -b ai/agent-foo ../onctl-ai-foo
+   git worktree add -b ai/agent-bar ../onctl-ai-bar
+   ```
+2. Launch one `opencode` (any model) inside each isolated directory:
+   ```
+   cd ../onctl-ai-foo && opencode
+   cd ../onctl-ai-bar && opencode   # fully independent filesystem
+   ```
+3. When finished, merge via the normal PR workflow. The worktree can be removed with:
+   ```
+   git worktree remove ../onctl-ai-foo
+   git branch -D ai/agent-foo
+   ```
+
+Existing patterns in this repo (see `.claude/worktrees/` and Conductor workspaces) already follow this model.
+
+Additional safeguards:
+- Use the `freeze` skill to restrict edits to specific sub-directories within a worktree.
+- One agent can stay in Plan mode (Tab) as an orchestrator that delegates disjoint tasks to other agents.
+- After any external changes, always re-run the pre-work steps above before continuing.
+
+This combination (per-agent worktrees + `ai/` branches + freeze) allows many opencode/grok-build instances to safely operate on the same repository at the same time.
+
 ## Verification and testing
 - After making code changes, always verify the code builds successfully:
   - Run `make` to build the project
