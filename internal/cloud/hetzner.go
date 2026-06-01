@@ -251,7 +251,14 @@ func (p ProviderHetzner) Resume(server Vm) (Vm, error) {
 		return Vm{}, fmt.Errorf("creating server from snapshot: %w", err)
 	}
 
-	// Delete the pause snapshot now that the server is running again — keeps
+	// Wait for the server to be fully running before deleting the snapshot —
+	// the server boots from the snapshot, so deleting it prematurely breaks startup.
+	allActions := append([]*hcloud.Action{result.Action}, result.NextActions...)
+	if err := p.Client.Action.WaitFor(context.TODO(), allActions...); err != nil {
+		log.Println("[DEBUG] waiting for server actions after resume: ", err)
+	}
+
+	// Delete the pause snapshot now that the server is running — keeps
 	// ListPaused clean and avoids stale storage costs.
 	if _, err := p.Client.Image.Delete(context.TODO(), img); err != nil {
 		log.Println("[DEBUG] could not delete pause snapshot after resume: ", err)
