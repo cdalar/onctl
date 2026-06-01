@@ -106,7 +106,8 @@ var listCmd = &cobra.Command{
 			default:
 				tmpl = noCostTmpl
 			}
-
+			// When there are paused servers, label both groups so they read as
+			// distinct sections; otherwise keep the plain single-table output.
 			if len(pausedList.List) > 0 {
 				fmt.Printf("\033[1;32m● RUNNING (%d)\033[0m\n", len(serverList.List))
 			}
