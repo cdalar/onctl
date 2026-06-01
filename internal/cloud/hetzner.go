@@ -250,6 +250,13 @@ func (p ProviderHetzner) Resume(server Vm) (Vm, error) {
 		}
 		return Vm{}, fmt.Errorf("creating server from snapshot: %w", err)
 	}
+
+	// Delete the pause snapshot now that the server is running again — keeps
+	// ListPaused clean and avoids stale storage costs.
+	if _, err := p.Client.Image.Delete(context.TODO(), img); err != nil {
+		log.Println("[DEBUG] could not delete pause snapshot after resume: ", err)
+	}
+
 	return mapHetznerServer(*result.Server), nil
 }
 
