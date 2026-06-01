@@ -35,6 +35,11 @@ type QueryResponse struct {
 	}
 }
 
+// ListPaused returns nothing: paused (deallocated) Azure VMs already appear in List.
+func (p ProviderAzure) ListPaused() (VmList, error) {
+	return VmList{}, nil
+}
+
 func (p ProviderAzure) List() (VmList, error) {
 	log.Println("[DEBUG] List Servers")
 	query := `

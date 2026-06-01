@@ -309,6 +309,11 @@ func (p ProviderAws) Destroy(server Vm) error {
 	return nil
 }
 
+// ListPaused returns nothing: paused (stopped) AWS instances already appear in List.
+func (p ProviderAws) ListPaused() (VmList, error) {
+	return VmList{}, nil
+}
+
 func (p ProviderAws) List() (VmList, error) {
 
 	input := &ec2.DescribeInstancesInput{

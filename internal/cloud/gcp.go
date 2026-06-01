@@ -26,6 +26,11 @@ type ProviderGcp struct {
 	GroupClient *compute.InstanceGroupsClient
 }
 
+// ListPaused returns nothing: paused (TERMINATED) GCP instances already appear in List.
+func (p ProviderGcp) ListPaused() (VmList, error) {
+	return VmList{}, nil
+}
+
 func (p ProviderGcp) List() (VmList, error) {
 	log.Println("[DEBUG] List Servers")
 	cloudList := make([]Vm, 0, 100)

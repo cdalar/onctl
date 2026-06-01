@@ -333,6 +333,68 @@ func (p ProviderHetzner) findReservedPrimaryIPs(name string) []*hcloud.PrimaryIP
 	return reserved
 }
 
+// ListPaused returns the servers paused via Pause, reconstructed from their
+// snapshots. The preserved primary IPv4 (tagged at pause time) is shown so the
+// user sees the address that will return on Resume.
+func (p ProviderHetzner) ListPaused() (VmList, error) {
+	images, err := p.Client.Image.AllWithOpts(context.TODO(), hcloud.ImageListOpts{
+		Type:     []hcloud.ImageType{hcloud.ImageTypeSnapshot},
+		ListOpts: hcloud.ListOpts{LabelSelector: labelOwner + "=onctl"},
+	})
+	if err != nil {
+		return VmList{}, err
+	}
+	if len(images) == 0 {
+		return VmList{}, nil
+	}
+
+	// One-shot lookup of preserved primary IPs -> map[serverName]IPv4.
+	ipByName := map[string]string{}
+	if ips, err := p.Client.PrimaryIP.AllWithOpts(context.TODO(), hcloud.PrimaryIPListOpts{
+		ListOpts: hcloud.ListOpts{LabelSelector: labelOwner + "=onctl"},
+	}); err != nil {
+		log.Println("[DEBUG] listing primary IPs for paused servers: ", err)
+	} else {
+		for _, ip := range ips {
+			if ip.Type == hcloud.PrimaryIPTypeIPv4 {
+				if name := ip.Labels[labelSnapshot]; name != "" {
+					ipByName[name] = ip.IP.String()
+				}
+			}
+		}
+	}
+
+	cloudList := make([]Vm, 0, len(images))
+	for _, img := range images {
+		name := img.Labels[labelSnapshot]
+		if name == "" {
+			continue // not an onctl pause snapshot
+		}
+		ip := ipByName[name]
+		if ip == "" {
+			ip = "N/A"
+		}
+		cloudList = append(cloudList, Vm{
+			Provider:  "hetzner",
+			ID:        strconv.FormatInt(img.ID, 10),
+			Name:      name,
+			IP:        ip,
+			PrivateIP: "N/A",
+			Type:      img.Labels[labelServerType],
+			Status:    "paused",
+			Location:  img.Labels[labelLocation],
+			CreatedAt: img.Created,
+			Cost: CostStruct{
+				Currency:        "EUR",
+				CostPerHour:     0,
+				CostPerMonth:    0,
+				AccumulatedCost: 0,
+			},
+		})
+	}
+	return VmList{List: cloudList}, nil
+}
+
 func (p ProviderHetzner) List() (VmList, error) {
 	log.Println("[DEBUG] List Servers")
 	list, _, err := p.Client.Server.List(context.TODO(), hcloud.ServerListOpts{

@@ -84,6 +84,7 @@ var listCmd = &cobra.Command{
 				fmt.Println(server.IP, "ansible_user="+username)
 			}
 		case "json":
+			// Flat array of running + paused (each paused row carries Status "paused").
 			combined := append(append([]cloud.Vm{}, serverList.List...), pausedList.List...)
 			jsonList, err := json.Marshal(combined)
 			if err != nil {
@@ -99,7 +100,6 @@ var listCmd = &cobra.Command{
 			fmt.Println(string(yamlList))
 		default:
 			noCostTmpl := "CLOUD\tID\tNAME\tLOCATION\tTYPE\tPUBLIC IP\tPRIVATE IP\tSTATE\tAGE\n{{range .List}}{{.Provider}}\t{{.ID}}\t{{.Name}}\t{{.Location}}\t{{.Type}}\t{{.IP}}\t{{.PrivateIP}}\t{{.Status}}\t{{durationFromCreatedAt .CreatedAt}}\n{{end}}"
-
 			switch cloudProvider {
 			case "hetzner":
 				tmpl = "CLOUD\tID\tNAME\tLOCATION\tTYPE\tPUBLIC IP\tPRIVATE IP\tSTATE\tAGE\tCOST/H\tUSAGE\n{{range .List}}{{.Provider}}\t{{.ID}}\t{{.Name}}\t{{.Location}}\t{{.Type}}\t{{.IP}}\t{{.PrivateIP}}\t{{.Status}}\t{{durationFromCreatedAt .CreatedAt}}\t{{.Cost.CostPerHour}}{{.Cost.Currency}}\t{{.Cost.AccumulatedCost}}{{.Cost.Currency}}\n{{end}}"
