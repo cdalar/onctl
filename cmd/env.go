@@ -76,7 +76,7 @@ var envDestroyCmd = &cobra.Command{
 				os.Exit(0)
 			}
 		}
-
+		force = true
 		// Destroy the VM by name
 		destroyCmd.Run(destroyCmd, []string{vmName})
 	},
