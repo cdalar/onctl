@@ -26,6 +26,146 @@ type ProviderAws struct {
 	Client *ec2.Client
 }
 
+// Pause stops the instance. On AWS a stopped instance accrues no compute cost
+// (only EBS storage), so unlike Hetzner there is no need to snapshot and delete.
+// The hot flag is accepted for interface symmetry but has no effect here: a stop
+// already shuts the guest OS down cleanly and the disk stays in place.
+func (p ProviderAws) Pause(server Vm, hot bool) error {
+	id := server.ID
+	if id == "" {
+		var err error
+		if id, err = p.findAwsInstance(server.Name); err != nil {
+			return err
+		}
+	}
+	if id == "" {
+		return fmt.Errorf("no instance found with name %q", server.Name)
+	}
+	log.Println("[DEBUG] Stopping instance: " + id)
+	if _, err := p.Client.StopInstances(context.TODO(), &ec2.StopInstancesInput{
+		InstanceIds: []string{id},
+	}); err != nil {
+		return err
+	}
+	// Wait until fully stopped so billing actually halts and a later resume is clean.
+	return ec2.NewInstanceStoppedWaiter(p.Client).Wait(context.TODO(), &ec2.DescribeInstancesInput{
+		InstanceIds: []string{id},
+	}, 10*time.Minute)
+}
+
+// Resume starts a previously paused (stopped) instance and returns it once running.
+func (p ProviderAws) Resume(server Vm) (Vm, error) {
+	id, err := p.findAwsInstance(server.Name)
+	if err != nil {
+		return Vm{}, err
+	}
+	if id == "" {
+		return Vm{}, fmt.Errorf("no paused instance found with name %q", server.Name)
+	}
+	log.Println("[DEBUG] Starting instance: " + id)
+	if _, err := p.Client.StartInstances(context.TODO(), &ec2.StartInstancesInput{
+		InstanceIds: []string{id},
+	}); err != nil {
+		return Vm{}, err
+	}
+	if err := ec2.NewInstanceRunningWaiter(p.Client).Wait(context.TODO(), &ec2.DescribeInstancesInput{
+		InstanceIds: []string{id},
+	}, 10*time.Minute); err != nil {
+		return Vm{}, err
+	}
+	return p.GetByName(server.Name)
+}
+
+// findAwsInstance returns the ID of an onctl-managed instance by name regardless
+// of power state (GetByName only matches running instances, so Resume needs this).
+func (p ProviderAws) findAwsInstance(name string) (string, error) {
+	out, err := p.Client.DescribeInstances(context.TODO(), &ec2.DescribeInstancesInput{
+		Filters: []types.Filter{
+			{Name: aws.String("tag:Name"), Values: []string{name}},
+			{Name: aws.String("tag:Owner"), Values: []string{"onctl"}},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	for _, r := range out.Reservations {
+		for _, inst := range r.Instances {
+			if inst.State != nil && inst.State.Name == types.InstanceStateNameTerminated {
+				continue
+			}
+			if inst.InstanceId != nil {
+				return *inst.InstanceId, nil
+			}
+		}
+	}
+	return "", nil
+}
+
+// associateElasticIP allocates a new Elastic IP, tags it for the server, and
+// associates it with the instance. Returns the allocated public IP.
+func (p ProviderAws) associateElasticIP(instanceID, name string) (string, error) {
+	alloc, err := p.Client.AllocateAddress(context.TODO(), &ec2.AllocateAddressInput{
+		Domain: types.DomainTypeVpc,
+		TagSpecifications: []types.TagSpecification{
+			{
+				ResourceType: types.ResourceTypeElasticIp,
+				Tags: []types.Tag{
+					{Key: aws.String("Name"), Value: aws.String(name)},
+					{Key: aws.String("Owner"), Value: aws.String("onctl")},
+				},
+			},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	if _, err := p.Client.AssociateAddress(context.TODO(), &ec2.AssociateAddressInput{
+		AllocationId: alloc.AllocationId,
+		InstanceId:   aws.String(instanceID),
+	}); err != nil {
+		// Release the just-allocated address so a failed associate doesn't leak it.
+		if _, relErr := p.Client.ReleaseAddress(context.TODO(), &ec2.ReleaseAddressInput{AllocationId: alloc.AllocationId}); relErr != nil {
+			log.Println("[DEBUG] could not release orphaned Elastic IP: ", relErr)
+		}
+		return "", err
+	}
+	if alloc.PublicIp == nil {
+		return "", nil
+	}
+	return *alloc.PublicIp, nil
+}
+
+// releaseElasticIP disassociates and releases any Elastic IP tagged for the
+// server. It is idempotent: a no-op when the server has no Elastic IP.
+func (p ProviderAws) releaseElasticIP(name string) {
+	out, err := p.Client.DescribeAddresses(context.TODO(), &ec2.DescribeAddressesInput{
+		Filters: []types.Filter{
+			{Name: aws.String("tag:Name"), Values: []string{name}},
+			{Name: aws.String("tag:Owner"), Values: []string{"onctl"}},
+		},
+	})
+	if err != nil {
+		log.Println("[DEBUG] could not describe Elastic IPs: ", err)
+		return
+	}
+	for _, addr := range out.Addresses {
+		if addr.AssociationId != nil {
+			if _, err := p.Client.DisassociateAddress(context.TODO(), &ec2.DisassociateAddressInput{
+				AssociationId: addr.AssociationId,
+			}); err != nil {
+				log.Println("[DEBUG] could not disassociate Elastic IP: ", err)
+			}
+		}
+		if _, err := p.Client.ReleaseAddress(context.TODO(), &ec2.ReleaseAddressInput{
+			AllocationId: addr.AllocationId,
+		}); err != nil {
+			log.Println("[DEBUG] could not release Elastic IP: ", err)
+		} else {
+			log.Println("[DEBUG] released Elastic IP for " + name)
+		}
+	}
+}
+
 func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 	if server.Type == "" {
 		server.Type = viper.GetString("aws.vm.type")
@@ -131,6 +271,15 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 	}
 	instance := provideraws.DescribeInstance(*result.Instances[0].InstanceId)
 
+	// Pin a static public IP by default so it survives pause/resume.
+	ip, err := p.associateElasticIP(*result.Instances[0].InstanceId, server.Name)
+	if err != nil {
+		fmt.Println("\033[31m✘\033[0m Could not associate Elastic IP (instance created with a dynamic IP): ", err)
+	} else {
+		log.Println("[DEBUG] associated Elastic IP: " + ip)
+		instance = provideraws.DescribeInstance(*result.Instances[0].InstanceId)
+	}
+
 	return mapAwsServer(instance), nil
 }
 
@@ -155,6 +304,8 @@ func (p ProviderAws) Destroy(server Vm) error {
 		return err
 	}
 	log.Printf("[DEBUG] %+v", result)
+	// Release any Elastic IP we pinned for this server so it does not leak/bill.
+	p.releaseElasticIP(server.Name)
 	return nil
 }
 

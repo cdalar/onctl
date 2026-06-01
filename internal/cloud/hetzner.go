@@ -104,6 +104,235 @@ func (p ProviderHetzner) Destroy(server Vm) error {
 	return nil
 }
 
+// Labels used to tie a pause snapshot (and its preserved primary IPs) back to a
+// server name so Resume can find them.
+const (
+	labelOwner      = "Owner"
+	labelSnapshot   = "onctl-snapshot"
+	labelServerType = "onctl-server-type"
+	labelLocation   = "onctl-location"
+)
+
+// Pause snapshots the server's disk and then deletes the server so it stops
+// accruing compute cost (Hetzner bills powered-off servers). The primary IP(s)
+// are preserved (auto-delete disabled and labeled) so Resume can re-attach them
+// and keep the same public address. Unless hot is true, the server is gracefully
+// shut down before the snapshot so it is application-consistent.
+func (p ProviderHetzner) Pause(server Vm, hot bool) error {
+	log.Println("[DEBUG] Pause server: ", server.Name)
+	s, _, err := p.Client.Server.GetByName(context.TODO(), server.Name)
+	if err != nil {
+		return err
+	}
+	if s == nil {
+		return errors.New("No Server found with name: " + server.Name)
+	}
+
+	// Remove any previous pause snapshot for this name so they don't accumulate.
+	if old, _ := p.findPauseSnapshot(server.Name); old != nil {
+		log.Printf("[DEBUG] deleting previous pause snapshot %d\n", old.ID)
+		if _, err := p.Client.Image.Delete(context.TODO(), old); err != nil {
+			log.Println("[DEBUG] could not delete previous snapshot: ", err)
+		}
+	}
+
+	// Gracefully shut down first (unless --hot) so the snapshot is consistent.
+	if !hot {
+		if err := p.shutdownServer(s); err != nil {
+			return fmt.Errorf("shutting down server: %w", err)
+		}
+	}
+
+	desc := "onctl pause: " + server.Name
+	result, _, err := p.Client.Server.CreateImage(context.TODO(), s, &hcloud.ServerCreateImageOpts{
+		Type:        hcloud.ImageTypeSnapshot,
+		Description: &desc,
+		Labels: map[string]string{
+			labelOwner:      "onctl",
+			labelSnapshot:   server.Name,
+			labelServerType: s.ServerType.Name,
+			labelLocation:   s.Datacenter.Location.Name,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("creating snapshot: %w", err)
+	}
+	log.Println("[DEBUG] waiting for snapshot to complete...")
+	if err := p.Client.Action.WaitFor(context.TODO(), result.Action); err != nil {
+		return fmt.Errorf("snapshot did not complete: %w", err)
+	}
+
+	// Preserve the primary IP(s): disable auto-delete and tag them so Resume
+	// can find and re-attach them after the server is gone.
+	for _, ipID := range []int64{s.PublicNet.IPv4.ID, s.PublicNet.IPv6.ID} {
+		if ipID == 0 {
+			continue
+		}
+		_, _, err := p.Client.PrimaryIP.Update(context.TODO(), &hcloud.PrimaryIP{ID: ipID}, hcloud.PrimaryIPUpdateOpts{
+			AutoDelete: hcloud.Ptr(false),
+			Labels: hcloud.Ptr(map[string]string{
+				labelOwner:    "onctl",
+				labelSnapshot: server.Name,
+			}),
+		})
+		if err != nil {
+			log.Printf("[DEBUG] could not preserve primary IP %d: %v\n", ipID, err)
+		}
+	}
+
+	// Delete the server. Its primary IPs survive because auto-delete is now off.
+	if _, _, err := p.Client.Server.DeleteWithResult(context.TODO(), s); err != nil {
+		return fmt.Errorf("deleting server: %w", err)
+	}
+	return nil
+}
+
+// Resume recreates a server from the snapshot taken by Pause and re-attaches the
+// preserved primary IP(s) when they are still reserved.
+func (p ProviderHetzner) Resume(server Vm) (Vm, error) {
+	log.Println("[DEBUG] Resume server: ", server.Name)
+	img, err := p.findPauseSnapshot(server.Name)
+	if err != nil {
+		return Vm{}, err
+	}
+	if img == nil {
+		return Vm{}, fmt.Errorf("no onctl pause snapshot found for %q", server.Name)
+	}
+
+	serverType := img.Labels[labelServerType]
+	if serverType == "" {
+		serverType = viper.GetString("hetzner.vm.type")
+	}
+	location := img.Labels[labelLocation]
+	if location == "" {
+		location = viper.GetString("hetzner.location")
+	}
+
+	opts := hcloud.ServerCreateOpts{
+		Name:       server.Name,
+		Location:   &hcloud.Location{Name: location},
+		Image:      img,
+		ServerType: &hcloud.ServerType{Name: serverType},
+		Labels:     map[string]string{labelOwner: "onctl"},
+	}
+	if server.SSHKeyID != "" {
+		if id, err := strconv.ParseInt(server.SSHKeyID, 10, 64); err == nil {
+			opts.SSHKeys = []*hcloud.SSHKey{{ID: id}}
+		}
+	}
+
+	// Re-attach any preserved primary IP(s) so the public address is unchanged.
+	if reserved := p.findReservedPrimaryIPs(server.Name); len(reserved) > 0 {
+		pubNet := &hcloud.ServerCreatePublicNet{}
+		for _, ip := range reserved {
+			switch ip.Type {
+			case hcloud.PrimaryIPTypeIPv4:
+				pubNet.EnableIPv4 = true
+				pubNet.IPv4 = ip
+			case hcloud.PrimaryIPTypeIPv6:
+				pubNet.EnableIPv6 = true
+				pubNet.IPv6 = ip
+			}
+			log.Printf("[DEBUG] re-attaching primary IP %s\n", ip.IP.String())
+		}
+		opts.PublicNet = pubNet
+	}
+
+	result, _, err := p.Client.Server.Create(context.TODO(), opts)
+	if err != nil {
+		if herr, ok := err.(hcloud.Error); ok && herr.Code == hcloud.ErrorCodeUniquenessError {
+			log.Println("Server already exists")
+			s, _, gerr := p.Client.Server.GetByName(context.TODO(), server.Name)
+			if gerr != nil {
+				return Vm{}, gerr
+			}
+			return mapHetznerServer(*s), nil
+		}
+		return Vm{}, fmt.Errorf("creating server from snapshot: %w", err)
+	}
+	return mapHetznerServer(*result.Server), nil
+}
+
+// shutdownServer gracefully powers off the server (ACPI), waiting for it to
+// reach the "off" state. If it does not stop within the timeout, it falls back
+// to a hard power off so Pause never blocks indefinitely.
+func (p ProviderHetzner) shutdownServer(s *hcloud.Server) error {
+	log.Println("[DEBUG] gracefully shutting down server: ", s.Name)
+	if _, _, err := p.Client.Server.Shutdown(context.TODO(), s); err != nil {
+		return err
+	}
+
+	if p.waitForServerOff(s.ID, 60*time.Second) {
+		return nil
+	}
+
+	log.Println("[DEBUG] graceful shutdown timed out; forcing power off")
+	if _, _, err := p.Client.Server.Poweroff(context.TODO(), s); err != nil {
+		return err
+	}
+	p.waitForServerOff(s.ID, 30*time.Second)
+	return nil
+}
+
+// waitForServerOff polls the server status until it is off or the timeout
+// elapses, returning true if it reached the off state.
+func (p ProviderHetzner) waitForServerOff(id int64, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		time.Sleep(3 * time.Second)
+		cur, _, err := p.Client.Server.GetByID(context.TODO(), id)
+		if err != nil {
+			log.Println("[DEBUG] polling server status: ", err)
+			continue
+		}
+		if cur != nil && cur.Status == hcloud.ServerStatusOff {
+			return true
+		}
+	}
+	return false
+}
+
+// findPauseSnapshot returns the most recent pause snapshot for the given server
+// name, or nil if none exists.
+func (p ProviderHetzner) findPauseSnapshot(name string) (*hcloud.Image, error) {
+	images, err := p.Client.Image.AllWithOpts(context.TODO(), hcloud.ImageListOpts{
+		Type:     []hcloud.ImageType{hcloud.ImageTypeSnapshot},
+		ListOpts: hcloud.ListOpts{LabelSelector: labelSnapshot + "=" + name},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(images) == 0 {
+		return nil, nil
+	}
+	latest := images[0]
+	for _, img := range images[1:] {
+		if img.Created.After(latest.Created) {
+			latest = img
+		}
+	}
+	return latest, nil
+}
+
+// findReservedPrimaryIPs returns the unassigned primary IPs preserved for the
+// given server name (those tagged by Pause and not currently attached).
+func (p ProviderHetzner) findReservedPrimaryIPs(name string) []*hcloud.PrimaryIP {
+	ips, err := p.Client.PrimaryIP.AllWithOpts(context.TODO(), hcloud.PrimaryIPListOpts{
+		ListOpts: hcloud.ListOpts{LabelSelector: labelSnapshot + "=" + name},
+	})
+	if err != nil {
+		log.Println("[DEBUG] listing primary IPs: ", err)
+		return nil
+	}
+	var reserved []*hcloud.PrimaryIP
+	for _, ip := range ips {
+		if ip.AssigneeID == 0 { // unassigned -> available to re-attach
+			reserved = append(reserved, ip)
+		}
+	}
+	return reserved
+}
+
 func (p ProviderHetzner) List() (VmList, error) {
 	log.Println("[DEBUG] List Servers")
 	list, _, err := p.Client.Server.List(context.TODO(), hcloud.ServerListOpts{

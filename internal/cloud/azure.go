@@ -153,6 +153,37 @@ func (p ProviderAzure) getSSHKeyPublicData() string {
 	return *sshKey.Properties.PublicKey
 }
 
+// Pause deallocates the VM. A deallocated Azure VM accrues no compute cost (only
+// disk storage), so unlike Hetzner there is no need to snapshot and delete. Note
+// that a plain power-off would still bill compute; deallocate is what stops it.
+// The hot flag is accepted for interface symmetry but has no effect here.
+func (p ProviderAzure) Pause(server Vm, hot bool) error {
+	log.Println("[DEBUG] Deallocating VM: ", server.Name)
+	poller, err := p.VmClient.BeginDeallocate(context.Background(), viper.GetString("azure.resourceGroup"), server.Name, nil)
+	if err != nil {
+		return err
+	}
+	_, err = poller.PollUntilDone(context.Background(), &runtime.PollUntilDoneOptions{
+		Frequency: time.Duration(3) * time.Second,
+	})
+	return err
+}
+
+// Resume starts a previously paused (deallocated) VM and returns it once running.
+func (p ProviderAzure) Resume(server Vm) (Vm, error) {
+	log.Println("[DEBUG] Starting VM: ", server.Name)
+	poller, err := p.VmClient.BeginStart(context.Background(), viper.GetString("azure.resourceGroup"), server.Name, nil)
+	if err != nil {
+		return Vm{}, err
+	}
+	if _, err = poller.PollUntilDone(context.Background(), &runtime.PollUntilDoneOptions{
+		Frequency: time.Duration(3) * time.Second,
+	}); err != nil {
+		return Vm{}, err
+	}
+	return p.GetByName(server.Name)
+}
+
 func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 	log.Println("[DEBUG] Deploy Server")
 

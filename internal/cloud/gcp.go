@@ -99,6 +99,40 @@ func (p ProviderGcp) GetByName(serverName string) (Vm, error) {
 
 }
 
+// Pause stops the instance. On GCP a stopped (TERMINATED) instance accrues no
+// compute cost (only persistent-disk storage), so unlike Hetzner there is no
+// need to snapshot and delete. The hot flag is accepted for interface symmetry
+// but has no effect here: stop already shuts the guest OS down cleanly.
+func (p ProviderGcp) Pause(server Vm, hot bool) error {
+	log.Println("[DEBUG] Stopping instance: ", server.Name)
+	op, err := p.Client.Stop(context.Background(), &computepb.StopInstanceRequest{
+		Project:  viper.GetString("gcp.project"),
+		Zone:     viper.GetString("gcp.zone"),
+		Instance: server.Name,
+	})
+	if err != nil {
+		return err
+	}
+	return op.Wait(context.Background())
+}
+
+// Resume starts a previously paused (stopped) instance and returns it once running.
+func (p ProviderGcp) Resume(server Vm) (Vm, error) {
+	log.Println("[DEBUG] Starting instance: ", server.Name)
+	op, err := p.Client.Start(context.Background(), &computepb.StartInstanceRequest{
+		Project:  viper.GetString("gcp.project"),
+		Zone:     viper.GetString("gcp.zone"),
+		Instance: server.Name,
+	})
+	if err != nil {
+		return Vm{}, err
+	}
+	if err := op.Wait(context.Background()); err != nil {
+		return Vm{}, err
+	}
+	return p.GetByName(server.Name)
+}
+
 func (p ProviderGcp) Deploy(server Vm) (Vm, error) {
 
 	machineType := fmt.Sprintf("zones/%s/machineTypes/%s", viper.GetString("gcp.zone"), viper.GetString("gcp.type"))
