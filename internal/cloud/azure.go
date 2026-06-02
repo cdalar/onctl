@@ -240,11 +240,9 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 					SKU:       to.Ptr(viper.GetString("azure.vm.image.sku")),
 				},
 				OSDisk: &armcompute.OSDisk{
-					DiffDiskSettings: &armcompute.DiffDiskSettings{
-						Option:    to.Ptr(armcompute.DiffDiskOptionsLocal),
-						Placement: to.Ptr(armcompute.DiffDiskPlacementResourceDisk),
-					},
-					Caching:      to.Ptr(armcompute.CachingTypesReadOnly),
+					// Ephemeral OS disks (DiffDiskSettings) do not support Stop-Deallocate,
+					// which is the only way to halt compute billing. Use a persistent managed
+					// disk so that onctl pause/resume works correctly.
 					CreateOption: to.Ptr(armcompute.DiskCreateOptionTypesFromImage),
 				},
 			},

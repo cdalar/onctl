@@ -286,11 +286,12 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 func (p ProviderAws) Destroy(server Vm) error {
 	if server.ID == "" {
 		log.Println("[DEBUG] Server ID is empty")
-		s, err := p.GetByName(server.Name)
-		if err != nil || s.ID == "" {
+		// Use findAwsInstance (state-agnostic) so paused (stopped) instances are also destroyable.
+		id, err := p.findAwsInstance(server.Name)
+		if err != nil || id == "" {
 			log.Fatalln(err)
 		}
-		server.ID = s.ID
+		server.ID = id
 	}
 	log.Println("[DEBUG] Terminating Instance: " + server.ID)
 	input := &ec2.TerminateInstancesInput{
