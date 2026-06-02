@@ -487,18 +487,3 @@ func printAwsError(err error) {
 		fmt.Println(err.Error())
 	}
 }
-
-// Pause is not yet supported for AWS.
-func (p ProviderAws) Pause(server Vm, hot bool) error {
-	return fmt.Errorf("pause not supported yet for AWS (Hetzner only for now)")
-}
-
-// Resume is not yet supported for AWS.
-func (p ProviderAws) Resume(server Vm) (Vm, error) {
-	return Vm{}, fmt.Errorf("resume not supported yet for AWS (Hetzner only for now)")
-}
-
-// ListPaused returns empty for AWS (stopped instances appear in List).
-func (p ProviderAws) ListPaused() (VmList, error) {
-	return VmList{}, nil
-}
