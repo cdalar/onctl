@@ -106,11 +106,20 @@ This combination (per-agent worktrees + `ai/` branches + freeze) allows many ope
   - Wait until **every** required CI check (Build, Lint, Tests, Security, CodeQL, Analyze, etc.) is green/passed.
   - Use `gh pr reviews <PR-number>` (or `gh pr view`) to inspect any review comments or change requests.
   - Address failing checks and all review feedback before proceeding further.
+  - If the repo branch protection enables **"Require conversation resolution before merging"** (current setting for this repo's main), return to the GitHub PR page and explicitly click **"Resolve conversation"** on *every* thread from Copilot, claude-review, Codex, etc. Simply replying in the thread is not enough — the conversations must be marked resolved in the UI to satisfy the protection rule before you can merge.
 - Only enable auto-merge (or merge) when **both** of the following are true:
   - All required CI checks have passed, **and**
   - Any requested or required human/bot reviews have been approved (or the user has explicitly authorized the merge).
   Then you may run:
     `gh pr merge <PR-number> --auto --squash --delete-branch`
+- After the PR successfully merges to main:
+  - The `--delete-branch` flag already removes the remote tracking branch.
+  - Clean up the local isolated worktree and session branch (run from your main clone directory):
+    ```
+    git worktree remove ../onctl-ai-xxx
+    git branch -D ai/your-branch-name
+    git worktree prune
+    ```
 - Check if main branch has been updated while working:
   - Before finalizing PR, check if new commits were merged to main
   - If your PR conflicts or is superseded by other changes, close it with explanation
