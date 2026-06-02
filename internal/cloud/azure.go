@@ -35,6 +35,11 @@ type QueryResponse struct {
 	}
 }
 
+// ListPaused returns nothing: paused (deallocated) Azure VMs already appear in List.
+func (p ProviderAzure) ListPaused() (VmList, error) {
+	return VmList{}, nil
+}
+
 func (p ProviderAzure) List() (VmList, error) {
 	log.Println("[DEBUG] List Servers")
 	query := `
@@ -153,6 +158,37 @@ func (p ProviderAzure) getSSHKeyPublicData() string {
 	return *sshKey.Properties.PublicKey
 }
 
+// Pause deallocates the VM. A deallocated Azure VM accrues no compute cost (only
+// disk storage), so unlike Hetzner there is no need to snapshot and delete. Note
+// that a plain power-off would still bill compute; deallocate is what stops it.
+// The hot flag is accepted for interface symmetry but has no effect here.
+func (p ProviderAzure) Pause(server Vm, hot bool) error {
+	log.Println("[DEBUG] Deallocating VM: ", server.Name)
+	poller, err := p.VmClient.BeginDeallocate(context.Background(), viper.GetString("azure.resourceGroup"), server.Name, nil)
+	if err != nil {
+		return err
+	}
+	_, err = poller.PollUntilDone(context.Background(), &runtime.PollUntilDoneOptions{
+		Frequency: time.Duration(3) * time.Second,
+	})
+	return err
+}
+
+// Resume starts a previously paused (deallocated) VM and returns it once running.
+func (p ProviderAzure) Resume(server Vm) (Vm, error) {
+	log.Println("[DEBUG] Starting VM: ", server.Name)
+	poller, err := p.VmClient.BeginStart(context.Background(), viper.GetString("azure.resourceGroup"), server.Name, nil)
+	if err != nil {
+		return Vm{}, err
+	}
+	if _, err = poller.PollUntilDone(context.Background(), &runtime.PollUntilDoneOptions{
+		Frequency: time.Duration(3) * time.Second,
+	}); err != nil {
+		return Vm{}, err
+	}
+	return p.GetByName(server.Name)
+}
+
 func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 	log.Println("[DEBUG] Deploy Server")
 
@@ -204,11 +240,9 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 					SKU:       to.Ptr(viper.GetString("azure.vm.image.sku")),
 				},
 				OSDisk: &armcompute.OSDisk{
-					DiffDiskSettings: &armcompute.DiffDiskSettings{
-						Option:    to.Ptr(armcompute.DiffDiskOptionsLocal),
-						Placement: to.Ptr(armcompute.DiffDiskPlacementResourceDisk),
-					},
-					Caching:      to.Ptr(armcompute.CachingTypesReadOnly),
+					// Ephemeral OS disks (DiffDiskSettings) do not support Stop-Deallocate,
+					// which is the only way to halt compute billing. Use a persistent managed
+					// disk so that onctl pause/resume works correctly.
 					CreateOption: to.Ptr(armcompute.DiskCreateOptionTypesFromImage),
 				},
 			},
@@ -509,19 +543,4 @@ func createNic(ctx context.Context, p *ProviderAzure, server Vm, vnet *armnetwor
 	log.Println("[DEBUG] ", nicRespDone)
 	return &nicRespDone.Interface, err
 
-}
-
-// Pause is not yet supported for Azure.
-func (p ProviderAzure) Pause(server Vm, hot bool) error {
-	return fmt.Errorf("pause not supported yet for Azure (Hetzner only for now)")
-}
-
-// Resume is not yet supported for Azure.
-func (p ProviderAzure) Resume(server Vm) (Vm, error) {
-	return Vm{}, fmt.Errorf("resume not supported yet for Azure (Hetzner only for now)")
-}
-
-// ListPaused returns empty for Azure (deallocated VMs appear in List when present).
-func (p ProviderAzure) ListPaused() (VmList, error) {
-	return VmList{}, nil
 }

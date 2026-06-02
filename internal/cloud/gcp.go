@@ -26,6 +26,11 @@ type ProviderGcp struct {
 	GroupClient *compute.InstanceGroupsClient
 }
 
+// ListPaused returns nothing: paused (TERMINATED) GCP instances already appear in List.
+func (p ProviderGcp) ListPaused() (VmList, error) {
+	return VmList{}, nil
+}
+
 func (p ProviderGcp) List() (VmList, error) {
 	log.Println("[DEBUG] List Servers")
 	cloudList := make([]Vm, 0, 100)
@@ -97,6 +102,40 @@ func (p ProviderGcp) GetByName(serverName string) (Vm, error) {
 	}
 	return mapGcpServer(server), nil
 
+}
+
+// Pause stops the instance. On GCP a stopped (TERMINATED) instance accrues no
+// compute cost (only persistent-disk storage), so unlike Hetzner there is no
+// need to snapshot and delete. The hot flag is accepted for interface symmetry
+// but has no effect here: stop already shuts the guest OS down cleanly.
+func (p ProviderGcp) Pause(server Vm, hot bool) error {
+	log.Println("[DEBUG] Stopping instance: ", server.Name)
+	op, err := p.Client.Stop(context.Background(), &computepb.StopInstanceRequest{
+		Project:  viper.GetString("gcp.project"),
+		Zone:     viper.GetString("gcp.zone"),
+		Instance: server.Name,
+	})
+	if err != nil {
+		return err
+	}
+	return op.Wait(context.Background())
+}
+
+// Resume starts a previously paused (stopped) instance and returns it once running.
+func (p ProviderGcp) Resume(server Vm) (Vm, error) {
+	log.Println("[DEBUG] Starting instance: ", server.Name)
+	op, err := p.Client.Start(context.Background(), &computepb.StartInstanceRequest{
+		Project:  viper.GetString("gcp.project"),
+		Zone:     viper.GetString("gcp.zone"),
+		Instance: server.Name,
+	})
+	if err != nil {
+		return Vm{}, err
+	}
+	if err := op.Wait(context.Background()); err != nil {
+		return Vm{}, err
+	}
+	return p.GetByName(server.Name)
 }
 
 func (p ProviderGcp) Deploy(server Vm) (Vm, error) {
@@ -186,19 +225,4 @@ func mapGcpServer(server *computepb.Instance) Vm {
 		CreatedAt: createdAt,
 		Location:  filepath.Base(server.GetZone()),
 	}
-}
-
-// Pause is not yet supported for GCP.
-func (p ProviderGcp) Pause(server Vm, hot bool) error {
-	return fmt.Errorf("pause not supported yet for GCP (Hetzner only for now)")
-}
-
-// Resume is not yet supported for GCP.
-func (p ProviderGcp) Resume(server Vm) (Vm, error) {
-	return Vm{}, fmt.Errorf("resume not supported yet for GCP (Hetzner only for now)")
-}
-
-// ListPaused returns empty for GCP (stopped instances appear in List).
-func (p ProviderGcp) ListPaused() (VmList, error) {
-	return VmList{}, nil
 }
