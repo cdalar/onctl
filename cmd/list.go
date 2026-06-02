@@ -84,6 +84,7 @@ var listCmd = &cobra.Command{
 				fmt.Println(server.IP, "ansible_user="+username)
 			}
 		case "json":
+			// Flat array of running + paused (each paused row carries Status "paused").
 			combined := append(append([]cloud.Vm{}, serverList.List...), pausedList.List...)
 			jsonList, err := json.Marshal(combined)
 			if err != nil {
@@ -99,14 +100,14 @@ var listCmd = &cobra.Command{
 			fmt.Println(string(yamlList))
 		default:
 			noCostTmpl := "CLOUD\tID\tNAME\tLOCATION\tTYPE\tPUBLIC IP\tPRIVATE IP\tSTATE\tAGE\n{{range .List}}{{.Provider}}\t{{.ID}}\t{{.Name}}\t{{.Location}}\t{{.Type}}\t{{.IP}}\t{{.PrivateIP}}\t{{.Status}}\t{{durationFromCreatedAt .CreatedAt}}\n{{end}}"
-
 			switch cloudProvider {
 			case "hetzner":
 				tmpl = "CLOUD\tID\tNAME\tLOCATION\tTYPE\tPUBLIC IP\tPRIVATE IP\tSTATE\tAGE\tCOST/H\tUSAGE\n{{range .List}}{{.Provider}}\t{{.ID}}\t{{.Name}}\t{{.Location}}\t{{.Type}}\t{{.IP}}\t{{.PrivateIP}}\t{{.Status}}\t{{durationFromCreatedAt .CreatedAt}}\t{{.Cost.CostPerHour}}{{.Cost.Currency}}\t{{.Cost.AccumulatedCost}}{{.Cost.Currency}}\n{{end}}"
 			default:
 				tmpl = noCostTmpl
 			}
-
+			// When there are paused servers, label both groups so they read as
+			// distinct sections; otherwise keep the plain single-table output.
 			if len(pausedList.List) > 0 {
 				fmt.Printf("\033[1;32m● RUNNING (%d)\033[0m\n", len(serverList.List))
 			}
