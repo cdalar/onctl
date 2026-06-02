@@ -2,7 +2,12 @@ coverage:
   status:
     project:
       default:
-        informational: false
+        informational: true
+        # Project coverage only informs; it never blocks PR merges. The
+        # codebase contains a lot of thin cloud-SDK glue (provider wrappers)
+        # that is primarily validated via e2e/manual runs rather than unit
+        # tests. A blocking project gate would penalize refactors, new
+        # providers, and feature addition.
     patch:
       default:
         # Patch coverage reports but does not block merges. Much of the
