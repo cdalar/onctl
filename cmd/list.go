@@ -40,11 +40,14 @@ var listCmd = &cobra.Command{
 		}
 		log.Println("[DEBUG] VM List: ", serverList)
 
-		pausedList, err := provider.ListPaused()
-		if err != nil {
-			log.Println(err)
+		var pausedList cloud.VmList
+		if output != "puppet" && output != "ansible" {
+			pausedList, err = provider.ListPaused()
+			if err != nil {
+				log.Println(err)
+			}
+			log.Println("[DEBUG] Paused List: ", pausedList)
 		}
-		log.Println("[DEBUG] Paused List: ", pausedList)
 
 		switch output {
 		case "puppet":

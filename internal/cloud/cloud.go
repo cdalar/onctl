@@ -70,10 +70,8 @@ type CloudProviderInterface interface {
 	Deploy(Vm) (Vm, error)
 	// Destroy destroys an instance
 	Destroy(Vm) error
-	// Pause stops the instance so it no longer accrues compute cost. On clouds
-	// that bill stopped instances (e.g. Hetzner) this snapshots the disk and
-	// deletes the instance; elsewhere it stops/deallocates. When hot is false the
-	// instance is gracefully shut down first (only relevant to the snapshot path).
+	// Pause stops the instance so it no longer accrues compute cost (Hetzner path
+	// snapshots+delete). Currently AWS/Azure/GCP return "not supported yet" errors.
 	Pause(server Vm, hot bool) error
 	// Resume brings a paused instance back (from snapshot or by starting it).
 	Resume(Vm) (Vm, error)

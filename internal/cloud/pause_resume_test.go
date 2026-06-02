@@ -3,8 +3,8 @@ package cloud
 import "testing"
 
 // Compile-time guarantee that every cloud provider implements the full
-// CloudProviderInterface, including Pause and Resume. The build breaks here if a
-// provider drops pause/resume or changes their signatures.
+// CloudProviderInterface, including Pause, Resume and ListPaused. The build
+// breaks here if a provider drops any method or changes signatures.
 var (
 	_ CloudProviderInterface = ProviderHetzner{}
 	_ CloudProviderInterface = ProviderAws{}
@@ -13,8 +13,8 @@ var (
 )
 
 // TestAllProvidersImplementPauseResume makes the cross-provider contract explicit
-// in the suite: pause/resume is a capability every provider must offer, not a
-// Hetzner-only feature.
+// in the suite: every provider must implement Pause/Resume/ListPaused (current
+// stubs for non-Hetzner return "not supported yet").
 func TestAllProvidersImplementPauseResume(t *testing.T) {
 	providers := map[string]any{
 		"hetzner": ProviderHetzner{},

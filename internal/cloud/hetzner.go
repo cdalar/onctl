@@ -281,10 +281,13 @@ func (p ProviderHetzner) Pause(server Vm, hot bool) error {
 	}
 
 	// Remove any previous pause snapshot for this name so they don't accumulate.
-	if old, _ := p.findPauseSnapshot(server.Name); old != nil {
+	old, err := p.findPauseSnapshot(server.Name)
+	if err != nil {
+		log.Printf("[DEBUG] error discovering previous pause snapshot for %s: %v\n", server.Name, err)
+	} else if old != nil {
 		log.Printf("[DEBUG] deleting previous pause snapshot %d\n", old.ID)
-		if _, err := p.Client.Image.Delete(context.TODO(), old); err != nil {
-			log.Println("[DEBUG] could not delete previous snapshot: ", err)
+		if _, derr := p.Client.Image.Delete(context.TODO(), old); derr != nil {
+			log.Println("[DEBUG] could not delete previous snapshot: ", derr)
 		}
 	}
 
@@ -423,7 +426,8 @@ func (p ProviderHetzner) Resume(server Vm) (Vm, error) {
 	}
 
 	// Re-attach any preserved primary IP(s) so the public address is unchanged.
-	if reserved := p.findReservedPrimaryIPs(server.Name); len(reserved) > 0 {
+	reserved := p.findReservedPrimaryIPs(server.Name)
+	if len(reserved) > 0 {
 		pubNet := &hcloud.ServerCreatePublicNet{}
 		for _, ip := range reserved {
 			switch ip.Type {
@@ -465,6 +469,17 @@ func (p ProviderHetzner) Resume(server Vm) (Vm, error) {
 		log.Println("[DEBUG] could not delete pause snapshot after resume: ", err)
 	}
 
+	for _, ip := range reserved {
+		labels := map[string]string{labelOwner: "onctl"}
+		_, _, uerr := p.Client.PrimaryIP.Update(context.TODO(), &hcloud.PrimaryIP{ID: ip.ID}, hcloud.PrimaryIPUpdateOpts{
+			AutoDelete: hcloud.Ptr(true),
+			Labels:     hcloud.Ptr(labels),
+		})
+		if uerr != nil {
+			log.Printf("[DEBUG] could not restore primary IP %d after resume: %v\n", ip.ID, uerr)
+		}
+	}
+
 	return mapHetznerServer(*result.Server), nil
 }
 
@@ -472,7 +487,7 @@ func (p ProviderHetzner) Resume(server Vm) (Vm, error) {
 // given server name (those tagged by Pause and not currently attached).
 func (p ProviderHetzner) findReservedPrimaryIPs(name string) []*hcloud.PrimaryIP {
 	ips, err := p.Client.PrimaryIP.AllWithOpts(context.TODO(), hcloud.PrimaryIPListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelSnapshot + "=" + name},
+		ListOpts: hcloud.ListOpts{LabelSelector: fmt.Sprintf("%s=%s,%s=%s", labelSnapshot, name, labelOwner, "onctl")},
 	})
 	if err != nil {
 		log.Println("[DEBUG] listing primary IPs: ", err)
@@ -548,7 +563,7 @@ func (p ProviderHetzner) ListPaused() (VmList, error) {
 func (p ProviderHetzner) findPauseSnapshot(name string) (*hcloud.Image, error) {
 	images, err := p.Client.Image.AllWithOpts(context.TODO(), hcloud.ImageListOpts{
 		Type:     []hcloud.ImageType{hcloud.ImageTypeSnapshot},
-		ListOpts: hcloud.ListOpts{LabelSelector: labelSnapshot + "=" + name},
+		ListOpts: hcloud.ListOpts{LabelSelector: fmt.Sprintf("%s=%s,%s=%s", labelSnapshot, name, labelOwner, "onctl")},
 	})
 	if err != nil {
 		return nil, err

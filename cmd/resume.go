@@ -30,11 +30,18 @@ snapshot and re-attaches the preserved public IP when available.`,
 		}
 		serverName := args[0]
 
-		// Ensure the onctl SSH key exists and attach it (mirrors create).
-		publicKeyFile, _ := getSSHKeyFilePaths(resumePublicKeyFile)
-		keyID, err := provider.CreateSSHKey(publicKeyFile)
-		if err != nil {
-			log.Fatalln(err)
+		// Only create/ensure the SSH key in the cloud when the current provider
+		// actually supports resume (Hetzner). This avoids side-effect resource
+		// creation (e.g. key import) on AWS/Azure/GCP where Resume is a
+		// no-op stub that will fail.
+		keyID := ""
+		if _, ok := provider.(cloud.ProviderHetzner); ok {
+			publicKeyFile, _ := getSSHKeyFilePaths(resumePublicKeyFile)
+			var err error
+			keyID, err = provider.CreateSSHKey(publicKeyFile)
+			if err != nil {
+				log.Fatalln(err)
+			}
 		}
 
 		fmt.Println("\033[32m✔\033[0m Resuming VM from snapshot...")
