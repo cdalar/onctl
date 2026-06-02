@@ -40,6 +40,15 @@ var listCmd = &cobra.Command{
 		}
 		log.Println("[DEBUG] VM List: ", serverList)
 
+		var pausedList cloud.VmList
+		if output != "puppet" && output != "ansible" {
+			pausedList, err = provider.ListPaused()
+			if err != nil {
+				log.Println(err)
+			}
+			log.Println("[DEBUG] Paused List: ", pausedList)
+		}
+
 		switch output {
 		case "puppet":
 			var puppetInventory puppet.Inventory
@@ -75,25 +84,38 @@ var listCmd = &cobra.Command{
 				fmt.Println(server.IP, "ansible_user="+username)
 			}
 		case "json":
-			jsonList, err := json.Marshal(serverList.List)
+			combined := append(append([]cloud.Vm{}, serverList.List...), pausedList.List...)
+			jsonList, err := json.Marshal(combined)
 			if err != nil {
 				log.Println(err)
 			}
 			fmt.Println(string(jsonList))
 		case "yaml":
-			yamlList, err := yaml.Marshal(serverList.List)
+			combined := append(append([]cloud.Vm{}, serverList.List...), pausedList.List...)
+			yamlList, err := yaml.Marshal(combined)
 			if err != nil {
 				log.Println(err)
 			}
 			fmt.Println(string(yamlList))
 		default:
+			noCostTmpl := "CLOUD\tID\tNAME\tLOCATION\tTYPE\tPUBLIC IP\tPRIVATE IP\tSTATE\tAGE\n{{range .List}}{{.Provider}}\t{{.ID}}\t{{.Name}}\t{{.Location}}\t{{.Type}}\t{{.IP}}\t{{.PrivateIP}}\t{{.Status}}\t{{durationFromCreatedAt .CreatedAt}}\n{{end}}"
+
 			switch cloudProvider {
 			case "hetzner":
 				tmpl = "CLOUD\tID\tNAME\tLOCATION\tTYPE\tPUBLIC IP\tPRIVATE IP\tSTATE\tAGE\tCOST/H\tUSAGE\n{{range .List}}{{.Provider}}\t{{.ID}}\t{{.Name}}\t{{.Location}}\t{{.Type}}\t{{.IP}}\t{{.PrivateIP}}\t{{.Status}}\t{{durationFromCreatedAt .CreatedAt}}\t{{.Cost.CostPerHour}}{{.Cost.Currency}}\t{{.Cost.AccumulatedCost}}{{.Cost.Currency}}\n{{end}}"
 			default:
-				tmpl = "CLOUD\tID\tNAME\tLOCATION\tTYPE\tPUBLIC IP\tPRIVATE IP\tSTATE\tAGE\n{{range .List}}{{.Provider}}\t{{.ID}}\t{{.Name}}\t{{.Location}}\t{{.Type}}\t{{.IP}}\t{{.PrivateIP}}\t{{.Status}}\t{{durationFromCreatedAt .CreatedAt}}\n{{end}}"
+				tmpl = noCostTmpl
+			}
+
+			if len(pausedList.List) > 0 {
+				fmt.Printf("\033[1;32m● RUNNING (%d)\033[0m\n", len(serverList.List))
 			}
 			TabWriter(serverList, tmpl)
+
+			if len(pausedList.List) > 0 {
+				fmt.Printf("\n\033[1;33m● PAUSED (%d)\033[0m\n", len(pausedList.List))
+				TabWriter(pausedList, noCostTmpl)
+			}
 		}
 
 	},

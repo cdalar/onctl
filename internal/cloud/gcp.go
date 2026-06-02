@@ -187,3 +187,18 @@ func mapGcpServer(server *computepb.Instance) Vm {
 		Location:  filepath.Base(server.GetZone()),
 	}
 }
+
+// Pause is not yet supported for GCP.
+func (p ProviderGcp) Pause(server Vm, hot bool) error {
+	return fmt.Errorf("pause not supported yet for GCP (Hetzner only for now)")
+}
+
+// Resume is not yet supported for GCP.
+func (p ProviderGcp) Resume(server Vm) (Vm, error) {
+	return Vm{}, fmt.Errorf("resume not supported yet for GCP (Hetzner only for now)")
+}
+
+// ListPaused returns empty for GCP (stopped instances appear in List).
+func (p ProviderGcp) ListPaused() (VmList, error) {
+	return VmList{}, nil
+}

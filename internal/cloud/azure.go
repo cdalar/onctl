@@ -510,3 +510,18 @@ func createNic(ctx context.Context, p *ProviderAzure, server Vm, vnet *armnetwor
 	return &nicRespDone.Interface, err
 
 }
+
+// Pause is not yet supported for Azure.
+func (p ProviderAzure) Pause(server Vm, hot bool) error {
+	return fmt.Errorf("pause not supported yet for Azure (Hetzner only for now)")
+}
+
+// Resume is not yet supported for Azure.
+func (p ProviderAzure) Resume(server Vm) (Vm, error) {
+	return Vm{}, fmt.Errorf("resume not supported yet for Azure (Hetzner only for now)")
+}
+
+// ListPaused returns empty for Azure (deallocated VMs appear in List when present).
+func (p ProviderAzure) ListPaused() (VmList, error) {
+	return VmList{}, nil
+}
