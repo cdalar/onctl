@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -47,6 +48,18 @@ var listCmd = &cobra.Command{
 				log.Println(err)
 			}
 			log.Println("[DEBUG] Paused List: ", pausedList)
+
+			// Partition any stopped VMs out of serverList into pausedList so all
+			// providers show the split running/paused view, not just Hetzner.
+			var running cloud.VmList
+			for _, vm := range serverList.List {
+				if isPausedStatus(vm.Status) {
+					pausedList.List = append(pausedList.List, vm)
+				} else {
+					running.List = append(running.List, vm)
+				}
+			}
+			serverList = running
 		}
 
 		switch output {
@@ -120,4 +133,13 @@ var listCmd = &cobra.Command{
 		}
 
 	},
+}
+
+// isPausedStatus reports whether a VM status means stopped/paused rather than
+// running. AWS uses "stopped", GCP uses "TERMINATED" (stopped, not deleted),
+// Azure uses "VM deallocated".
+func isPausedStatus(status string) bool {
+	return status == "stopped" ||
+		status == "TERMINATED" ||
+		strings.Contains(strings.ToLower(status), "deallocated")
 }
