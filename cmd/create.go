@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/cdalar/onctl/internal/cloud"
+	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/cdalar/onctl/internal/domain"
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/cdalar/onctl/internal/ui"

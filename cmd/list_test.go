@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cdalar/onctl/internal/cloud"
+	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/stretchr/testify/assert"
 )
 

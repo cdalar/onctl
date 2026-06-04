@@ -6,7 +6,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/cdalar/onctl/internal/cloud"
+	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/cdalar/onctl/internal/ui"
 
 	"github.com/spf13/cobra"
