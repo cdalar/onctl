@@ -14,12 +14,20 @@ import (
 	"github.com/cdalar/onctl/internal/tools"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	"github.com/spf13/viper"
 	"golang.org/x/crypto/ssh"
 )
 
+type HetznerConfig struct {
+	Location      string
+	Image         string
+	VMType        string
+	Username      string
+	SSHPrivateKey string
+}
+
 type ProviderHetzner struct {
 	Client *hcloud.Client
+	Config HetznerConfig
 }
 
 func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
@@ -30,19 +38,22 @@ func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 		log.Fatalln(err)
 	}
 
-	// Use server.Type if provided, otherwise fall back to config
 	serverType := server.Type
 	if serverType == "" {
-		serverType = viper.GetString("hetzner.vm.type")
+		serverType = p.Config.VMType
+	}
+	location := server.Location
+	if location == "" {
+		location = p.Config.Location
 	}
 
 	result, _, err := p.Client.Server.Create(context.TODO(), hcloud.ServerCreateOpts{
 		Name: server.Name,
 		Location: &hcloud.Location{
-			Name: viper.GetString("hetzner.location"),
+			Name: location,
 		},
 		Image: &hcloud.Image{
-			Name: viper.GetString("hetzner.vm.image"),
+			Name: p.Config.Image,
 		},
 		ServerType: &hcloud.ServerType{
 			Name: serverType,
@@ -201,11 +212,11 @@ func (p ProviderHetzner) Resume(server Vm) (Vm, error) {
 
 	serverType := img.Labels[labelServerType]
 	if serverType == "" {
-		serverType = viper.GetString("hetzner.vm.type")
+		serverType = p.Config.VMType
 	}
 	location := img.Labels[labelLocation]
 	if location == "" {
-		location = viper.GetString("hetzner.location")
+		location = p.Config.Location
 	}
 
 	opts := hcloud.ServerCreateOpts{
@@ -552,11 +563,11 @@ func (p ProviderHetzner) SSHInto(serverName string, port int, privateKey string,
 	}
 
 	if privateKey == "" {
-		privateKey = viper.GetString("ssh.privateKey")
+		privateKey = p.Config.SSHPrivateKey
 	}
 	tools.SSHIntoVM(tools.SSHIntoVMRequest{
 		IPAddress:      server.PublicNet.IPv4.IP.String(),
-		User:           viper.GetString("hetzner.vm.username"),
+		User:           p.Config.Username,
 		Port:           port,
 		PrivateKeyFile: privateKey,
 		Command:        command,

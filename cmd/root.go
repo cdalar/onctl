@@ -14,6 +14,7 @@ import (
 	"github.com/cdalar/onctl/internal/tools"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -77,6 +78,13 @@ func Execute() error {
 	case "hetzner":
 		provider = &cloud.ProviderHetzner{
 			Client: providerhtz.GetClient(),
+			Config: cloud.HetznerConfig{
+				Location:      viper.GetString("hetzner.location"),
+				Image:         viper.GetString("hetzner.vm.image"),
+				VMType:        viper.GetString("hetzner.vm.type"),
+				Username:      viper.GetString("hetzner.vm.username"),
+				SSHPrivateKey: viper.GetString("ssh.privateKey"),
+			},
 		}
 	case "gcp":
 		provider = &cloud.ProviderGcp{
