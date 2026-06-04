@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cdalar/onctl/internal/cloud"
+	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/cdalar/onctl/internal/provideraws"
 	"github.com/cdalar/onctl/internal/providerazure"
 	"github.com/cdalar/onctl/internal/providergcp"

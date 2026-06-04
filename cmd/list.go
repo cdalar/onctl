@@ -9,7 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/cdalar/onctl/internal/cloud"
+	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/cdalar/onctl/internal/tools/puppet"
 
 	"github.com/spf13/cobra"
