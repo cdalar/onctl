@@ -71,31 +71,40 @@ func (r *Remote) DownloadFile(srcPath, dstPath string) error {
 	return nil
 }
 
-func (r *Remote) downloadFileWithJumpHost(srcPath, dstPath string) error {
-	// Create a temporary file for the private key
-	tempKeyFile, err := os.CreateTemp("", "onctl_ssh_key_*")
+// writeTempKeyFile writes r.PrivateKey to a temp file and returns its path and a cleanup func.
+func (r *Remote) writeTempKeyFile() (string, func(), error) {
+	f, err := os.CreateTemp("", "onctl_ssh_key_*")
 	if err != nil {
-		return fmt.Errorf("failed to create temp key file: %v", err)
+		return "", nil, fmt.Errorf("failed to create temp key file: %v", err)
 	}
-	defer func() {
-		if err := os.Remove(tempKeyFile.Name()); err != nil {
+	cleanup := func() {
+		if err := os.Remove(f.Name()); err != nil {
 			log.Printf("Failed to remove temp key file: %v", err)
 		}
-	}()
+	}
+	if _, err := f.WriteString(r.PrivateKey); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("failed to write private key to temp file: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("failed to close temp key file: %v", err)
+	}
+	return f.Name(), cleanup, nil
+}
 
-	// Write the private key to the temp file
-	if _, err := tempKeyFile.WriteString(r.PrivateKey); err != nil {
-		return fmt.Errorf("failed to write private key to temp file: %v", err)
+func (r *Remote) downloadFileWithJumpHost(srcPath, dstPath string) error {
+	keyPath, cleanup, err := r.writeTempKeyFile()
+	if err != nil {
+		return err
 	}
-	if err := tempKeyFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp key file: %v", err)
-	}
+	defer cleanup()
 
 	// Use system scp command with ProxyJump
 	scpArgs := []string{
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "StrictHostKeyChecking=no",
-		"-i", tempKeyFile.Name(),
+		"-i", keyPath,
 		"-P", fmt.Sprint(r.SSHPort),
 	}
 
@@ -187,30 +196,17 @@ func (r *Remote) SSHCopyFile(srcPath, dstPath string) error {
 }
 
 func (r *Remote) uploadFileWithJumpHost(srcPath, dstPath string) error {
-	// Create a temporary file for the private key
-	tempKeyFile, err := os.CreateTemp("", "onctl_ssh_key_*")
+	keyPath, cleanup, err := r.writeTempKeyFile()
 	if err != nil {
-		return fmt.Errorf("failed to create temp key file: %v", err)
+		return err
 	}
-	defer func() {
-		if err := os.Remove(tempKeyFile.Name()); err != nil {
-			log.Printf("Failed to remove temp key file: %v", err)
-		}
-	}()
-
-	// Write the private key to the temp file
-	if _, err := tempKeyFile.WriteString(r.PrivateKey); err != nil {
-		return fmt.Errorf("failed to write private key to temp file: %v", err)
-	}
-	if err := tempKeyFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp key file: %v", err)
-	}
+	defer cleanup()
 
 	// Use system scp command with ProxyJump
 	scpArgs := []string{
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "StrictHostKeyChecking=no",
-		"-i", tempKeyFile.Name(),
+		"-i", keyPath,
 		"-P", fmt.Sprint(r.SSHPort),
 	}
 

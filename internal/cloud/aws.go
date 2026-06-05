@@ -28,11 +28,11 @@ type NetworkProviderAws struct {
 
 func (n NetworkProviderAws) Create(netw Network) (Network, error) {
 	_, ipNet, err := net.ParseCIDR(netw.CIDR)
+	if err != nil {
+		return Network{}, err
+	}
 	log.Println("[DEBUG] ipNet.IP:", ipNet.IP.String())
 	log.Println("[DEBUG] ipNet.Mask:", ipNet.Mask.String())
-	if err != nil {
-		log.Fatalln(err)
-	}
 
 	network, err := n.Client.CreateVpc(&ec2.CreateVpcInput{
 		CidrBlock: aws.String(netw.CIDR),
@@ -74,7 +74,7 @@ func (n NetworkProviderAws) Delete(net Network) error {
 		},
 	})
 	if err != nil {
-		log.Fatalf("Failed to describe subnets for VPC %s: %v", net.ID, err)
+		return fmt.Errorf("failed to describe subnets for VPC %s: %v", net.ID, err)
 	}
 
 	for _, subnet := range result.Subnets {
@@ -82,7 +82,7 @@ func (n NetworkProviderAws) Delete(net Network) error {
 			SubnetId: subnet.SubnetId,
 		})
 		if err != nil {
-			log.Fatalf("Failed to delete subnet %s: %v", *subnet.SubnetId, err)
+			return fmt.Errorf("failed to delete subnet %s: %v", *subnet.SubnetId, err)
 		}
 	}
 

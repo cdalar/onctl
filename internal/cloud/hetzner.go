@@ -63,7 +63,7 @@ func (n NetworkProviderHetzner) Delete(network Network) error {
 
 	networkId, err := strconv.ParseInt(network.ID, 10, 64)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 	resp, err := n.Client.Network.Delete(context.TODO(), &hcloud.Network{
 		ID: networkId,
@@ -78,11 +78,11 @@ func (n NetworkProviderHetzner) Delete(network Network) error {
 
 func (n NetworkProviderHetzner) Create(network Network) (Network, error) {
 	_, ipNet, err := net.ParseCIDR(network.CIDR)
+	if err != nil {
+		return Network{}, err
+	}
 	log.Println("[DEBUG] ipNet.IP:", ipNet.IP.String())
 	log.Println("[DEBUG] ipNet.Mask:", ipNet.Mask.String())
-	if err != nil {
-		log.Fatalln(err)
-	}
 	net, resp, err := n.Client.Network.Create(context.TODO(), hcloud.NetworkCreateOpts{
 		Name:    network.Name,
 		IPRange: ipNet,
@@ -101,7 +101,7 @@ func (n NetworkProviderHetzner) Create(network Network) (Network, error) {
 		Subnet: hcloud.NetworkSubnet{
 			Type:        hcloud.NetworkSubnetTypeCloud,
 			IPRange:     ipNet,
-			NetworkZone: hcloud.NetworkZoneEUCentral, //TODO: make this configurable based on vm location ex. fsn1
+			NetworkZone: hetznerNetworkZone(),
 		},
 	})
 	log.Println("[DEBUG] zone:", viper.GetString("hetzner.location"))
@@ -125,11 +125,11 @@ func (p ProviderHetzner) DetachNetwork(vm Vm, network Network) error {
 
 	networkId, err := strconv.ParseInt(network.ID, 10, 64)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 	serverId, err := strconv.ParseInt(vm.ID, 10, 64)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	action, _, err := p.Client.Server.DetachFromNetwork(context.TODO(), &hcloud.Server{
@@ -157,11 +157,11 @@ func (p ProviderHetzner) AttachNetwork(vm Vm, network Network) error {
 
 	networkId, err := strconv.ParseInt(network.ID, 10, 64)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 	serverId, err := strconv.ParseInt(vm.ID, 10, 64)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	action, _, err := p.Client.Server.AttachToNetwork(context.TODO(), &hcloud.Server{
@@ -325,6 +325,14 @@ func (p ProviderHetzner) CreateSSHKey(publicKeyFile string) (keyID string, err e
 	}
 	// fmt.Println("DONE")
 	return fmt.Sprint(hkey.ID), nil
+}
+
+func hetznerNetworkZone() hcloud.NetworkZone {
+	zone := viper.GetString("hetzner.network_zone")
+	if zone == "" {
+		return hcloud.NetworkZoneEUCentral
+	}
+	return hcloud.NetworkZone(zone)
 }
 
 func mapHetznerNetwork(network hcloud.Network) Network {
