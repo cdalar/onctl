@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	pxapi "github.com/Telmate/proxmox-api-go/proxmox"
@@ -36,9 +37,13 @@ func (p ProviderProxmox) Deploy(server Vm) (Vm, error) {
 	// Check if VM already exists
 	vmRef := pxapi.NewVmRef(pxapi.GuestID(vmID))
 	vmRef.SetNode(node)
-	_, err := p.Client.GetVmInfo(ctx, vmRef)
+	existingInfo, err := p.Client.GetVmInfo(ctx, vmRef)
 	if err == nil {
-		log.Println("VM already exists with ID:", vmID)
+		tags, _ := existingInfo["tags"].(string)
+		if tags != "onctl" {
+			return Vm{}, fmt.Errorf("VM ID %d is already occupied by a VM not managed by onctl", vmID)
+		}
+		log.Println("[DEBUG] VM already exists with ID:", vmID)
 		return p.getVMInfo(vmRef, server.Name)
 	}
 
@@ -100,6 +105,14 @@ func (p ProviderProxmox) Deploy(server Vm) (Vm, error) {
 	// Add cloud-init if provided
 	if server.CloudInitFile != "" {
 		config["ciuser"] = viper.GetString("proxmox.vm.username")
+		// Proxmox cloud-init requires files pre-uploaded to Proxmox storage.
+		// Accept a Proxmox storage reference (e.g. "local:snippets/user-data.yaml");
+		// for plain local paths warn and skip rather than silently drop.
+		if strings.Contains(server.CloudInitFile, ":") {
+			config["cicustom"] = "user=" + server.CloudInitFile
+		} else {
+			log.Printf("[WARN] cloud-init file %q is a local path; Proxmox requires snippets on Proxmox storage (e.g. 'local:snippets/user-data.yaml')", server.CloudInitFile)
+		}
 	}
 
 	// Configure network
