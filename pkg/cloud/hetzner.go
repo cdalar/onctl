@@ -529,19 +529,18 @@ func mapHetznerServer(server hcloud.Server) Vm {
 }
 
 func (p ProviderHetzner) ListImages() ([]CloudImage, error) {
+	// Without an Architecture filter the API returns each image once per
+	// architecture (x86 + arm64), producing duplicates. x86 is the default
+	// for standard server types so we filter to that.
 	images, err := p.Client.Image.AllWithOpts(context.TODO(), hcloud.ImageListOpts{
-		Type: []hcloud.ImageType{hcloud.ImageTypeSystem, hcloud.ImageTypeApp},
+		Type:         []hcloud.ImageType{hcloud.ImageTypeSystem, hcloud.ImageTypeApp},
+		Architecture: []hcloud.Architecture{hcloud.ArchitectureX86},
 	})
 	if err != nil {
 		return nil, err
 	}
-	seen := make(map[string]bool)
 	result := make([]CloudImage, 0, len(images))
 	for _, img := range images {
-		if seen[img.Name] {
-			continue
-		}
-		seen[img.Name] = true
 		result = append(result, CloudImage{
 			Name:        img.Name,
 			Description: img.Description,
