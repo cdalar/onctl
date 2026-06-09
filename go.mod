@@ -119,6 +119,6 @@ require (
 	github.com/hashicorp/logutils v1.0.0
 	github.com/pkg/sftp v1.13.10
 	github.com/spf13/viper v1.21.0
-	golang.org/x/crypto v0.52.0
-	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/crypto v0.53.0
+	golang.org/x/text v0.38.0 // indirect
 )
