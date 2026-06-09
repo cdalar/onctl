@@ -5,10 +5,10 @@ import (
 	"log"
 	"os"
 
-	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/cdalar/onctl/internal/domain"
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/cdalar/onctl/internal/ui"
+	"github.com/cdalar/onctl/pkg/cloud"
 	"gopkg.in/yaml.v2"
 
 	"github.com/spf13/cobra"
@@ -109,13 +109,13 @@ var createCmd = &cobra.Command{
 		for _, vm := range list.List {
 			if vm.Name == opt.Vm.Name {
 				s.Stop()
-				fmt.Println("\033[31m\u2718\033[0m VM " + opt.Vm.Name + " exists. Aborting...")
+				fmt.Println("\033[31m✘\033[0m VM " + opt.Vm.Name + " exists. Aborting...")
 				os.Exit(1)
 			}
 		}
 
 		s.Stop()
-		fmt.Println("\033[32m\u2714\033[0m Creating VM...")
+		fmt.Println("\033[32m✔\033[0m Creating VM...")
 
 		// Check Domain Env
 		if opt.Domain != "" {
@@ -124,7 +124,7 @@ var createCmd = &cobra.Command{
 			err := domain.NewCloudFlareService().CheckEnv()
 			if err != nil {
 				s.Stop()
-				fmt.Println("\033[31m\u2718\033[0m Error on Domain: ", err)
+				fmt.Println("\033[31m✘\033[0m Error on Domain: ", err)
 				os.Exit(1)
 			}
 		}
@@ -137,17 +137,17 @@ var createCmd = &cobra.Command{
 		publicKeyFile, privateKeyFile := getSSHKeyFilePaths(opt.PublicKeyFile)
 		log.Println("[DEBUG] publicKeyFile: ", publicKeyFile)
 		log.Println("[DEBUG] privateKeyFile: ", privateKeyFile)
-		fmt.Println("\033[32m\u2714\033[0m Using Public Key:", publicKeyFile)
+		fmt.Println("\033[32m✔\033[0m Using Public Key:", publicKeyFile)
 		s.Start()
 		s.Suffix = " Checking SSH Keys..."
 		opt.Vm.SSHKeyID, err = provider.CreateSSHKey(publicKeyFile)
 		if err != nil {
 			s.Stop()
-			fmt.Println("\033[32m\u2718\033[0m Checking SSH Keys...")
+			fmt.Println("\033[32m✘\033[0m Checking SSH Keys...")
 			log.Fatalln(err)
 		}
 		s.Stop()
-		fmt.Println("\033[32m\u2714\033[0m Checking SSH Keys... ")
+		fmt.Println("\033[32m✔\033[0m Checking SSH Keys... ")
 		// END SSH Key
 
 		// BEGIN Set VM Name
@@ -170,7 +170,7 @@ var createCmd = &cobra.Command{
 		s.Restart()
 		s.Suffix = " VM IP: " + vm.IP
 		s.Stop()
-		fmt.Println("\033[32m\u2714\033[0m" + s.Suffix)
+		fmt.Println("\033[32m✔\033[0m" + s.Suffix)
 
 		log.Println("[DEBUG] Vm:" + vm.String())
 		privateKey, err := os.ReadFile(privateKeyFile)
@@ -182,7 +182,7 @@ var createCmd = &cobra.Command{
 		log.Println("[DEBUG] waiting for cloud-init")
 		log.Println("[DEBUG] ssh port: ", opt.Vm.SSHPort)
 		s.Stop()
-		// fmt.Println("\033[32m\u2714\033[0m VM Starting...")
+		// fmt.Println("\033[32m✔\033[0m VM Starting...")
 		remote := tools.Remote{
 			Username:   viper.GetString(cloudProvider + ".vm.username"),
 			IPAddress:  vm.IP,
@@ -201,10 +201,10 @@ var createCmd = &cobra.Command{
 			})
 			s.Stop()
 			if err != nil {
-				fmt.Println("\033[31m\u2718\033[0m Error on Domain: ")
+				fmt.Println("\033[31m✘\033[0m Error on Domain: ")
 				log.Println(err)
 			} else {
-				fmt.Println("\033[32m\u2714\033[0m Domain is ready: ")
+				fmt.Println("\033[32m✔\033[0m Domain is ready: ")
 			}
 		}
 
@@ -212,7 +212,7 @@ var createCmd = &cobra.Command{
 		s.Suffix = " Waiting for VM to be ready..."
 		remote.WaitForCloudInit(viper.GetString("vm.cloud-init.timeout"))
 		s.Stop()
-		fmt.Println("\033[32m\u2714\033[0m VM is Ready")
+		fmt.Println("\033[32m✔\033[0m VM is Ready")
 		log.Println("[DEBUG] cloud-init finished")
 		// END Cloud-init
 
@@ -244,13 +244,13 @@ var createCmd = &cobra.Command{
 				log.Println(err)
 			}
 			s.Stop()
-			fmt.Println("\033[32m\u2714\033[0m " + opt.ApplyFiles[i] + " ran on Remote")
+			fmt.Println("\033[32m✔\033[0m " + opt.ApplyFiles[i] + " ran on Remote")
 
 		}
 		if len(opt.DownloadFiles) > 0 {
 			ProcessDownloadSlice(opt.DownloadFiles, remote)
 		}
 		s.Stop()
-		fmt.Println("\033[32m\u2714\033[0m VM Configured...")
+		fmt.Println("\033[32m✔\033[0m VM Configured...")
 	},
 }
