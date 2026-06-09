@@ -98,6 +98,9 @@ var createCmd = &cobra.Command{
 			// Use the new MergeConfig function
 			MergeConfig(&opt, config)
 		}
+		if opt.Vm.Image != "" && cloudProvider != "hetzner" {
+			log.Fatalf("--image flag is only supported for the hetzner provider (current provider: %s)", cloudProvider)
+		}
 		s := ui.New() // Build our new spinner
 		s.Start()
 		s.Suffix = " Checking vm..."
