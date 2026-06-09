@@ -6,12 +6,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/cdalar/onctl/internal/provideraws"
 	"github.com/cdalar/onctl/internal/providerazure"
 	"github.com/cdalar/onctl/internal/providergcp"
 	"github.com/cdalar/onctl/internal/providerhtz"
 	"github.com/cdalar/onctl/internal/tools"
+	"github.com/cdalar/onctl/pkg/cloud"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"

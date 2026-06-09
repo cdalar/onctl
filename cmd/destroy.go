@@ -6,8 +6,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/cdalar/onctl/internal/ui"
+	"github.com/cdalar/onctl/pkg/cloud"
 
 	"github.com/spf13/cobra"
 )
@@ -70,15 +70,15 @@ var destroyCmd = &cobra.Command{
 					s.Start()
 					s.Suffix = " Destroying VM..."
 					if err := provider.Destroy(server); err != nil {
-						fmt.Println("\033[31m\u2718\033[0m Could not destroy VM: " + server.Name)
+						fmt.Println("\033[31m✘\033[0m Could not destroy VM: " + server.Name)
 						log.Println(err)
 					}
 					s.Stop()
-					fmt.Println("\033[32m\u2714\033[0m VM Destroyed: " + server.Name)
+					fmt.Println("\033[32m✔\033[0m VM Destroyed: " + server.Name)
 				}(server)
 			}
 			wg.Wait()
-			fmt.Println("\033[32m\u2714\033[0m ALL VM(s) are destroyed")
+			fmt.Println("\033[32m✔\033[0m ALL VM(s) are destroyed")
 		default:
 			// Tear down specific server
 			serverName := args[0]
@@ -93,12 +93,12 @@ var destroyCmd = &cobra.Command{
 			s.Suffix = " Destroying VM..."
 			if err := provider.Destroy(cloud.Vm{Name: serverName}); err != nil {
 				s.Stop()
-				fmt.Println("\033[31m\u2718\033[0m Cannot destroy VM: " + serverName)
+				fmt.Println("\033[31m✘\033[0m Cannot destroy VM: " + serverName)
 				fmt.Println(err)
 				os.Exit(1)
 			}
 			s.Stop()
-			fmt.Println("\033[32m\u2714\033[0m VM Destroyed: " + serverName)
+			fmt.Println("\033[32m✔\033[0m VM Destroyed: " + serverName)
 		}
 	},
 }

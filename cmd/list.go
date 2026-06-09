@@ -9,8 +9,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/cdalar/onctl/internal/tools/puppet"
+	"github.com/cdalar/onctl/pkg/cloud"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
