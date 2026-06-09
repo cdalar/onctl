@@ -528,6 +528,26 @@ func mapHetznerServer(server hcloud.Server) Vm {
 	}
 }
 
+func (p ProviderHetzner) ListImages() ([]CloudImage, error) {
+	images, err := p.Client.Image.AllWithOpts(context.TODO(), hcloud.ImageListOpts{
+		Type: []hcloud.ImageType{hcloud.ImageTypeSystem, hcloud.ImageTypeApp},
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]CloudImage, 0, len(images))
+	for _, img := range images {
+		result = append(result, CloudImage{
+			Name:        img.Name,
+			Description: img.Description,
+			Type:        string(img.Type),
+			OSFlavor:    img.OSFlavor,
+			OSVersion:   img.OSVersion,
+		})
+	}
+	return result, nil
+}
+
 func (p ProviderHetzner) GetByName(serverName string) (Vm, error) {
 	s, _, err := p.Client.Server.GetByName(context.TODO(), serverName)
 	if err != nil {
