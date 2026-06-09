@@ -9,6 +9,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// hetznerImageLister returns the ImageLister to use. Overridable in tests.
+var hetznerImageLister = func() cloud.ImageLister {
+	return cloud.ProviderHetzner{Client: providerhtz.GetClient()}
+}
+
 func init() {
 	rootCmd.AddCommand(imagesCmd)
 }
@@ -21,10 +26,7 @@ var imagesCmd = &cobra.Command{
 			fmt.Println("The current cloud provider does not support listing images.")
 			return
 		}
-		htzProvider := cloud.ProviderHetzner{
-			Client: providerhtz.GetClient(),
-		}
-		images, err := htzProvider.ListImages()
+		images, err := hetznerImageLister().ListImages()
 		if err != nil {
 			log.Fatalln(err)
 		}
