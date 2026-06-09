@@ -85,6 +85,22 @@ func TestProviderHetzner_ListImages_Empty(t *testing.T) {
 	assert.Empty(t, images)
 }
 
+func TestProviderHetzner_ListImages_APIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":{"code":"internal_error","message":"server error"}}`))
+	}))
+	defer srv.Close()
+
+	p := ProviderHetzner{
+		Client: hcloud.NewClient(hcloud.WithToken("test"), hcloud.WithEndpoint(srv.URL)),
+	}
+
+	images, err := p.ListImages()
+	assert.Error(t, err)
+	assert.Nil(t, images)
+}
+
 func TestCloudImage_Fields(t *testing.T) {
 	img := CloudImage{
 		Name:        "debian-12",
