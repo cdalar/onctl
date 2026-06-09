@@ -535,8 +535,13 @@ func (p ProviderHetzner) ListImages() ([]CloudImage, error) {
 	if err != nil {
 		return nil, err
 	}
+	seen := make(map[string]bool)
 	result := make([]CloudImage, 0, len(images))
 	for _, img := range images {
+		if seen[img.Name] {
+			continue
+		}
+		seen[img.Name] = true
 		result = append(result, CloudImage{
 			Name:        img.Name,
 			Description: img.Description,
