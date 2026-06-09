@@ -67,6 +67,20 @@ func (v Vm) String() string {
 	return ret
 }
 
+type CloudImage struct {
+	Name        string
+	Description string
+	Type        string
+	OSFlavor    string
+	OSVersion   string
+}
+
+// ImageLister is an optional interface for providers that support listing
+// available OS images. Not all providers implement this.
+type ImageLister interface {
+	ListImages() ([]CloudImage, error)
+}
+
 type CloudProviderInterface interface {
 	// Deploy deploys a new instance
 	Deploy(Vm) (Vm, error)

@@ -74,6 +74,11 @@ func Execute() error {
 			log.Fatalln(err)
 		}
 	}
+	// images command handles its own provider init to avoid fatal-on-missing-credentials
+	// for providers that don't support image listing.
+	if len(os.Args) > 1 && os.Args[1] == "images" {
+		return rootCmd.Execute()
+	}
 	switch cloudProvider {
 	case "hetzner":
 		provider = &cloud.ProviderHetzner{
