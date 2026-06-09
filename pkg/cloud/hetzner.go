@@ -44,13 +44,19 @@ func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 		serverType = p.Config.VMType
 	}
 
+	// Use server.Image if provided, otherwise fall back to config
+	image := server.Image
+	if image == "" {
+		image = p.Config.Image
+	}
+
 	result, _, err := p.Client.Server.Create(context.TODO(), hcloud.ServerCreateOpts{
 		Name: server.Name,
 		Location: &hcloud.Location{
 			Name: p.Config.Location,
 		},
 		Image: &hcloud.Image{
-			Name: p.Config.Image,
+			Name: image,
 		},
 		ServerType: &hcloud.ServerType{
 			Name: serverType,

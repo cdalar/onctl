@@ -68,6 +68,7 @@ func init() {
 	createCmd.Flags().StringVar(&opt.Domain, "domain", "", "request a domain name for the VM")
 	createCmd.Flags().StringSliceVarP(&opt.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
 	createCmd.Flags().StringVarP(&opt.ConfigFile, "file", "f", "", "Path to configuration YAML file")
+	createCmd.Flags().StringVar(&opt.Vm.Image, "image", "", "OS image to use (e.g. ubuntu-22.04, fedora-42)")
 	// Register create command at root level for convenience
 	rootCmd.AddCommand(createCmd)
 	createCmd.SetUsageTemplate(createCmd.UsageTemplate() + `
@@ -96,6 +97,9 @@ var createCmd = &cobra.Command{
 
 			// Use the new MergeConfig function
 			MergeConfig(&opt, config)
+		}
+		if opt.Vm.Image != "" && cloudProvider != "hetzner" {
+			log.Fatalf("--image flag is only supported for the hetzner provider (current provider: %s)", cloudProvider)
 		}
 		s := ui.New() // Build our new spinner
 		s.Start()

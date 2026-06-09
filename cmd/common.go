@@ -410,6 +410,9 @@ func MergeConfig(opt *cmdCreateOptions, config *cmdCreateOptions) {
 	if opt.Vm.Type == "" && config.Vm.Type != "" {
 		opt.Vm.Type = config.Vm.Type
 	}
+	if opt.Vm.Image == "" && config.Vm.Image != "" {
+		opt.Vm.Image = config.Vm.Image
+	}
 	if opt.Vm.SSHPort == 22 && config.Vm.SSHPort != 0 { // Default SSH port is 22
 		opt.Vm.SSHPort = config.Vm.SSHPort
 	}

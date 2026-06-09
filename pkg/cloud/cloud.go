@@ -30,6 +30,8 @@ type Vm struct {
 	PrivateIP string
 	// Type is the type of the instance
 	Type string `yaml:"type"`
+	// Image is the OS image to use for the instance
+	Image string `yaml:"image"`
 	// Status is the status of the instance
 	Status string
 	// Location is the location of the instance
