@@ -141,44 +141,55 @@ func (p ProviderGcp) Resume(server Vm) (Vm, error) {
 func (p ProviderGcp) Deploy(server Vm) (Vm, error) {
 
 	machineType := fmt.Sprintf("zones/%s/machineTypes/%s", viper.GetString("gcp.zone"), viper.GetString("gcp.type"))
-	op, err := p.Client.Insert(context.Background(), &computepb.InsertInstanceRequest{
-		Project: viper.GetString("gcp.project"),
-		Zone:    viper.GetString("gcp.zone"),
-		InstanceResource: &computepb.Instance{
-			Name:        &server.Name,
-			MachineType: &machineType,
-			Metadata: &computepb.Metadata{
-				Items: []*computepb.Items{
-					{
-						Key:   to.Ptr("ssh-keys"),
-						Value: to.Ptr(fmt.Sprintf("%s:%s", viper.GetString("gcp.vm.username"), string(publicKey))),
-					},
-					{
-						Key:   to.Ptr("user-data"),
-						Value: to.Ptr(tools.FileToBase64(server.CloudInitFile)),
-					},
-				},
-			},
-			Disks: []*computepb.AttachedDisk{
+	instance := &computepb.Instance{
+		Name:        &server.Name,
+		MachineType: &machineType,
+		Metadata: &computepb.Metadata{
+			Items: []*computepb.Items{
 				{
-					AutoDelete: to.Ptr(true),
-					Boot:       to.Ptr(true),
-					InitializeParams: &computepb.AttachedDiskInitializeParams{
-						SourceImage: to.Ptr("projects/ubuntu-os-cloud/global/images/ubuntu-2204-jammy-v20240208"),
-					},
+					Key:   to.Ptr("ssh-keys"),
+					Value: to.Ptr(fmt.Sprintf("%s:%s", viper.GetString("gcp.vm.username"), string(publicKey))),
+				},
+				{
+					Key:   to.Ptr("user-data"),
+					Value: to.Ptr(tools.FileToBase64(server.CloudInitFile)),
 				},
 			},
+		},
+		Disks: []*computepb.AttachedDisk{
+			{
+				AutoDelete: to.Ptr(true),
+				Boot:       to.Ptr(true),
+				InitializeParams: &computepb.AttachedDiskInitializeParams{
+					SourceImage: to.Ptr("projects/ubuntu-os-cloud/global/images/ubuntu-2204-jammy-v20240208"),
+				},
+			},
+		},
 
-			NetworkInterfaces: []*computepb.NetworkInterface{
-				{
-					AccessConfigs: []*computepb.AccessConfig{
-						{
-							Name: to.Ptr("External NAT"),
-						},
+		NetworkInterfaces: []*computepb.NetworkInterface{
+			{
+				AccessConfigs: []*computepb.AccessConfig{
+					{
+						Name: to.Ptr("External NAT"),
 					},
 				},
 			},
 		},
+	}
+
+	// Nested virtualization is required to run KVM-based hypervisors (e.g. Firecracker)
+	// on a GCP VM. Only N1/N2/C2 machine types support it, so it's opt-in via config.
+	if viper.GetBool("gcp.vm.nestedVirtualization") {
+		instance.AdvancedMachineFeatures = &computepb.AdvancedMachineFeatures{
+			EnableNestedVirtualization: to.Ptr(true),
+		}
+		instance.MinCpuPlatform = to.Ptr("Intel Haswell")
+	}
+
+	op, err := p.Client.Insert(context.Background(), &computepb.InsertInstanceRequest{
+		Project:          viper.GetString("gcp.project"),
+		Zone:             viper.GetString("gcp.zone"),
+		InstanceResource: instance,
 	})
 	if err != nil {
 		log.Fatalln(err)
