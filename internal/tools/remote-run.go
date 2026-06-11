@@ -107,6 +107,33 @@ func (r *Remote) NewSSHConnection() error {
 	return nil
 }
 
+// WaitForSSH waits until an SSH connection to the remote can be established.
+// It is used by providers (e.g. Firecracker) whose microVMs have no
+// cloud-init readiness signal to wait on.
+func (r *Remote) WaitForSSH(timeout string) {
+	log.Println("[DEBUG] Waiting for SSH to be ready timeout:", timeout)
+
+	duration, err := time.ParseDuration(timeout)
+	if err != nil {
+		log.Fatalf("Invalid timeout value: %v", err)
+	}
+
+	timer := time.After(duration)
+
+	for {
+		select {
+		case <-timer:
+			log.Fatalln("Exiting.. Timeout reached while waiting for SSH on IP " + r.IPAddress + " on port " + strconv.Itoa(r.SSHPort))
+			return
+		default:
+			if err := r.NewSSHConnection(); err == nil {
+				return
+			}
+			time.Sleep(3 * time.Second)
+		}
+	}
+}
+
 // exists returns whether the given file or directory exists
 func exists(path string) (bool, error) {
 	fmt.Println("Checking if ", path, " exists")

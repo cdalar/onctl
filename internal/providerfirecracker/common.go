@@ -267,6 +267,27 @@ func (m ProcessManager) IsRunning(pid int) bool {
 	return process.Signal(syscall.Signal(0)) == nil
 }
 
+// Owns reports whether pid is a firecracker process bound to socketPath, by
+// checking its command line for a "--api-sock socketPath" argument pair.
+// This guards against a persisted PID having been reused by an unrelated
+// host process after a VMM exit or host reboot.
+func (m ProcessManager) Owns(pid int, socketPath string) bool {
+	if pid <= 0 || socketPath == "" {
+		return false
+	}
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+	if err != nil {
+		return false
+	}
+	args := strings.Split(strings.TrimRight(string(data), "\x00"), "\x00")
+	for i, arg := range args {
+		if arg == "--api-sock" && i+1 < len(args) && args[i+1] == socketPath {
+			return true
+		}
+	}
+	return false
+}
+
 // APIClient is the real cloud.FirecrackerAPI implementation.
 type APIClient struct{}
 

@@ -75,6 +75,10 @@ type FirecrackerProcess interface {
 	Stop(pid int) error
 	// IsRunning reports whether a process with the given PID is alive.
 	IsRunning(pid int) bool
+	// Owns reports whether the process with the given PID is the firecracker
+	// VMM bound to socketPath, guarding against a persisted PID having been
+	// reused by an unrelated process after a VMM exit or host reboot.
+	Owns(pid int, socketPath string) bool
 }
 
 // FirecrackerAPI issues runtime control requests to a running firecracker
@@ -435,7 +439,9 @@ func (p ProviderFirecracker) Destroy(server Vm) error {
 		return err
 	}
 	if vm.PID > 0 && p.Process.IsRunning(vm.PID) {
-		if err := p.Process.Stop(vm.PID); err != nil {
+		if !p.Process.Owns(vm.PID, vm.SocketPath) {
+			log.Println("[DEBUG] persisted PID " + fmt.Sprint(vm.PID) + " for " + server.Name + " is no longer the firecracker process for this microVM; skipping stop")
+		} else if err := p.Process.Stop(vm.PID); err != nil {
 			return fmt.Errorf("failed to stop microVM: %w", err)
 		}
 	}

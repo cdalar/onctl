@@ -21,6 +21,7 @@ type fakeFirecrackerProcess struct {
 	startErr   error
 	stopCalls  []int
 	running    map[int]bool
+	notOwned   map[int]bool
 }
 
 func (f *fakeFirecrackerProcess) Start(_ string, _ FirecrackerVMConfig, _ string) (int, error) {
@@ -43,6 +44,10 @@ func (f *fakeFirecrackerProcess) Stop(pid int) error {
 
 func (f *fakeFirecrackerProcess) IsRunning(pid int) bool {
 	return f.running[pid]
+}
+
+func (f *fakeFirecrackerProcess) Owns(pid int, _ string) bool {
+	return !f.notOwned[pid]
 }
 
 // fakeFirecrackerAPI is a test double for FirecrackerAPI.
@@ -256,6 +261,23 @@ func TestProviderFirecracker_Destroy(t *testing.T) {
 
 	require.NoError(t, p.Destroy(Vm{Name: "test-vm"}))
 	assert.Contains(t, proc.stopCalls, 12345)
+	assert.Contains(t, netMgr.deleted, firecrackerTapName("test-vm"))
+
+	_, statErr := os.Stat(p.vmDir("test-vm"))
+	assert.True(t, os.IsNotExist(statErr))
+}
+
+// TestProviderFirecracker_Destroy_StalePID verifies that Destroy does not
+// signal a running process whose PID was persisted for this microVM but no
+// longer belongs to it (e.g. reused after a host reboot).
+func TestProviderFirecracker_Destroy_StalePID(t *testing.T) {
+	p, proc, _, netMgr, _ := newTestFirecrackerProvider(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	proc.notOwned = map[int]bool{12345: true}
+
+	require.NoError(t, p.Destroy(Vm{Name: "test-vm"}))
+	assert.NotContains(t, proc.stopCalls, 12345)
 	assert.Contains(t, netMgr.deleted, firecrackerTapName("test-vm"))
 
 	_, statErr := os.Stat(p.vmDir("test-vm"))
