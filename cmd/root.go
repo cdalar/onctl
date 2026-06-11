@@ -8,6 +8,7 @@ import (
 
 	"github.com/cdalar/onctl/internal/provideraws"
 	"github.com/cdalar/onctl/internal/providerazure"
+	"github.com/cdalar/onctl/internal/providerfirecracker"
 	"github.com/cdalar/onctl/internal/providergcp"
 	"github.com/cdalar/onctl/internal/providerhtz"
 	"github.com/cdalar/onctl/internal/tools"
@@ -35,7 +36,7 @@ var (
   onctl destroy test`,
 	}
 	cloudProvider     string
-	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp"}
+	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "firecracker"}
 	provider          cloud.CloudProviderInterface
 )
 
@@ -110,6 +111,15 @@ func Execute() error {
 			SSHKeyClient:        providerazure.GetSSHKeyClient(),
 			VnetClient:          providerazure.GetVnetClient(),
 			NSGClient:           providerazure.GetNSGClient(),
+		}
+	case "firecracker":
+		fcConfig := providerfirecracker.GetConfig()
+		provider = &cloud.ProviderFirecracker{
+			Config:  fcConfig,
+			Process: providerfirecracker.NewProcessManager(fcConfig.BinPath),
+			API:     providerfirecracker.NewAPIClient(),
+			Net:     providerfirecracker.NewNetworkManager(),
+			Rootfs:  providerfirecracker.NewRootfsPreparer(),
 		}
 	}
 	return rootCmd.Execute()

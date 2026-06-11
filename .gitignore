@@ -3,6 +3,7 @@ onctl.exe
 onctl
 onctl-deploy.json
 onctl-linux
+onctl-amd64
 ip.txt
 tmp/*
 .env*
