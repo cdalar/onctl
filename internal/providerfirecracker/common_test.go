@@ -309,6 +309,36 @@ func TestProcessManager_StartStopIsRunning(t *testing.T) {
 	assert.False(t, pm.IsRunning(pid))
 }
 
+func TestProcessManager_Owns(t *testing.T) {
+	pm := ProcessManager{}
+	assert.False(t, pm.Owns(0, "/tmp/api.sock"))
+	assert.False(t, pm.Owns(1234, ""))
+	assert.False(t, pm.Owns(999999999, "/tmp/api.sock"))
+
+	if _, err := os.Stat("/proc/self/cmdline"); err != nil {
+		t.Skip("/proc/<pid>/cmdline not available on this platform")
+	}
+
+	dir, err := os.MkdirTemp("", "fcowns")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "api.sock")
+
+	cmd := exec.Command(os.Args[0], "--api-sock", sock)
+	cmd.Env = append(os.Environ(), fakeFirecrackerEnv+"=1")
+	require.NoError(t, cmd.Start())
+	pid := cmd.Process.Pid
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+
+	require.NoError(t, waitForSocket(sock, 5*time.Second))
+
+	assert.True(t, pm.Owns(pid, sock))
+	assert.False(t, pm.Owns(pid, filepath.Join(dir, "other.sock")))
+}
+
 func TestNewAPIClient(t *testing.T) {
 	assert.Equal(t, APIClient{}, NewAPIClient())
 }
