@@ -23,6 +23,23 @@ import (
 	"github.com/spf13/viper"
 )
 
+// expandHome expands a leading "~" or "~/" in path to the user's home
+// directory. Config values come from a YAML file, so the shell never gets a
+// chance to expand "~" itself.
+func expandHome(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	if path == "~" {
+		return home
+	}
+	if strings.HasPrefix(path, "~/") {
+		return filepath.Join(home, path[2:])
+	}
+	return path
+}
+
 // GetConfig reads firecracker.* settings from viper, applying defaults for
 // anything that isn't set.
 func GetConfig() cloud.FirecrackerConfig {
@@ -31,6 +48,8 @@ func GetConfig() cloud.FirecrackerConfig {
 		if home, err := os.UserHomeDir(); err == nil {
 			stateDir = filepath.Join(home, ".onctl", "firecracker")
 		}
+	} else {
+		stateDir = expandHome(stateDir)
 	}
 
 	vcpu := viper.GetInt64("firecracker.vcpuCount")
@@ -59,8 +78,8 @@ func GetConfig() cloud.FirecrackerConfig {
 	}
 
 	return cloud.FirecrackerConfig{
-		KernelImage: viper.GetString("firecracker.kernelImage"),
-		RootfsImage: viper.GetString("firecracker.rootfsImage"),
+		KernelImage: expandHome(viper.GetString("firecracker.kernelImage")),
+		RootfsImage: expandHome(viper.GetString("firecracker.rootfsImage")),
 		KernelArgs:  viper.GetString("firecracker.kernelArgs"),
 		VCPUCount:   vcpu,
 		MemSizeMib:  mem,
@@ -99,7 +118,7 @@ func firecrackerRequest(client *http.Client, method, path string, body any) erro
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("firecracker API %s %s returned %s: %s", method, path, resp.Status, string(respBody))
@@ -186,7 +205,7 @@ func (m ProcessManager) Start(socketPath string, cfg cloud.FirecrackerVMConfig, 
 	if err != nil {
 		return 0, fmt.Errorf("failed to open log file %q: %w", logFile, err)
 	}
-	defer logFd.Close()
+	defer func() { _ = logFd.Close() }()
 
 	cmd := exec.Command(m.BinPath, "--api-sock", socketPath)
 	cmd.Stdout = logFd
@@ -345,13 +364,13 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	_, err = io.Copy(out, in)
 	return err
@@ -370,9 +389,9 @@ func injectSSHKey(rootfsPath, publicKey, username string) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(keyFile.Name())
+	defer func() { _ = os.Remove(keyFile.Name()) }()
 	if _, err := keyFile.WriteString(publicKey + "\n"); err != nil {
-		keyFile.Close()
+		_ = keyFile.Close()
 		return err
 	}
 	if err := keyFile.Close(); err != nil {
@@ -380,16 +399,16 @@ func injectSSHKey(rootfsPath, publicKey, username string) error {
 	}
 
 	script := fmt.Sprintf(
-		"mkdir %s\nwrite %s %s/authorized_keys\nsif %s/authorized_keys mode 0100600\nsif %s mode 040700\n",
-		sshDir, keyFile.Name(), sshDir, sshDir, sshDir,
+		"mkdir %s\nrm %s/authorized_keys\nwrite %s %s/authorized_keys\nsif %s/authorized_keys mode 0100600\nsif %s mode 040700\n",
+		sshDir, sshDir, keyFile.Name(), sshDir, sshDir, sshDir,
 	)
 	scriptFile, err := os.CreateTemp("", "onctl-debugfs-*.script")
 	if err != nil {
 		return err
 	}
-	defer os.Remove(scriptFile.Name())
+	defer func() { _ = os.Remove(scriptFile.Name()) }()
 	if _, err := scriptFile.WriteString(script); err != nil {
-		scriptFile.Close()
+		_ = scriptFile.Close()
 		return err
 	}
 	if err := scriptFile.Close(); err != nil {
