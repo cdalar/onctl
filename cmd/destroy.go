@@ -67,8 +67,8 @@ var destroyCmd = &cobra.Command{
 				wg.Add(1)
 				go func(server cloud.Vm) {
 					defer wg.Done()
-					s.Start()
 					s.Suffix = " Destroying VM..."
+					s.Start()
 					if err := provider.Destroy(server); err != nil {
 						fmt.Println("\033[31m✘\033[0m Could not destroy VM: " + server.Name)
 						log.Println(err)
@@ -89,8 +89,8 @@ var destroyCmd = &cobra.Command{
 					os.Exit(0)
 				}
 			}
-			s.Start()
 			s.Suffix = " Destroying VM..."
+			s.Start()
 			if err := provider.Destroy(cloud.Vm{Name: serverName}); err != nil {
 				s.Stop()
 				fmt.Println("\033[31m✘\033[0m Cannot destroy VM: " + serverName)

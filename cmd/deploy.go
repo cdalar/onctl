@@ -72,8 +72,8 @@ func checkDockerHubImage(image string) bool {
 // runContainer runs a Docker container on the remote VM
 func runContainer(remote tools.Remote, s *ui.Spinner, image string, env []string, name string) {
 	// Step 3: Run Docker container on remote VM
-	s.Restart()
 	s.Suffix = " Starting Docker container on remote VM..."
+	s.Restart()
 
 	// Prepare environment variables
 	envVars := ""
@@ -143,8 +143,8 @@ func runContainer(remote tools.Remote, s *ui.Spinner, image string, env []string
 	fmt.Printf("\033[32m\u2714\033[0m Docker container started successfully (ID: %s)\033[?25h\n", containerID)
 
 	// Step 4: Clean up uploaded tar file (only if it exists)
-	s.Restart()
 	s.Suffix = " Cleaning up temporary files..."
+	s.Restart()
 
 	cleanupCmd := "rm image.tar.gz 2>/dev/null || true"
 	_, err = remote.RemoteRun(&tools.RemoteRunConfig{
@@ -412,16 +412,16 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 					filled := int(float64(current) / float64(total) * float64(progressBarWidth))
 					bar := strings.Repeat("█", filled) + strings.Repeat("░", progressBarWidth-filled)
 
-					s.Suffix = fmt.Sprintf(" Uploading... %.1f%% [%s] (%.1f/%.1f MB) %.1f MBit/s",
-						percentage, bar, float64(current)/(1024*1024), fileSizeMB, mbitsPerSecond)
+					s.SetSuffix(fmt.Sprintf(" Uploading... %.1f%% [%s] (%.1f/%.1f MB) %.1f MBit/s",
+						percentage, bar, float64(current)/(1024*1024), fileSizeMB, mbitsPerSecond))
 				} else {
 					// First callback, speed not yet available
 					progressBarWidth := 20
 					filled := int(float64(current) / float64(total) * float64(progressBarWidth))
 					bar := strings.Repeat("█", filled) + strings.Repeat("░", progressBarWidth-filled)
 
-					s.Suffix = fmt.Sprintf(" Uploading... %.1f%% [%s] (%.1f/%.1f MB)",
-						percentage, bar, float64(current)/(1024*1024), fileSizeMB)
+					s.SetSuffix(fmt.Sprintf(" Uploading... %.1f%% [%s] (%.1f/%.1f MB)",
+						percentage, bar, float64(current)/(1024*1024), fileSizeMB))
 				}
 			}
 
@@ -448,8 +448,8 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 			fmt.Println("\033[32m\u2714\033[0m Docker image uploaded to remote VM\033[?25h")
 
 			// Step 4: Load Docker image on remote VM
-			s.Restart()
 			s.Suffix = " Loading Docker image on remote VM..."
+			s.Restart()
 
 			loadCmd := "gunzip -c image.tar.gz | docker load"
 			_, err = remote.RemoteRun(&tools.RemoteRunConfig{

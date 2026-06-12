@@ -165,8 +165,8 @@ var sshCmd = &cobra.Command{
 
 		// BEGIN Apply File
 		for i, applyFile := range applyFileFound {
-			s.Restart()
 			s.Suffix = " Running " + sshOpt.ApplyFiles[i] + " on Remote..."
+			s.Restart()
 
 			err = remote.CopyAndRunRemoteFile(&tools.CopyAndRunRemoteFileConfig{
 				File: applyFile,
