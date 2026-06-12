@@ -31,10 +31,16 @@ func (m model) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
+// suffixMsg updates the spinner suffix while the program is running
+type suffixMsg string
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg.(type) {
+	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m, tea.Quit
+	case suffixMsg:
+		m.suffix = string(msg)
+		return m, nil
 	default:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -136,7 +142,7 @@ func (s *Spinner) SetSuffix(suffix string) {
 	s.model.suffix = suffix
 
 	if s.isRunning && s.program != nil {
-		s.program.Send(s.model)
+		s.program.Send(suffixMsg(suffix))
 	}
 }
 

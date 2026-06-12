@@ -102,8 +102,8 @@ var createCmd = &cobra.Command{
 			log.Fatalf("--image flag is only supported for the hetzner provider (current provider: %s)", cloudProvider)
 		}
 		s := ui.New() // Build our new spinner
-		s.Start()
 		s.Suffix = " Checking vm..."
+		s.Start()
 		list, err := provider.List()
 		if err != nil {
 			s.Stop()
@@ -123,8 +123,8 @@ var createCmd = &cobra.Command{
 
 		// Check Domain Env
 		if opt.Domain != "" {
-			s.Start()
 			s.Suffix = " --domain flag is set... Checking Domain Env..."
+			s.Start()
 			err := domain.NewCloudFlareService().CheckEnv()
 			if err != nil {
 				s.Stop()
@@ -142,8 +142,8 @@ var createCmd = &cobra.Command{
 		log.Println("[DEBUG] publicKeyFile: ", publicKeyFile)
 		log.Println("[DEBUG] privateKeyFile: ", privateKeyFile)
 		fmt.Println("\033[32m✔\033[0m Using Public Key:", publicKeyFile)
-		s.Start()
 		s.Suffix = " Checking SSH Keys..."
+		s.Start()
 		opt.Vm.SSHKeyID, err = provider.CreateSSHKey(publicKeyFile)
 		if err != nil {
 			s.Stop()
@@ -163,18 +163,16 @@ var createCmd = &cobra.Command{
 				opt.Vm.Name = tools.GenerateMachineUniqueName()
 			}
 		}
-		s.Restart()
 		s.Suffix = " VM Starting..."
+		s.Restart()
 		// END Set VM Name
 
 		vm, err := provider.Deploy(opt.Vm)
 		if err != nil {
 			log.Println(err)
 		}
-		s.Restart()
-		s.Suffix = " VM IP: " + vm.IP
 		s.Stop()
-		fmt.Println("\033[32m✔\033[0m" + s.Suffix)
+		fmt.Println("\033[32m✔\033[0m VM IP: " + vm.IP)
 
 		log.Println("[DEBUG] Vm:" + vm.String())
 		privateKey, err := os.ReadFile(privateKeyFile)
@@ -197,8 +195,8 @@ var createCmd = &cobra.Command{
 
 		// BEGIN Domain
 		if opt.Domain != "" {
-			s.Restart()
 			s.Suffix = " Requesting Domain..."
+			s.Restart()
 			_, err := domain.NewCloudFlareService().SetRecord(&domain.SetRecordRequest{
 				Subdomain: opt.Domain,
 				Ipaddress: vm.IP,
@@ -213,15 +211,15 @@ var createCmd = &cobra.Command{
 		}
 
 		if cloudProvider != "firecracker" {
-			s.Restart()
 			s.Suffix = " Waiting for VM to be ready..."
+			s.Restart()
 			remote.WaitForCloudInit(viper.GetString("vm.cloud-init.timeout"))
 			s.Stop()
 			fmt.Println("\033[32m✔\033[0m VM is Ready")
 			log.Println("[DEBUG] cloud-init finished")
 		} else {
-			s.Restart()
 			s.Suffix = " Waiting for SSH to be ready..."
+			s.Restart()
 			remote.WaitForSSH(viper.GetString("vm.cloud-init.timeout"))
 			s.Stop()
 			fmt.Println("\033[32m✔\033[0m VM is Ready")
@@ -229,8 +227,8 @@ var createCmd = &cobra.Command{
 		}
 		// END Cloud-init
 
-		s.Restart()
 		s.Suffix = " Configuring VM..."
+		s.Restart()
 		if opt.DotEnvFile != "" {
 			dotEnvVars, err := tools.ParseDotEnvFile(opt.DotEnvFile)
 			if err != nil {
@@ -246,8 +244,8 @@ var createCmd = &cobra.Command{
 
 		// BEGIN Apply File
 		for i, applyFile := range applyFileFound {
-			s.Restart()
 			s.Suffix = " Running " + opt.ApplyFiles[i] + " on Remote..."
+			s.Restart()
 
 			err = remote.CopyAndRunRemoteFile(&tools.CopyAndRunRemoteFileConfig{
 				File: applyFile,
