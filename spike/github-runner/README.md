@@ -53,6 +53,6 @@ boot-to-job-pickup time.
 
 - Registration tokens are short-lived and single-purpose; nothing reusable is
   left on the VM. The product version (Phase 1) switches to JIT config, which
-  is stricter still.
+  is stricter still — see [PHASE1.md](PHASE1.md) for the plan.
 - `SKIP_DOCKER=1` (via `-e`) skips docker install to isolate its cost when
   comparing against a prebaked image.
