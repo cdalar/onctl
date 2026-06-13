@@ -1,0 +1,16 @@
+# Commit this to the test repo as .github/workflows/onctl-test.yml
+name: onctl-runner-test
+on: workflow_dispatch
+jobs:
+  smoke:
+    runs-on: [self-hosted, onctl]
+    steps:
+      - uses: actions/checkout@v4
+      - name: machine info
+        run: |
+          echo "running on $(hostname)"
+          uname -a
+          nproc
+          free -h
+      - name: docker works
+        run: docker run --rm hello-world
