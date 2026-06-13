@@ -300,6 +300,71 @@ func TestGetSSHKeyFilePaths(t *testing.T) {
 	}
 }
 
+func TestDirSize(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "dirsize-test-")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Top-level file
+	if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("12345"), 0o600); err != nil {
+		t.Fatalf("Failed to write file1: %v", err)
+	}
+
+	// Nested directory with a file
+	subDir := filepath.Join(tmpDir, "subdir")
+	if err := os.Mkdir(subDir, 0o755); err != nil {
+		t.Fatalf("Failed to create subdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(subDir, "file2.txt"), []byte("1234567890"), 0o600); err != nil {
+		t.Fatalf("Failed to write file2: %v", err)
+	}
+
+	size, err := dirSize(tmpDir)
+	if err != nil {
+		t.Fatalf("dirSize returned error: %v", err)
+	}
+
+	expected := int64(len("12345") + len("1234567890"))
+	if size != expected {
+		t.Errorf("Expected size %d, got %d", expected, size)
+	}
+}
+
+func TestDirSize_NonExistentPath(t *testing.T) {
+	_, err := dirSize("/nonexistent/path/for/dirsize-test")
+	if err == nil {
+		t.Error("Expected error for non-existent path, got nil")
+	}
+}
+
+func TestProcessUploadSlice_Directory(t *testing.T) {
+	mockRemote := tools.Remote{
+		Username:   "test",
+		IPAddress:  "127.0.0.1",
+		SSHPort:    22,
+		PrivateKey: "fake-key",
+	}
+
+	tmpDir, err := os.MkdirTemp("", "upload-dir-test-")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("hello"), 0o600); err != nil {
+		t.Fatalf("Failed to write file: %v", err)
+	}
+
+	// Without a real SSH server, SSHUploadDir will fail to connect, but
+	// ProcessUploadSlice should handle that gracefully (log and continue)
+	// rather than panicking.
+	assert.NotPanics(t, func() {
+		ProcessUploadSlice([]string{tmpDir + ":/remote/dir"}, mockRemote)
+	})
+}
+
 func TestProcessUploadSlice(t *testing.T) {
 	// Mock Remote struct
 	mockRemote := tools.Remote{

@@ -3,9 +3,11 @@ package tools
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/pkg/sftp"
 )
@@ -175,6 +177,79 @@ func (r *Remote) SSHCopyFileWithProgress(srcPath, dstPath string, progressCallba
 	}
 
 	return nil
+}
+
+// SSHUploadDir recursively uploads a local directory to a remote path via SFTP.
+// totalBytes should be the pre-calculated total size of the directory for progress reporting.
+func (r *Remote) SSHUploadDir(srcDir, dstDir string, totalBytes int64, progressCallback func(current, total int64)) error {
+	sftpClient, err := r.newSFTPClient(false, true)
+	if err != nil {
+		return fmt.Errorf("failed to create SFTP client for upload: %w", err)
+	}
+	defer func() {
+		if err := sftpClient.Close(); err != nil {
+			log.Printf("Failed to close SFTP client: %v", err)
+		}
+	}()
+
+	var uploadedBytes int64
+	return filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return fmt.Errorf("failed to compute relative path: %w", err)
+		}
+		remotePath := filepath.Join(dstDir, relPath)
+
+		if d.IsDir() {
+			return sftpClient.MkdirAll(remotePath)
+		}
+
+		srcFile, err := os.Open(path)
+		if err != nil {
+			return fmt.Errorf("failed to open %s: %w", path, err)
+		}
+		defer func() {
+			if err := srcFile.Close(); err != nil {
+				log.Printf("Failed to close source file: %v", err)
+			}
+		}()
+
+		dstFile, err := sftpClient.Create(remotePath)
+		if err != nil {
+			return fmt.Errorf("failed to create remote file %s: %w", remotePath, err)
+		}
+		defer func() {
+			if err := dstFile.Close(); err != nil {
+				log.Printf("Failed to close remote file: %v", err)
+			}
+		}()
+
+		buffer := make([]byte, progressCopyBufferSize)
+		for {
+			n, readErr := srcFile.Read(buffer)
+			if n > 0 {
+				written, writeErr := dstFile.Write(buffer[:n])
+				if writeErr != nil {
+					return writeErr
+				}
+				uploadedBytes += int64(written)
+				if progressCallback != nil {
+					progressCallback(uploadedBytes, totalBytes)
+				}
+			}
+			if readErr == io.EOF {
+				break
+			}
+			if readErr != nil {
+				return readErr
+			}
+		}
+		return nil
+	})
 }
 
 func (r *Remote) SCPCopyFileWithProgress(srcPath, dstPath string, progressCallback func(current, total int64)) error {

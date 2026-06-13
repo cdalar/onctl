@@ -160,6 +160,35 @@ func TestSSHCopyFileWithProgress_EmptyFile(t *testing.T) {
 	}
 }
 
+func TestSSHUploadDir_NoSSHConnection(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "scp-upload-dir-")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	if err := os.WriteFile(tmpDir+"/file1.txt", []byte("content"), 0o600); err != nil {
+		t.Fatalf("Failed to write file: %v", err)
+	}
+
+	r := &Remote{
+		Username:   "test",
+		IPAddress:  "127.0.0.1",
+		SSHPort:    22,
+		PrivateKey: "fake-key",
+	}
+
+	// This will fail because we can't actually connect, but should return a
+	// wrapped error rather than panicking.
+	err = r.SSHUploadDir(tmpDir, "/remote/dir", 7, nil)
+	if err == nil {
+		t.Error("Expected error without valid SSH connection, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to create SFTP client for upload") {
+		t.Errorf("Expected specific error message, got: %v", err)
+	}
+}
+
 func TestDownloadFile_NonExistentFile(t *testing.T) {
 	r := &Remote{
 		Username:   "test",

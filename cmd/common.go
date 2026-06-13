@@ -287,6 +287,24 @@ func getSSHKeyFilePaths(filename string) (publicKeyFile, privateKeyFile string) 
 	return publicKeyFile, privateKeyFile
 }
 
+func dirSize(path string) (int64, error) {
+	var size int64
+	err := filepath.WalkDir(path, func(_ string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			info, err := d.Info()
+			if err != nil {
+				return err
+			}
+			size += info.Size()
+		}
+		return nil
+	})
+	return size, err
+}
+
 func ProcessUploadSlice(uploadSlice []string, remote tools.Remote) {
 	if len(uploadSlice) == 0 {
 		return
@@ -316,8 +334,23 @@ func ProcessUploadSlice(uploadSlice []string, remote tools.Remote) {
 			log.Printf("[ERROR] Failed to stat %s: %v", localFile, err)
 			continue
 		}
-		totalBytes := fileInfo.Size()
-		fmt.Printf("Uploading file: %s -> %s (%.1f MB)\n", localFile, remoteFile, float64(totalBytes)/(1024*1024))
+
+		var totalBytes int64
+		if fileInfo.IsDir() {
+			totalBytes, err = dirSize(localFile)
+			if err != nil {
+				log.Printf("[ERROR] Failed to calculate size of %s: %v", localFile, err)
+				continue
+			}
+		} else {
+			totalBytes = fileInfo.Size()
+		}
+
+		if fileInfo.IsDir() {
+			fmt.Printf("Uploading directory: %s -> %s (%.1f MB)\n", localFile, remoteFile, float64(totalBytes)/(1024*1024))
+		} else {
+			fmt.Printf("Uploading file: %s -> %s (%.1f MB)\n", localFile, remoteFile, float64(totalBytes)/(1024*1024))
+		}
 
 		startTime := time.Now()
 		progressCallback := func(current, total int64) {
@@ -342,15 +375,25 @@ func ProcessUploadSlice(uploadSlice []string, remote tools.Remote) {
 			fmt.Printf("\r[%s] %5.1f%% (%.1f/%.1f MB) %.1f MB/s", bar, percentage, float64(current)/(1024*1024), float64(total)/(1024*1024), mbPerSecond)
 		}
 
-		err = remote.SSHCopyFileWithProgress(localFile, remoteFile, progressCallback)
-		if err != nil {
-			fmt.Print("\n")
-			log.Printf("[ERROR] Failed to upload %s: %v", localFile, err)
-			continue
+		if fileInfo.IsDir() {
+			err = remote.SSHUploadDir(localFile, remoteFile, totalBytes, progressCallback)
+			if err != nil {
+				fmt.Print("\n")
+				log.Printf("[ERROR] Failed to upload directory %s: %v", localFile, err)
+				continue
+			}
+			progressCallback(totalBytes, totalBytes)
+			fmt.Printf("\n\033[32m\u2714\033[0m Uploaded directory %s\n", remoteFile)
+		} else {
+			err = remote.SSHCopyFileWithProgress(localFile, remoteFile, progressCallback)
+			if err != nil {
+				fmt.Print("\n")
+				log.Printf("[ERROR] Failed to upload %s: %v", localFile, err)
+				continue
+			}
+			progressCallback(totalBytes, totalBytes)
+			fmt.Printf("\n\033[32m\u2714\033[0m Uploaded %s\n", remoteFile)
 		}
-
-		progressCallback(totalBytes, totalBytes)
-		fmt.Printf("\n\033[32m\u2714\033[0m Uploaded %s\n", remoteFile)
 	}
 
 	if spinnerWasActive {
