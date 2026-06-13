@@ -37,7 +37,9 @@ process exits on its own (no service install, no token left behind).
 3. **New bootstrap script** (`github-runner-jit.sh`): drop
    `GH_REPO`/`RUNNER_TOKEN`/`config.sh`/`svc.sh` entirely. Steps: install
    packages, optional docker, download runner binary, then
-   `./run.sh --jitconfig "$JIT_CONFIG"` in the foreground.
+   `./run.sh --jitconfig "$JIT_CONFIG"` in the background (nohup), so
+   `onctl create` returns immediately as in Phase 0 — the workflow is
+   triggered afterward per the README's manual flow.
 
 4. **Reuse the existing test workflow** (`workflow-onctl-test.yml`) unchanged.
 
