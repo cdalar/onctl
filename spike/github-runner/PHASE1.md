@@ -15,7 +15,7 @@ process exits on its own (no service install, no token left behind).
 | Identity/labels | chosen by `config.sh` on the VM | fixed server-side at `generate-jitconfig` time |
 | Credential on VM | registration token (1h, reusable to re-register) | `encoded_jit_config` (one job, one use) |
 | VM-side steps | download runner, `config.sh --ephemeral`, `svc.sh install/start` | download runner, `run.sh --jitconfig <blob>` |
-| Lifecycle | systemd service, deregisters after 1 job | one-shot foreground process, exits after 1 job |
+| Lifecycle | systemd service, deregisters after 1 job | backgrounded one-shot process, exits after 1 job |
 
 ## Steps
 
@@ -55,13 +55,26 @@ process exits on its own (no service install, no token left behind).
 - Provision time and pickup latency comparable to Phase 0 (~1m / ~few sec).
 - Runner process exits after the job with nothing left running.
 
-## Open questions / risks
+## Results
 
-- `runner_group_id`: `1` is the default "Default" group for repo-level
-  runners, but confirm the API accepts/needs it for a plain repo (not an
-  org) — let the first test call surface this.
-- Token scope for `generate-jitconfig` (`administration:write`) may require
-  a dedicated PAT distinct from the `gh auth` session token.
+Tested via `run1.sh` against `cdalar/onctl-runner-test` on Hetzner:
+
+| | Provision time | Pickup latency | Job result |
+|---|---|---|---|
+| Phase 1 (JIT config) | 1m1.9s | ~3s | success |
+
+`runner-spike-jit` came online with labels `self-hosted,onctl`, ran the test
+workflow (checkout + `docker run hello-world`), and deregistered itself after
+the one job (0 runners afterward) — no `config.sh`, no systemd service, no
+reusable credential on the VM. All success criteria met.
+
+## Resolved questions
+
+- `runner_group_id=1` worked as-is for this repo-level runner — no error.
+- The default `gh auth` session token had sufficient scope for
+  `generate-jitconfig`; no separate PAT was needed.
+- The base64 `encoded_jit_config` blob passed through onctl's `-e` flag
+  without truncation.
 
 ## Out of scope
 

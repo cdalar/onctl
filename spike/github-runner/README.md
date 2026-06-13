@@ -49,10 +49,24 @@ boot-to-job-pickup time.
   number a warm pool would deliver.
 - Success criterion: green check + both numbers recorded.
 
+## Results
+
+Both phases hit the success criterion (green check + both numbers recorded)
+on a Hetzner VM via `onctl create`/`onctl destroy`:
+
+| | Provision time | Pickup latency | Job result |
+|---|---|---|---|
+| Phase 0 (`run0.sh`, registration token) | 1m5.4s | ~4s | success |
+| Phase 1 (`run1.sh`, JIT config) | 1m1.9s | ~3s | success |
+
+Both runs registered a runner (`runner-spike` / `runner-spike-jit`), ran
+checkout + `docker run hello-world`, and self-deregistered after the single
+job (0 runners left afterward, no leftover systemd service).
+
 ## Notes
 
 - Registration tokens are short-lived and single-purpose; nothing reusable is
   left on the VM. The product version (Phase 1) switches to JIT config, which
-  is stricter still — see [PHASE1.md](PHASE1.md) for the plan.
+  is stricter still — see [PHASE1.md](PHASE1.md) for the plan and results.
 - `SKIP_DOCKER=1` (via `-e`) skips docker install to isolate its cost when
   comparing against a prebaked image.
