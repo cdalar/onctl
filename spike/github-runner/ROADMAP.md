@@ -14,12 +14,20 @@ This requires a small always-on service (webhook receiver + provisioning
 logic) that doesn't exist yet. This is the actual product; everything else
 below is hardening or optimization around it.
 
+**Status: Phase 2 implements this** — see
+[PHASE2.md](PHASE2.md) and [controller/](controller/). Label-to-template
+mapping beyond a single hardcoded label set/template is still open (#5).
+
 ## 2. Auto-teardown / orphan cleanup
 
 Ephemeral runners deregister themselves from GitHub, but the VM keeps
 running and billing. Need a `workflow_job: completed` handler (plus a
 fallback idle-timeout) that calls `onctl destroy` — otherwise every job
 leaks a VM.
+
+**Status: Phase 2 implements the `workflow_job: completed` handler** — see
+[PHASE2.md](PHASE2.md). A fallback idle-timeout for jobs that never report
+"completed" (e.g. cancelled runs) is still open.
 
 ## 3. GitHub App instead of PAT
 
