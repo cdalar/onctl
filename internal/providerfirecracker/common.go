@@ -210,7 +210,7 @@ func (m ProcessManager) Start(socketPath string, cfg cloud.FirecrackerVMConfig, 
 	cmd := exec.Command(m.BinPath, "--api-sock", socketPath)
 	cmd.Stdout = logFd
 	cmd.Stderr = logFd
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	setSysProcAttr(cmd)
 	if err := cmd.Start(); err != nil {
 		return 0, fmt.Errorf("failed to start %s: %w", m.BinPath, err)
 	}
