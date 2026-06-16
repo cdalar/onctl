@@ -46,7 +46,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release
+          args: release --timeout 120m
         env:
           GITHUB_TOKEN: ${{ secrets.GORELEASER_GH_TOKEN }}
           AC_PASSWORD: ${{ secrets.AC_PASSWORD }}

@@ -13,41 +13,21 @@ before:
 
 builds:
   - binary: onctl
-    id: onctl-linux
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
-    goarch:
-      - amd64
-      - arm64
-    ldflags:
-      - -w -s -X 'github.com/cdalar/onctl/cmd.Version=v{{.Version}}-{{.ShortCommit}}'
-
-  - binary: onctl
-    id: onctl-windows
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - windows
-    goarch:
-      - amd64
-    ldflags:
-      - -w -s -X 'github.com/cdalar/onctl/cmd.Version=v{{.Version}}-{{.ShortCommit}}'
-
-  - binary: onctl
     id: onctl
     env:
       - CGO_ENABLED=0
     goos:
+      - linux
       - darwin
+      - windows
     goarch:
       - amd64
-      - arm64 # M1 Chip
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
     ldflags:
       - -w -s -X 'github.com/cdalar/onctl/cmd.Version=v{{.Version}}-{{.ShortCommit}}'
-    # hooks:
-    #   post: ["gon gon/config-{{.Arch}}.json"]
 
 
 archives:
