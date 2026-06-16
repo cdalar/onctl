@@ -77,7 +77,7 @@ release:
     name: onctl
   prerelease: auto
 
-brews:
+homebrew_casks:
   - repository:
       owner: cdalar
       name: homebrew-tap
