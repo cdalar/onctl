@@ -146,6 +146,7 @@ func (p ProviderProxmox) Destroy(server Vm) error {
 			return err
 		}
 		server.ID = s.ID
+		server.Location = s.Location
 	}
 
 	vmID, err := strconv.ParseUint(server.ID, 10, 32)
@@ -154,7 +155,11 @@ func (p ProviderProxmox) Destroy(server Vm) error {
 	}
 
 	vmRef := pxapi.NewVmRef(pxapi.GuestID(uint32(vmID)))
-	vmRef.SetNode(viper.GetString("proxmox.node"))
+	node := server.Location
+	if node == "" {
+		node = viper.GetString("proxmox.node")
+	}
+	vmRef.SetNode(node)
 
 	ctx := context.Background()
 
