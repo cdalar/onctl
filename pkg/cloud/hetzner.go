@@ -55,9 +55,7 @@ func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 		Location: &hcloud.Location{
 			Name: p.Config.Location,
 		},
-		Image: &hcloud.Image{
-			Name: image,
-		},
+		Image: hcloudImage(image),
 		ServerType: &hcloud.ServerType{
 			Name: serverType,
 		},
@@ -491,6 +489,17 @@ func (p ProviderHetzner) CreateSSHKey(publicKeyFile string) (keyID string, err e
 	}
 	// fmt.Println("DONE")
 	return fmt.Sprint(hkey.ID), nil
+}
+
+// hcloudImage builds an hcloud.Image reference from an image string.
+// Hetzner distinguishes named OS images ("ubuntu-22.04") from snapshots
+// that are referenced by numeric ID. If the string parses as an integer it
+// is treated as a snapshot/backup ID; otherwise it is used as a name.
+func hcloudImage(image string) *hcloud.Image {
+	if id, err := strconv.ParseInt(image, 10, 64); err == nil {
+		return &hcloud.Image{ID: id}
+	}
+	return &hcloud.Image{Name: image}
 }
 
 // mapHetznerServer gets a hcloud.Server and returns a Vm

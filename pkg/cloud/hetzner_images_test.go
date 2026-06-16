@@ -118,3 +118,22 @@ func TestCloudImage_Fields(t *testing.T) {
 
 // compile-time check: ProviderHetzner implements ImageLister.
 var _ ImageLister = ProviderHetzner{}
+
+func TestHcloudImage_NamedImage(t *testing.T) {
+	img := hcloudImage("ubuntu-22.04")
+	assert.Equal(t, int64(0), img.ID)
+	assert.Equal(t, "ubuntu-22.04", img.Name)
+}
+
+func TestHcloudImage_SnapshotID(t *testing.T) {
+	img := hcloudImage("185432")
+	assert.Equal(t, int64(185432), img.ID)
+	assert.Equal(t, "", img.Name)
+}
+
+func TestHcloudImage_NegativeID(t *testing.T) {
+	// negative integers are not valid Hetzner IDs; treat as a name
+	img := hcloudImage("-1")
+	assert.Equal(t, int64(-1), img.ID)
+	assert.Equal(t, "", img.Name)
+}
