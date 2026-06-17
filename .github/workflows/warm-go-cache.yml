@@ -1,0 +1,26 @@
+name: warm-go-cache
+
+on:
+  schedule:
+    - cron: '0 2 */5 * *'  # every 5 days — keeps cache alive under GitHub's 7-day eviction window
+  workflow_dispatch:
+
+jobs:
+  warm:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: true
+      - name: Pre-build stdlib for cross-compile targets
+        run: |
+          GOOS=linux  GOARCH=amd64 go build std &
+          GOOS=linux  GOARCH=arm64 go build std &
+          GOOS=windows GOARCH=amd64 go build std &
+          GOOS=darwin GOARCH=amd64 go build std &
+          wait
