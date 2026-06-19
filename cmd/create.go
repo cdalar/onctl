@@ -153,6 +153,13 @@ var createCmd = &cobra.Command{
 
 			// Use the new MergeConfig function
 			MergeConfig(&opt, config)
+			// AWS reads the image purely through the aws.vm.image viper key
+			// (see provideraws.GetImages), not opt.Vm.Image, so a config-file
+			// vm.image needs to be copied across; the --image flag already
+			// binds to both via viper.BindPFlag.
+			if cloudProvider == "aws" && opt.Vm.Image != "" {
+				viper.Set("aws.vm.image", opt.Vm.Image)
+			}
 		}
 		if opt.Vm.Image != "" && cloudProvider != "hetzner" && cloudProvider != "aws" {
 			log.Fatalf("--image flag is only supported for the hetzner and aws providers (current provider: %s)", cloudProvider)

@@ -117,19 +117,19 @@ func ReadConfig(cloudProvider string) error {
 		return fmt.Errorf("no configuration directory found in current directory or home directory. Please run `onctl init` first")
 	}
 
-	// Set paths for general and cloud provider-specific config
-	configFile := filepath.Join(configDir, cloudProvider+".yaml")
-	log.Println("[DEBUG] Config File Path:", configFile)
-
-	if _, err := os.Stat(configFile); os.IsNotExist(err) {
-		return fmt.Errorf("no configuration file found for %s in %s", cloudProvider, configDir)
-	}
-
 	viper.SetConfigName("onctl") // General config
 	viper.AddConfigPath(configDir)
 
 	if err := viper.ReadInConfig(); err != nil {
 		log.Printf("Failed to read general config: %v", err)
+	}
+
+	// Set path for cloud provider-specific config
+	configFile := filepath.Join(configDir, cloudProvider+".yaml")
+	log.Println("[DEBUG] Config File Path:", configFile)
+
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		return fmt.Errorf("no configuration file found for %s in %s", cloudProvider, configDir)
 	}
 
 	viper.SetConfigName(cloudProvider) // Specific config
