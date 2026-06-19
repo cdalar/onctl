@@ -37,8 +37,8 @@ func TestWhichCloudProvider(t *testing.T) {
 	t.Setenv("HOME", cleanHome)
 	origDir, _ := os.Getwd()
 	tmp := t.TempDir()
-	os.Chdir(tmp)
-	defer os.Chdir(origDir)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { require.NoError(t, os.Chdir(origDir)) }()
 
 	// Clear all cloud provider env vars first
 	envVars := []string{
@@ -95,8 +95,8 @@ func TestDetectCloudProviders(t *testing.T) {
 	t.Setenv("HOME", cleanHome)
 	origDir, _ := os.Getwd()
 	tmp := t.TempDir()
-	os.Chdir(tmp)
-	defer os.Chdir(origDir)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { require.NoError(t, os.Chdir(origDir)) }()
 
 	envVars := []string{
 		"AWS_ACCESS_KEY_ID", "AWS_PROFILE",
