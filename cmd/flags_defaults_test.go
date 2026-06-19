@@ -55,20 +55,38 @@ func TestCreateFlagsBindToViper(t *testing.T) {
 		{"fc-binary", "fc.binPath", "firecracker", "/usr/local/bin/firecracker"},
 		{"vcpu", "fc.vcpuCount", "1", "4"},
 		{"memory", "fc.memSizeMib", "512", "2048"},
+		// AWS (replaces aws.yaml).
+		{"type", "aws.vm.type", "t2.micro", "m5.large"},
+		{"location", "aws.location", "eu-central-1", "us-east-1"},
+		{"username", "aws.vm.username", "ubuntu", "ec2-user"},
 	}
+	// Check every default before mutating any flag. Several keys share a
+	// flag with a different per-provider default (e.g. --type backs both
+	// hetzner.vm.type=cpx21 and aws.vm.type=t2.micro): once a flag is marked
+	// Changed -- even by setting it back to its original value -- viper's
+	// flag layer outranks SetDefault for every key bound to that flag, so
+	// checking defaults and overrides in the same pass would make later
+	// cases see the wrong "default".
 	for _, c := range cases {
-		// Default (flag unchanged) resolves via the binding.
 		assert.Equal(t, c.def, viper.GetString(c.key), "default for %s", c.key)
-		// Override flows through.
+	}
+	assert.Equal(t, "root", viper.GetString("fc.vm.username"))
+
+	for _, c := range cases {
 		assert.NoError(t, createCmd.Flags().Set(c.flag, c.override))
 		assert.Equal(t, c.override, viper.GetString(c.key), "override for %s", c.key)
-		// Restore so other tests see the default again.
 		assert.NoError(t, createCmd.Flags().Set(c.flag, c.def))
 	}
 
-	// The generic --username flag drives the Firecracker microVM user too.
-	assert.Equal(t, "root", viper.GetString("fc.vm.username"))
-	assert.NoError(t, createCmd.Flags().Set("username", "ubuntu"))
-	assert.Equal(t, "ubuntu", viper.GetString("fc.vm.username"))
+	// The generic --username flag drives the Firecracker and AWS users too.
+	assert.NoError(t, createCmd.Flags().Set("username", "admin"))
+	assert.Equal(t, "admin", viper.GetString("fc.vm.username"))
+	assert.Equal(t, "admin", viper.GetString("aws.vm.username"))
+
+	// Restore the shared flags to their own intrinsic defaults (not
+	// whichever per-provider case happened to run last) so sibling tests in
+	// this package see the same state as before this test ran.
+	assert.NoError(t, createCmd.Flags().Set("type", "cpx21"))
+	assert.NoError(t, createCmd.Flags().Set("location", "fsn1"))
 	assert.NoError(t, createCmd.Flags().Set("username", "root"))
 }

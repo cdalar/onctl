@@ -96,9 +96,17 @@ func init() {
 	_ = viper.BindPFlag("hetzner.location", createCmd.Flags().Lookup("location"))
 	_ = viper.BindPFlag("hetzner.vm.username", createCmd.Flags().Lookup("username"))
 	_ = viper.BindPFlag("vm.cloud-init.timeout", createCmd.Flags().Lookup("cloud-init-timeout"))
-	// --image keeps an empty flag default (so the non-hetzner guard below and
+	// --image keeps an empty flag default (so the image guard below and
 	// opt.Vm.Image stay empty when unset); viper supplies the real default.
 	_ = viper.BindPFlag("hetzner.vm.image", createCmd.Flags().Lookup("image"))
+
+	// AWS. Same generic flags, bound to the aws.* keys read by
+	// provideraws/pkg/cloud/aws.go. Defaults match the previous aws.yaml; see
+	// setDefaults() in common.go.
+	_ = viper.BindPFlag("aws.vm.type", createCmd.Flags().Lookup("type"))
+	_ = viper.BindPFlag("aws.location", createCmd.Flags().Lookup("location"))
+	_ = viper.BindPFlag("aws.vm.username", createCmd.Flags().Lookup("username"))
+	_ = viper.BindPFlag("aws.vm.image", createCmd.Flags().Lookup("image"))
 
 	// Firecracker-specific flags. These replace the embedded fc.yaml
 	// written by `onctl init`: each is bound to the fc.* key read by
@@ -145,9 +153,16 @@ var createCmd = &cobra.Command{
 
 			// Use the new MergeConfig function
 			MergeConfig(&opt, config)
+			// AWS reads the image purely through the aws.vm.image viper key
+			// (see provideraws.GetImages), not opt.Vm.Image, so a config-file
+			// vm.image needs to be copied across; the --image flag already
+			// binds to both via viper.BindPFlag.
+			if cloudProvider == "aws" && opt.Vm.Image != "" {
+				viper.Set("aws.vm.image", opt.Vm.Image)
+			}
 		}
-		if opt.Vm.Image != "" && cloudProvider != "hetzner" {
-			log.Fatalf("--image flag is only supported for the hetzner provider (current provider: %s)", cloudProvider)
+		if opt.Vm.Image != "" && cloudProvider != "hetzner" && cloudProvider != "aws" {
+			log.Fatalf("--image flag is only supported for the hetzner and aws providers (current provider: %s)", cloudProvider)
 		}
 		s := ui.New() // Build our new spinner
 		s.Suffix = " Checking vm..."

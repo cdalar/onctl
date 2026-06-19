@@ -48,7 +48,7 @@ func GenerateIDToken() uuid.UUID {
 
 // setDefaults registers built-in defaults for every setting that was
 // previously supplied by the YAML files written by `onctl init`. With these in
-// place onctl works for Hetzner and Firecracker with no .onctl config present; CLI flags and an
+// place onctl works for Hetzner, Firecracker and AWS with no .onctl config present; CLI flags and an
 // existing .onctl config still override them (viper precedence: flag > env >
 // config > default). See ROADMAP/PR: "Remove onctl's YAML config in favor of
 // CLI flags with defaults (Hetzner)".
@@ -63,6 +63,18 @@ func setDefaults() {
 	viper.SetDefault("hetzner.vm.type", "cpx21")
 	viper.SetDefault("hetzner.vm.image", "ubuntu-22.04")
 	viper.SetDefault("hetzner.vm.username", "root")
+	// AWS (was aws.yaml). aws.vm.image is left undefaulted here:
+	// provideraws.GetImages already falls back to the Ubuntu AMI name
+	// pattern when it's empty.
+	viper.SetDefault("aws.location", "eu-central-1")
+	viper.SetDefault("aws.vm.type", "t2.micro")
+	viper.SetDefault("aws.vm.username", "ubuntu")
+	// GCP (was gcp.yaml). gcp.project has no static default: initState()
+	// falls back to `gcloud config get-value project` for it, and fails
+	// fast if that's also empty.
+	viper.SetDefault("gcp.zone", "europe-west4-a")
+	viper.SetDefault("gcp.type", "n1-standard-1")
+	viper.SetDefault("gcp.vm.username", "root")
 	// Firecracker (was fc.yaml). providerfc.GetConfig also
 	// defaults these for direct package use; kept here so the values are part
 	// of the CLI config layer (and so kernelImage/rootfsImage, which GetConfig
@@ -105,19 +117,19 @@ func ReadConfig(cloudProvider string) error {
 		return fmt.Errorf("no configuration directory found in current directory or home directory. Please run `onctl init` first")
 	}
 
-	// Set paths for general and cloud provider-specific config
-	configFile := filepath.Join(configDir, cloudProvider+".yaml")
-	log.Println("[DEBUG] Config File Path:", configFile)
-
-	if _, err := os.Stat(configFile); os.IsNotExist(err) {
-		return fmt.Errorf("no configuration file found for %s in %s", cloudProvider, configDir)
-	}
-
 	viper.SetConfigName("onctl") // General config
 	viper.AddConfigPath(configDir)
 
 	if err := viper.ReadInConfig(); err != nil {
 		log.Printf("Failed to read general config: %v", err)
+	}
+
+	// Set path for cloud provider-specific config
+	configFile := filepath.Join(configDir, cloudProvider+".yaml")
+	log.Println("[DEBUG] Config File Path:", configFile)
+
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		return fmt.Errorf("no configuration file found for %s in %s", cloudProvider, configDir)
 	}
 
 	viper.SetConfigName(cloudProvider) // Specific config
