@@ -146,5 +146,5 @@ func AzureCLISubscriptionID() string {
 // users won't have this set, so an empty result here is expected and not an
 // error on its own.
 func AzureCLIDefaultResourceGroup() string {
-	return runAzCLI("config", "get", "defaults.group", "-o", "tsv")
+	return runAzCLI("config", "get", "defaults.group", "--query", "value", "-o", "tsv")
 }

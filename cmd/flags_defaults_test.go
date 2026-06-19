@@ -12,9 +12,15 @@ import (
 // TestGenericCreateFlagsExist verifies the YAML-replacing flags are registered.
 func TestGenericCreateFlagsExist(t *testing.T) {
 	for _, name := range []string{"type", "location", "username", "cloud-init-timeout", "image",
-		"kernel-image", "rootfs-image", "fc-binary", "vcpu", "memory",
-		"subscription-id", "resource-group"} {
+		"kernel-image", "rootfs-image", "fc-binary", "vcpu", "memory"} {
 		assert.NotNil(t, createCmd.Flags().Lookup(name), "create should have --%s flag", name)
+	}
+	// subscription-id/resource-group are persistent on root (every Azure-touching
+	// command needs them, not just create); createCmd.Flag (singular) resolves
+	// inherited persistent flags without requiring cobra's Execute to have run.
+	for _, name := range []string{"subscription-id", "resource-group"} {
+		assert.NotNil(t, rootCmd.PersistentFlags().Lookup(name), "root should have persistent --%s flag", name)
+		assert.NotNil(t, createCmd.Flag(name), "create should inherit --%s flag", name)
 	}
 	assert.NotNil(t, rootCmd.PersistentFlags().Lookup("provider"), "root should have persistent --provider flag")
 	assert.NotNil(t, actionCmd.Flags().Lookup("github-owner"), "action should have --github-owner flag")
@@ -62,6 +68,11 @@ func TestCreateFlagsBindToViper(t *testing.T) {
 		{"type", "azure.vm.type", "Standard_D4s_v3", "Standard_B2s"},
 		{"location", "azure.location", "westeurope", "northeurope"},
 		{"username", "azure.vm.username", "azureuser", "adminuser"},
+	}
+	// subscription-id/resource-group are persistent on root, not local to
+	// create (see TestGenericCreateFlagsExist), so they're set/restored
+	// through rootCmd.PersistentFlags() below instead of the table above.
+	azureIdentifierCases := []struct{ flag, key, def, override string }{
 		{"subscription-id", "azure.subscriptionId", "", "sub-123"},
 		{"resource-group", "azure.resourceGroup", "", "rg-test"},
 	}
@@ -76,6 +87,9 @@ func TestCreateFlagsBindToViper(t *testing.T) {
 	for _, c := range cases {
 		assert.Equal(t, c.def, viper.GetString(c.key), "default for %s", c.key)
 	}
+	for _, c := range azureIdentifierCases {
+		assert.Equal(t, c.def, viper.GetString(c.key), "default for %s", c.key)
+	}
 	assert.Equal(t, "root", viper.GetString("fc.vm.username"))
 	assert.Equal(t, "azureuser", viper.GetString("azure.vm.username"))
 
@@ -83,6 +97,11 @@ func TestCreateFlagsBindToViper(t *testing.T) {
 		assert.NoError(t, createCmd.Flags().Set(c.flag, c.override))
 		assert.Equal(t, c.override, viper.GetString(c.key), "override for %s", c.key)
 		assert.NoError(t, createCmd.Flags().Set(c.flag, c.def))
+	}
+	for _, c := range azureIdentifierCases {
+		assert.NoError(t, rootCmd.PersistentFlags().Set(c.flag, c.override))
+		assert.Equal(t, c.override, viper.GetString(c.key), "override for %s", c.key)
+		assert.NoError(t, rootCmd.PersistentFlags().Set(c.flag, c.def))
 	}
 
 	// The generic --username flag drives the Firecracker and Azure users too.

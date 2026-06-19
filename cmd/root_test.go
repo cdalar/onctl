@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRootCmd_CommandProperties(t *testing.T) {
@@ -68,25 +69,32 @@ func TestExecute_Function(t *testing.T) {
 	assert.NotNil(t, Execute)
 }
 
+// setAzureIdentifierFlags drives azure.subscriptionId/azure.resourceGroup
+// through the bound --subscription-id/--resource-group flags (persistent on
+// rootCmd, since every Azure-touching command needs them, not just create)
+// rather than viper.Set: viper has no Unset, so a direct Set creates an
+// "override" that outranks the flag binding for the rest of the test
+// binary's life (see find()'s precedence order), permanently breaking any
+// later test -- e.g. TestCreateFlagsBindToViper -- that exercises those same
+// flags.
+func setAzureIdentifierFlags(t *testing.T, subscriptionID, resourceGroup string) {
+	t.Helper()
+	require.NoError(t, rootCmd.PersistentFlags().Set("subscription-id", subscriptionID))
+	require.NoError(t, rootCmd.PersistentFlags().Set("resource-group", resourceGroup))
+}
+
 func TestResolveAzureIdentifiers(t *testing.T) {
-	originalSub := viper.GetString("azure.subscriptionId")
-	originalRG := viper.GetString("azure.resourceGroup")
-	defer func() {
-		viper.Set("azure.subscriptionId", originalSub)
-		viper.Set("azure.resourceGroup", originalRG)
-	}()
+	t.Cleanup(func() { setAzureIdentifierFlags(t, "", "") })
 
 	t.Run("already set", func(t *testing.T) {
-		viper.Set("azure.subscriptionId", "explicit-sub")
-		viper.Set("azure.resourceGroup", "explicit-rg")
+		setAzureIdentifierFlags(t, "explicit-sub", "explicit-rg")
 		assert.NoError(t, resolveAzureIdentifiers())
 		assert.Equal(t, "explicit-sub", viper.GetString("azure.subscriptionId"))
 		assert.Equal(t, "explicit-rg", viper.GetString("azure.resourceGroup"))
 	})
 
 	t.Run("fails clearly when unresolvable", func(t *testing.T) {
-		viper.Set("azure.subscriptionId", "")
-		viper.Set("azure.resourceGroup", "")
+		setAzureIdentifierFlags(t, "", "")
 		t.Setenv("PATH", "") // no az on PATH
 		err := resolveAzureIdentifiers()
 		assert.Error(t, err)
@@ -94,8 +102,7 @@ func TestResolveAzureIdentifiers(t *testing.T) {
 	})
 
 	t.Run("subscriptionId resolved, resourceGroup still required", func(t *testing.T) {
-		viper.Set("azure.subscriptionId", "explicit-sub")
-		viper.Set("azure.resourceGroup", "")
+		setAzureIdentifierFlags(t, "explicit-sub", "")
 		t.Setenv("PATH", "") // no az on PATH
 		err := resolveAzureIdentifiers()
 		assert.Error(t, err)

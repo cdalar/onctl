@@ -126,15 +126,19 @@ func ReadConfig(cloudProvider string) error {
 	configFile := filepath.Join(configDir, cloudProvider+".yaml")
 	log.Println("[DEBUG] Config File Path:", configFile)
 
-	if _, err := os.Stat(configFile); os.IsNotExist(err) {
-		return fmt.Errorf("no configuration file found for %s in %s", cloudProvider, configDir)
-	}
-
 	viper.SetConfigName("onctl") // General config
 	viper.AddConfigPath(configDir)
 
 	if err := viper.ReadInConfig(); err != nil {
 		log.Printf("Failed to read general config: %v", err)
+	}
+
+	// Checked after the general config load (rather than before) so a
+	// provider with no YAML of its own (Hetzner/Firecracker/Azure, which all
+	// have built-in defaults) still picks up shared settings like
+	// ssh.privateKey/ssh.publicKey from .onctl/onctl.yaml.
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		return fmt.Errorf("no configuration file found for %s in %s", cloudProvider, configDir)
 	}
 
 	viper.SetConfigName(cloudProvider) // Specific config

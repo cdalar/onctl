@@ -69,6 +69,11 @@ var (
 	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "fc"}
 	provider          cloud.CloudProviderInterface
 	providerFlag      string
+	// Azure identity flags bound to azure.* viper keys (see init below).
+	// Persistent (not create-only): resolveAzureIdentifiers runs for every
+	// Azure-touching command (ls, ssh, destroy, ...), not just create.
+	flagAzureSubscriptionID string
+	flagAzureResourceGroup  string
 )
 
 func checkCloudProvider() string {
@@ -215,6 +220,10 @@ func initProvider(cloudProvider string) {
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&providerFlag, "provider", "p", "", "cloud provider: "+strings.Join(cloudProviderList, ", ")+" (overrides ONCTL_CLOUD)")
+	rootCmd.PersistentFlags().StringVar(&flagAzureSubscriptionID, "subscription-id", "", "Azure: subscription ID (required for the azure provider; falls back to `az account show`)")
+	rootCmd.PersistentFlags().StringVar(&flagAzureResourceGroup, "resource-group", "", "Azure: resource group (required for the azure provider; falls back to the az CLI's configured default group, if any)")
+	_ = viper.BindPFlag("azure.subscriptionId", rootCmd.PersistentFlags().Lookup("subscription-id"))
+	_ = viper.BindPFlag("azure.resourceGroup", rootCmd.PersistentFlags().Lookup("resource-group"))
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(initCmd)
 }
