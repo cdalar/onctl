@@ -74,6 +74,10 @@ var sshCmd = &cobra.Command{
 	TraverseChildren:      true,
 	DisableFlagsInUseLine: true,
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		ensureProvider()
+		if provider == nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
 		VMList, err := provider.List()
 		list := []string{}
 		for _, vm := range VMList.List {

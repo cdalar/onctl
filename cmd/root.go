@@ -44,10 +44,9 @@ var (
 				return nil
 			}
 			switch cmd.Name() {
-			case "init", "version", "help":
+			case "init", "version", "help", "__complete", "__completeNoDesc":
 				return nil
 			}
-			setDefaults()
 			if providerFlag != "" {
 				if !tools.Contains(cloudProviderList, providerFlag) {
 					return fmt.Errorf("unsupported provider %q; use one of: %s", providerFlag, strings.Join(cloudProviderList, ", "))
@@ -56,11 +55,8 @@ var (
 					return err
 				}
 			}
-			cloudProvider = checkCloudProvider()
-			log.Println("[DEBUG] Cloud: " + cloudProvider)
-			// Best-effort: a missing .onctl is fine now that defaults exist.
-			if err := ReadConfig(cloudProvider); err != nil {
-				log.Println("[DEBUG] no config file loaded, using defaults:", err)
+			if err := initState(); err != nil {
+				return err
 			}
 			// The images command initializes its own provider lazily.
 			if cmd.Name() != "images" {
@@ -105,6 +101,40 @@ func checkCloudProvider() string {
 func Execute() error {
 	log.Println("[DEBUG] Args: " + strings.Join(os.Args, ","))
 	return rootCmd.Execute()
+}
+
+// initState resolves the cloud provider and loads its config. Hetzner has
+// built-in defaults (see setDefaults), so a missing .onctl is best-effort
+// there; every other provider still requires its YAML config, so a missing
+// or unreadable config stays a fatal error, matching the pre-flags behavior.
+func initState() error {
+	setDefaults()
+	cloudProvider = checkCloudProvider()
+	log.Println("[DEBUG] Cloud: " + cloudProvider)
+	if err := ReadConfig(cloudProvider); err != nil {
+		if cloudProvider != "hetzner" {
+			return err
+		}
+		log.Println("[DEBUG] no config file loaded, using defaults:", err)
+	}
+	return nil
+}
+
+// ensureProvider builds the provider client if it hasn't been already.
+// Cobra's shell-completion machinery (`__complete`) resolves
+// ValidArgsFunction without running PersistentPreRunE
+// (https://github.com/spf13/cobra/issues/1291), so completion functions that
+// call provider.List() (destroy, ssh) must invoke this themselves, or they'd
+// dereference a nil provider.
+func ensureProvider() {
+	if provider != nil {
+		return
+	}
+	if err := initState(); err != nil {
+		log.Println("[DEBUG] completion: " + err.Error())
+		return
+	}
+	initProvider(cloudProvider)
 }
 
 // initProvider builds the global provider client for the selected cloud.

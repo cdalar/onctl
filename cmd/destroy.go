@@ -27,6 +27,10 @@ var destroyCmd = &cobra.Command{
 	Aliases: []string{"down", "delete", "remove", "rm"},
 	Short:   "Destroy VM(s)",
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		ensureProvider()
+		if provider == nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
 		VMList, err := provider.List()
 		list := []string{}
 		for _, vm := range VMList.List {
