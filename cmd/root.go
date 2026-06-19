@@ -103,16 +103,17 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
-// initState resolves the cloud provider and loads its config. Hetzner has
-// built-in defaults (see setDefaults), so a missing .onctl is best-effort
-// there; every other provider still requires its YAML config, so a missing
-// or unreadable config stays a fatal error, matching the pre-flags behavior.
+// initState resolves the cloud provider and loads its config. Hetzner and fc
+// have built-in defaults (see setDefaults), so a missing .onctl is
+// best-effort for them; every other provider still requires its YAML config,
+// so a missing or unreadable config stays a fatal error, matching the
+// pre-flags behavior.
 func initState() error {
 	setDefaults()
 	cloudProvider = checkCloudProvider()
 	log.Println("[DEBUG] Cloud: " + cloudProvider)
 	if err := ReadConfig(cloudProvider); err != nil {
-		if cloudProvider != "hetzner" {
+		if cloudProvider != "hetzner" && cloudProvider != "fc" {
 			return err
 		}
 		log.Println("[DEBUG] no config file loaded, using defaults:", err)
