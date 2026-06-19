@@ -56,7 +56,7 @@ func parseSSHConfigFile(configFile string) (*cmdSSHOptions, error) {
 
 func init() {
 	sshCmd.Flags().StringVarP(&sshOpt.Key, "key", "k", "", "Path to privateKey file (default: ~/.ssh/id_rsa))")
-	sshCmd.Flags().IntVarP(&sshOpt.Port, "port", "p", 22, "ssh port")
+	sshCmd.Flags().IntVarP(&sshOpt.Port, "port", "P", 22, "ssh port")
 	sshCmd.Flags().StringSliceVarP(&sshOpt.ApplyFiles, "apply-file", "a", []string{}, "bash script file(s) to run on remote")
 	sshCmd.Flags().StringSliceVarP(&sshOpt.DownloadFiles, "download", "d", []string{}, "List of files to download")
 	sshCmd.Flags().StringSliceVarP(&sshOpt.UploadFiles, "upload", "u", []string{}, "List of files to upload")

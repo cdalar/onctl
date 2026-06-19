@@ -25,7 +25,7 @@ func TestActionCmd_HasFlags(t *testing.T) {
 		shorthand string
 		usage     string
 	}{
-		{"params", "p", "JSON parameter file to pass as stdin"},
+		{"params", "j", "JSON parameter file to pass as stdin"},
 	}
 
 	for _, flag := range flags {

@@ -149,7 +149,7 @@ func downloadFile(url, filepath string) error {
 }
 
 func init() {
-	actionCmd.Flags().StringVarP(&actionParamsFile, "params", "p", "", "JSON parameter file to pass as stdin")
+	actionCmd.Flags().StringVarP(&actionParamsFile, "params", "j", "", "JSON parameter file to pass as stdin")
 	actionCmd.Flags().String("github-owner", "cdalar", "GitHub owner/org to download action binaries from")
 	_ = viper.BindPFlag("actions.githubOwner", actionCmd.Flags().Lookup("github-owner"))
 	rootCmd.AddCommand(actionCmd)

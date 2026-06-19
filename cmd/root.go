@@ -185,7 +185,7 @@ func initProvider(cloudProvider string) {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&providerFlag, "provider", "", "cloud provider: "+strings.Join(cloudProviderList, ", ")+" (overrides ONCTL_CLOUD)")
+	rootCmd.PersistentFlags().StringVarP(&providerFlag, "provider", "p", "", "cloud provider: "+strings.Join(cloudProviderList, ", ")+" (overrides ONCTL_CLOUD)")
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(initCmd)
 }

@@ -75,7 +75,7 @@ func init() {
 	createCmd.Flags().StringSliceVarP(&opt.DownloadFiles, "download", "d", []string{}, "List of files to download")
 	createCmd.Flags().StringSliceVarP(&opt.UploadFiles, "upload", "u", []string{}, "List of files to upload")
 	createCmd.Flags().StringVarP(&opt.Vm.Name, "name", "n", "", "vm name")
-	createCmd.Flags().IntVarP(&opt.Vm.SSHPort, "ssh-port", "p", 22, "ssh port")
+	createCmd.Flags().IntVarP(&opt.Vm.SSHPort, "ssh-port", "P", 22, "ssh port")
 	createCmd.Flags().StringVarP(&opt.Vm.CloudInitFile, "cloud-init", "i", "", "cloud-init file")
 	createCmd.Flags().StringVar(&opt.DotEnvFile, "dot-env", "", "dot-env (.env) file")
 	createCmd.Flags().StringVar(&opt.Domain, "domain", "", "request a domain name for the VM")
