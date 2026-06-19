@@ -48,7 +48,7 @@ func GenerateIDToken() uuid.UUID {
 
 // setDefaults registers built-in defaults for every setting that was
 // previously supplied by the YAML files written by `onctl init`. With these in
-// place onctl works for Hetzner and Firecracker with no .onctl config present; CLI flags and an
+// place onctl works for Hetzner, Firecracker and GCP with no .onctl config present; CLI flags and an
 // existing .onctl config still override them (viper precedence: flag > env >
 // config > default). See ROADMAP/PR: "Remove onctl's YAML config in favor of
 // CLI flags with defaults (Hetzner)".
@@ -75,6 +75,12 @@ func setDefaults() {
 	viper.SetDefault("fc.network.bridge", "fcbr0")
 	viper.SetDefault("fc.network.cidr", "172.16.0.1/24")
 	viper.SetDefault("fc.vm.username", "root")
+	// GCP (was gcp.yaml). gcp.project has no static default: initState()
+	// falls back to `gcloud config get-value project` for it, and fails
+	// fast if that's also empty.
+	viper.SetDefault("gcp.zone", "europe-west4-a")
+	viper.SetDefault("gcp.type", "n1-standard-1")
+	viper.SetDefault("gcp.vm.username", "root")
 }
 
 func ReadConfig(cloudProvider string) error {

@@ -103,8 +103,8 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
-// initState resolves the cloud provider and loads its config. Hetzner and fc
-// have built-in defaults (see setDefaults), so a missing .onctl is
+// initState resolves the cloud provider and loads its config. Hetzner, fc and
+// gcp have built-in defaults (see setDefaults), so a missing .onctl is
 // best-effort for them; every other provider still requires its YAML config,
 // so a missing or unreadable config stays a fatal error, matching the
 // pre-flags behavior.
@@ -113,12 +113,32 @@ func initState() error {
 	cloudProvider = checkCloudProvider()
 	log.Println("[DEBUG] Cloud: " + cloudProvider)
 	if err := ReadConfig(cloudProvider); err != nil {
-		if cloudProvider != "hetzner" && cloudProvider != "fc" {
+		if cloudProvider != "hetzner" && cloudProvider != "fc" && cloudProvider != "gcp" {
 			return err
 		}
 		log.Println("[DEBUG] no config file loaded, using defaults:", err)
 	}
+	if cloudProvider == "gcp" {
+		if err := resolveGCPProject(); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// resolveGCPProject fills gcp.project from the gcloud CLI's active project
+// when no flag/env/yaml already set one, and fails clearly if it's still
+// unset (gcp.project has no static default; unlike the other GCP settings,
+// it's account-specific).
+func resolveGCPProject() error {
+	if viper.GetString("gcp.project") != "" {
+		return nil
+	}
+	if project := providergcp.GCloudDefaultProject(); project != "" {
+		viper.SetDefault("gcp.project", project)
+		return nil
+	}
+	return fmt.Errorf(`gcp.project is required: set --project, .onctl/gcp.yaml, or run "gcloud config set project <id>"`)
 }
 
 // ensureProvider builds the provider client if it hasn't been already.

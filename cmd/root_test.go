@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -65,4 +66,23 @@ func TestExecute_Function(t *testing.T) {
 	// We can't actually call it in tests as it would try to read config files
 	// but we can verify it's properly declared
 	assert.NotNil(t, Execute)
+}
+
+func TestResolveGCPProject(t *testing.T) {
+	original := viper.GetString("gcp.project")
+	defer viper.Set("gcp.project", original)
+
+	t.Run("already set", func(t *testing.T) {
+		viper.Set("gcp.project", "explicit-project")
+		assert.NoError(t, resolveGCPProject())
+		assert.Equal(t, "explicit-project", viper.GetString("gcp.project"))
+	})
+
+	t.Run("falls back and fails clearly when unresolvable", func(t *testing.T) {
+		viper.Set("gcp.project", "")
+		t.Setenv("PATH", "") // no gcloud on PATH
+		err := resolveGCPProject()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "gcp.project is required")
+	})
 }

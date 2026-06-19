@@ -47,6 +47,9 @@ var (
 	flagFCBinary      string
 	flagFCVCPU        int64
 	flagFCMemory      int64
+	// GCP-specific flag bound to gcp.project (see init below). This replaces
+	// gcp.yaml's project field, the one GCP setting with no static default.
+	flagGCPProject string
 )
 
 func parseConfigFile(configFile string) (*cmdCreateOptions, error) {
@@ -116,6 +119,15 @@ func init() {
 	_ = viper.BindPFlag("fc.vcpuCount", createCmd.Flags().Lookup("vcpu"))
 	_ = viper.BindPFlag("fc.memSizeMib", createCmd.Flags().Lookup("memory"))
 	_ = viper.BindPFlag("fc.vm.username", createCmd.Flags().Lookup("username"))
+
+	// GCP. Same generic flags, bound to the gcp.* keys read by pkg/cloud/gcp.go.
+	// gcp.project has no static default (see setDefaults() in common.go);
+	// --project replaces it. Defaults for the rest match the previous gcp.yaml.
+	createCmd.Flags().StringVar(&flagGCPProject, "project", "", "GCP: project ID (required for the gcp provider; falls back to `gcloud config get-value project`)")
+	_ = viper.BindPFlag("gcp.project", createCmd.Flags().Lookup("project"))
+	_ = viper.BindPFlag("gcp.zone", createCmd.Flags().Lookup("location"))
+	_ = viper.BindPFlag("gcp.type", createCmd.Flags().Lookup("type"))
+	_ = viper.BindPFlag("gcp.vm.username", createCmd.Flags().Lookup("username"))
 
 	// Register create command at root level for convenience
 	rootCmd.AddCommand(createCmd)
