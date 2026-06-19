@@ -109,7 +109,7 @@ func TestSSHCmd_HasFlags(t *testing.T) {
 		defValue  string
 	}{
 		{"key", "k", "Path to privateKey file (default: ~/.ssh/id_rsa))", ""},
-		{"port", "p", "ssh port", "22"},
+		{"port", "P", "ssh port", "22"},
 		{"apply-file", "a", "bash script file(s) to run on remote", "[]"},
 		{"download", "d", "List of files to download", "[]"},
 		{"upload", "u", "List of files to upload", "[]"},
