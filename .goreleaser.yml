@@ -13,12 +13,28 @@ before:
 
 builds:
   - binary: onctl
+    id: onctl-macos
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -w -s -X 'github.com/cdalar/onctl/cmd.Version=v{{.Version}}-{{.ShortCommit}}'
+    hooks:
+      post:
+        - cmd: quill sign-and-notarize "{{ .Path }}" --dry-run={{ .IsSnapshot }} --ad-hoc={{ .IsSnapshot }} -vv
+          env:
+            - QUILL_LOG_FILE=/tmp/quill-{{ .Target }}.log
+
+  - binary: onctl
     id: onctl
     env:
       - CGO_ENABLED=0
     goos:
       - linux
-      - darwin
       - windows
     goarch:
       - amd64
