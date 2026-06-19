@@ -1,6 +1,0 @@
-hetzner:
-  location: fsn1
-  vm:
-    type: cpx21
-    username: root
-    image: ubuntu-22.04

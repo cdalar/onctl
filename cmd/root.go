@@ -34,10 +34,41 @@ var (
 
   # Destroy a VM
   onctl destroy test`,
+		// PersistentPreRunE runs after cobra parses flags, so flag→viper
+		// bindings (set in each command's init) are in effect before we build
+		// the provider config. init/version/help and the bare root need no
+		// provider, so they are skipped.
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Bare root (no subcommand) and commands that need no provider.
+			if cmd.Parent() == nil {
+				return nil
+			}
+			switch cmd.Name() {
+			case "init", "version", "help", "__complete", "__completeNoDesc":
+				return nil
+			}
+			if providerFlag != "" {
+				if !tools.Contains(cloudProviderList, providerFlag) {
+					return fmt.Errorf("unsupported provider %q; use one of: %s", providerFlag, strings.Join(cloudProviderList, ", "))
+				}
+				if err := os.Setenv("ONCTL_CLOUD", providerFlag); err != nil {
+					return err
+				}
+			}
+			if err := initState(); err != nil {
+				return err
+			}
+			// The images command initializes its own provider lazily.
+			if cmd.Name() != "images" {
+				initProvider(cloudProvider)
+			}
+			return nil
+		},
 	}
 	cloudProvider     string
 	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "firecracker"}
 	provider          cloud.CloudProviderInterface
+	providerFlag      string
 )
 
 func checkCloudProvider() string {
@@ -64,22 +95,50 @@ func checkCloudProvider() string {
 	return cloudProvider
 }
 
-// Execute executes the root command.
+// Execute executes the root command. Provider selection and config loading now
+// happen in rootCmd.PersistentPreRunE (after flag parsing) so CLI flags can
+// override config values.
 func Execute() error {
 	log.Println("[DEBUG] Args: " + strings.Join(os.Args, ","))
-	if len(os.Args) > 1 && os.Args[1] != "init" && os.Args[1] != "version" {
-		cloudProvider = checkCloudProvider()
-		log.Println("[DEBUG] Cloud: " + cloudProvider)
-		err := ReadConfig(cloudProvider)
-		if err != nil {
-			log.Fatalln(err)
+	return rootCmd.Execute()
+}
+
+// initState resolves the cloud provider and loads its config. Hetzner has
+// built-in defaults (see setDefaults), so a missing .onctl is best-effort
+// there; every other provider still requires its YAML config, so a missing
+// or unreadable config stays a fatal error, matching the pre-flags behavior.
+func initState() error {
+	setDefaults()
+	cloudProvider = checkCloudProvider()
+	log.Println("[DEBUG] Cloud: " + cloudProvider)
+	if err := ReadConfig(cloudProvider); err != nil {
+		if cloudProvider != "hetzner" {
+			return err
 		}
+		log.Println("[DEBUG] no config file loaded, using defaults:", err)
 	}
-	// images command handles its own provider init to avoid fatal-on-missing-credentials
-	// for providers that don't support image listing.
-	if len(os.Args) > 1 && os.Args[1] == "images" {
-		return rootCmd.Execute()
+	return nil
+}
+
+// ensureProvider builds the provider client if it hasn't been already.
+// Cobra's shell-completion machinery (`__complete`) resolves
+// ValidArgsFunction without running PersistentPreRunE
+// (https://github.com/spf13/cobra/issues/1291), so completion functions that
+// call provider.List() (destroy, ssh) must invoke this themselves, or they'd
+// dereference a nil provider.
+func ensureProvider() {
+	if provider != nil {
+		return
 	}
+	if err := initState(); err != nil {
+		log.Println("[DEBUG] completion: " + err.Error())
+		return
+	}
+	initProvider(cloudProvider)
+}
+
+// initProvider builds the global provider client for the selected cloud.
+func initProvider(cloudProvider string) {
 	switch cloudProvider {
 	case "hetzner":
 		provider = &cloud.ProviderHetzner{
@@ -122,10 +181,10 @@ func Execute() error {
 			Rootfs:  providerfirecracker.NewRootfsPreparer(),
 		}
 	}
-	return rootCmd.Execute()
 }
 
 func init() {
+	rootCmd.PersistentFlags().StringVar(&providerFlag, "provider", "", "cloud provider: "+strings.Join(cloudProviderList, ", ")+" (overrides ONCTL_CLOUD)")
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(initCmd)
 }
