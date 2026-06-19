@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   goreleaser:
-    runs-on: macos-latest
+    runs-on: [self-hosted, macOS, ARM64]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
