@@ -40,6 +40,13 @@ var (
 	flagLocation         string
 	flagUsername         string
 	flagCloudInitTimeout string
+	// Firecracker-specific flags bound to fc.* viper keys (see init
+	// below). These replace the embedded fc.yaml from `onctl init`.
+	flagFCKernelImage string
+	flagFCRootfsImage string
+	flagFCBinary      string
+	flagFCVCPU        int64
+	flagFCMemory      int64
 )
 
 func parseConfigFile(configFile string) (*cmdCreateOptions, error) {
@@ -92,6 +99,23 @@ func init() {
 	// --image keeps an empty flag default (so the non-hetzner guard below and
 	// opt.Vm.Image stay empty when unset); viper supplies the real default.
 	_ = viper.BindPFlag("hetzner.vm.image", createCmd.Flags().Lookup("image"))
+
+	// Firecracker-specific flags. These replace the embedded fc.yaml
+	// written by `onctl init`: each is bound to the fc.* key read by
+	// providerfc.GetConfig, with defaults matching the old YAML so
+	// behavior is identical with no config present. See setDefaults() in
+	// common.go. The generic --username flag also drives the microVM user.
+	createCmd.Flags().StringVar(&flagFCKernelImage, "kernel-image", "~/.onctl/firecracker/images/vmlinux", "Firecracker: path to the uncompressed kernel (vmlinux)")
+	createCmd.Flags().StringVar(&flagFCRootfsImage, "rootfs-image", "~/.onctl/firecracker/images/rootfs.ext4", "Firecracker: path to the base rootfs (ext4)")
+	createCmd.Flags().StringVar(&flagFCBinary, "fc-binary", "firecracker", "Firecracker: path to the firecracker binary")
+	createCmd.Flags().Int64Var(&flagFCVCPU, "vcpu", 1, "Firecracker: number of vCPUs")
+	createCmd.Flags().Int64Var(&flagFCMemory, "memory", 512, "Firecracker: memory size in MiB")
+	_ = viper.BindPFlag("fc.kernelImage", createCmd.Flags().Lookup("kernel-image"))
+	_ = viper.BindPFlag("fc.rootfsImage", createCmd.Flags().Lookup("rootfs-image"))
+	_ = viper.BindPFlag("fc.binPath", createCmd.Flags().Lookup("fc-binary"))
+	_ = viper.BindPFlag("fc.vcpuCount", createCmd.Flags().Lookup("vcpu"))
+	_ = viper.BindPFlag("fc.memSizeMib", createCmd.Flags().Lookup("memory"))
+	_ = viper.BindPFlag("fc.vm.username", createCmd.Flags().Lookup("username"))
 
 	// Register create command at root level for convenience
 	rootCmd.AddCommand(createCmd)
@@ -234,7 +258,7 @@ var createCmd = &cobra.Command{
 			}
 		}
 
-		if cloudProvider != "firecracker" {
+		if cloudProvider != "fc" {
 			s.Suffix = " Waiting for VM to be ready..."
 			s.Restart()
 			remote.WaitForCloudInit(viper.GetString("vm.cloud-init.timeout"))

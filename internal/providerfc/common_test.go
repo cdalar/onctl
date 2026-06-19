@@ -1,6 +1,6 @@
-package providerfirecracker
+package providerfc
 
-// Tests for providerfirecracker package.
+// Tests for providerfc package.
 
 import (
 	"encoding/json"
@@ -19,22 +19,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeFirecrackerEnv, when set to "1", causes TestMain to turn this test
+// fakeFCEnv, when set to "1", causes TestMain to turn this test
 // binary into a fake firecracker process that serves the API endpoints
 // configureAndBoot relies on. This lets ProcessManager.Start/Stop/IsRunning
 // be exercised end-to-end via os.Args[0] re-exec, the standard pattern for
 // testing exec.Command-based code.
-const fakeFirecrackerEnv = "ONCTL_TEST_FAKE_FIRECRACKER"
+const fakeFCEnv = "ONCTL_TEST_FAKE_FIRECRACKER"
 
 func TestMain(m *testing.M) {
-	if os.Getenv(fakeFirecrackerEnv) == "1" {
-		runFakeFirecracker()
+	if os.Getenv(fakeFCEnv) == "1" {
+		runFakeFC()
 		return
 	}
 	os.Exit(m.Run())
 }
 
-func runFakeFirecracker() {
+func runFakeFC() {
 	var sock string
 	for i, a := range os.Args {
 		if a == "--api-sock" && i+1 < len(os.Args) {
@@ -118,16 +118,16 @@ func TestGetConfig_CustomValues(t *testing.T) {
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
 
-	viper.Set("firecracker.stateDir", "~/custom-state")
-	viper.Set("firecracker.kernelImage", "~/images/vmlinux")
-	viper.Set("firecracker.rootfsImage", "~/images/rootfs.ext4")
-	viper.Set("firecracker.kernelArgs", "console=ttyS0")
-	viper.Set("firecracker.vcpuCount", 4)
-	viper.Set("firecracker.memSizeMib", 2048)
-	viper.Set("firecracker.network.bridge", "mybr0")
-	viper.Set("firecracker.network.cidr", "10.0.0.1/24")
-	viper.Set("firecracker.vm.username", "ubuntu")
-	viper.Set("firecracker.binPath", "/usr/local/bin/firecracker")
+	viper.Set("fc.stateDir", "~/custom-state")
+	viper.Set("fc.kernelImage", "~/images/vmlinux")
+	viper.Set("fc.rootfsImage", "~/images/rootfs.ext4")
+	viper.Set("fc.kernelArgs", "console=ttyS0")
+	viper.Set("fc.vcpuCount", 4)
+	viper.Set("fc.memSizeMib", 2048)
+	viper.Set("fc.network.bridge", "mybr0")
+	viper.Set("fc.network.cidr", "10.0.0.1/24")
+	viper.Set("fc.vm.username", "ubuntu")
+	viper.Set("fc.binPath", "/usr/local/bin/firecracker")
 
 	cfg := GetConfig()
 	assert.Equal(t, filepath.Join(home, "custom-state"), cfg.StateDir)
@@ -147,7 +147,7 @@ func TestUnixHTTPClient(t *testing.T) {
 	assert.Equal(t, 5*time.Second, client.Timeout)
 }
 
-func TestFirecrackerRequest(t *testing.T) {
+func TestFCRequest(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "api.sock")
 
 	mux := http.NewServeMux()
@@ -163,23 +163,23 @@ func TestFirecrackerRequest(t *testing.T) {
 
 	client := unixHTTPClient(sock)
 
-	require.NoError(t, firecrackerRequest(client, http.MethodPut, "/ok", map[string]string{"a": "b"}))
+	require.NoError(t, fcRequest(client, http.MethodPut, "/ok", map[string]string{"a": "b"}))
 
-	err := firecrackerRequest(client, http.MethodPut, "/fail", nil)
+	err := fcRequest(client, http.MethodPut, "/fail", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "boom")
 	assert.Contains(t, err.Error(), "/fail")
 }
 
-func TestFirecrackerRequest_MarshalError(t *testing.T) {
+func TestFCRequest_MarshalError(t *testing.T) {
 	client := unixHTTPClient("/tmp/does-not-matter.sock")
-	err := firecrackerRequest(client, http.MethodPut, "/x", make(chan int))
+	err := fcRequest(client, http.MethodPut, "/x", make(chan int))
 	assert.Error(t, err)
 }
 
-func TestFirecrackerRequest_ConnectionError(t *testing.T) {
+func TestFCRequest_ConnectionError(t *testing.T) {
 	client := unixHTTPClient(filepath.Join(t.TempDir(), "nonexistent.sock"))
-	err := firecrackerRequest(client, http.MethodPut, "/x", nil)
+	err := fcRequest(client, http.MethodPut, "/x", nil)
 	assert.Error(t, err)
 }
 
@@ -201,7 +201,7 @@ func TestConfigureAndBoot(t *testing.T) {
 	mux.HandleFunc("/actions", record("/actions"))
 	startUnixServer(t, sock, mux)
 
-	cfg := cloud.FirecrackerVMConfig{
+	cfg := cloud.FCVMConfig{
 		KernelImage: "/images/vmlinux",
 		KernelArgs:  "console=ttyS0",
 		RootfsPath:  "/vms/test/rootfs.ext4",
@@ -223,7 +223,7 @@ func TestConfigureAndBoot_Error(t *testing.T) {
 	})
 	startUnixServer(t, sock, mux)
 
-	err := configureAndBoot(sock, cloud.FirecrackerVMConfig{})
+	err := configureAndBoot(sock, cloud.FCVMConfig{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "boot-source")
 }
@@ -249,7 +249,7 @@ func TestNewProcessManager(t *testing.T) {
 func TestProcessManager_Start_BinaryNotFound(t *testing.T) {
 	dir := t.TempDir()
 	pm := NewProcessManager(filepath.Join(dir, "no-such-binary"))
-	_, err := pm.Start(filepath.Join(dir, "api.sock"), cloud.FirecrackerVMConfig{}, filepath.Join(dir, "fc.log"))
+	_, err := pm.Start(filepath.Join(dir, "api.sock"), cloud.FCVMConfig{}, filepath.Join(dir, "fc.log"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to start")
 }
@@ -268,10 +268,10 @@ func TestProcessManager_Stop_InvalidPID(t *testing.T) {
 }
 
 // TestProcessManager_StartStopIsRunning re-execs the test binary as a fake
-// firecracker process (see runFakeFirecracker) to exercise Start's full
+// firecracker process (see runFakeFC) to exercise Start's full
 // success path along with Stop and IsRunning.
 func TestProcessManager_StartStopIsRunning(t *testing.T) {
-	t.Setenv(fakeFirecrackerEnv, "1")
+	t.Setenv(fakeFCEnv, "1")
 
 	// Use a short path under os.TempDir() rather than t.TempDir(): the long,
 	// test-name-derived paths from t.TempDir() can exceed the ~104 byte
@@ -281,7 +281,7 @@ func TestProcessManager_StartStopIsRunning(t *testing.T) {
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
 	pm := NewProcessManager(os.Args[0])
-	cfg := cloud.FirecrackerVMConfig{
+	cfg := cloud.FCVMConfig{
 		KernelImage: "/images/vmlinux",
 		RootfsPath:  "/vms/test/rootfs.ext4",
 		VCPUCount:   1,
@@ -327,7 +327,7 @@ func TestProcessManager_Owns(t *testing.T) {
 	sock := filepath.Join(dir, "api.sock")
 
 	cmd := exec.Command(os.Args[0], "--api-sock", sock)
-	cmd.Env = append(os.Environ(), fakeFirecrackerEnv+"=1")
+	cmd.Env = append(os.Environ(), fakeFCEnv+"=1")
 	require.NoError(t, cmd.Start())
 	pid := cmd.Process.Pid
 	t.Cleanup(func() {

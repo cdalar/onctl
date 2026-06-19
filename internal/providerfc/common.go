@@ -1,7 +1,7 @@
-// Package providerfirecracker provides the host-side implementations (process
+// Package providerfc provides the host-side implementations (process
 // management, networking, rootfs preparation and API access) backing
-// cloud.ProviderFirecracker, plus configuration loading from viper.
-package providerfirecracker
+// cloud.ProviderFC, plus configuration loading from viper.
+package providerfc
 
 import (
 	"bytes"
@@ -40,10 +40,10 @@ func expandHome(path string) string {
 	return path
 }
 
-// GetConfig reads firecracker.* settings from viper, applying defaults for
+// GetConfig reads fc.* settings from viper, applying defaults for
 // anything that isn't set.
-func GetConfig() cloud.FirecrackerConfig {
-	stateDir := viper.GetString("firecracker.stateDir")
+func GetConfig() cloud.FCConfig {
+	stateDir := viper.GetString("fc.stateDir")
 	if stateDir == "" {
 		if home, err := os.UserHomeDir(); err == nil {
 			stateDir = filepath.Join(home, ".onctl", "firecracker")
@@ -52,35 +52,35 @@ func GetConfig() cloud.FirecrackerConfig {
 		stateDir = expandHome(stateDir)
 	}
 
-	vcpu := viper.GetInt64("firecracker.vcpuCount")
+	vcpu := viper.GetInt64("fc.vcpuCount")
 	if vcpu == 0 {
 		vcpu = 1
 	}
-	mem := viper.GetInt64("firecracker.memSizeMib")
+	mem := viper.GetInt64("fc.memSizeMib")
 	if mem == 0 {
 		mem = 512
 	}
-	bridge := viper.GetString("firecracker.network.bridge")
+	bridge := viper.GetString("fc.network.bridge")
 	if bridge == "" {
 		bridge = "fcbr0"
 	}
-	cidr := viper.GetString("firecracker.network.cidr")
+	cidr := viper.GetString("fc.network.cidr")
 	if cidr == "" {
 		cidr = "172.16.0.1/24"
 	}
-	username := viper.GetString("firecracker.vm.username")
+	username := viper.GetString("fc.vm.username")
 	if username == "" {
 		username = "root"
 	}
-	binPath := viper.GetString("firecracker.binPath")
+	binPath := viper.GetString("fc.binPath")
 	if binPath == "" {
 		binPath = "firecracker"
 	}
 
-	return cloud.FirecrackerConfig{
-		KernelImage: expandHome(viper.GetString("firecracker.kernelImage")),
-		RootfsImage: expandHome(viper.GetString("firecracker.rootfsImage")),
-		KernelArgs:  viper.GetString("firecracker.kernelArgs"),
+	return cloud.FCConfig{
+		KernelImage: expandHome(viper.GetString("fc.kernelImage")),
+		RootfsImage: expandHome(viper.GetString("fc.rootfsImage")),
+		KernelArgs:  viper.GetString("fc.kernelArgs"),
 		VCPUCount:   vcpu,
 		MemSizeMib:  mem,
 		Bridge:      bridge,
@@ -104,7 +104,7 @@ func unixHTTPClient(socketPath string) *http.Client {
 	}
 }
 
-func firecrackerRequest(client *http.Client, method, path string, body any) error {
+func fcRequest(client *http.Client, method, path string, body any) error {
 	data, err := json.Marshal(body)
 	if err != nil {
 		return err
@@ -128,17 +128,17 @@ func firecrackerRequest(client *http.Client, method, path string, body any) erro
 
 // configureAndBoot configures a freshly started firecracker VMM over its API
 // socket and starts the microVM.
-func configureAndBoot(socketPath string, cfg cloud.FirecrackerVMConfig) error {
+func configureAndBoot(socketPath string, cfg cloud.FCVMConfig) error {
 	client := unixHTTPClient(socketPath)
 
-	if err := firecrackerRequest(client, http.MethodPut, "/boot-source", map[string]string{
+	if err := fcRequest(client, http.MethodPut, "/boot-source", map[string]string{
 		"kernel_image_path": cfg.KernelImage,
 		"boot_args":         cfg.KernelArgs,
 	}); err != nil {
 		return fmt.Errorf("boot-source: %w", err)
 	}
 
-	if err := firecrackerRequest(client, http.MethodPut, "/drives/rootfs", map[string]any{
+	if err := fcRequest(client, http.MethodPut, "/drives/rootfs", map[string]any{
 		"drive_id":       "rootfs",
 		"path_on_host":   cfg.RootfsPath,
 		"is_root_device": true,
@@ -147,7 +147,7 @@ func configureAndBoot(socketPath string, cfg cloud.FirecrackerVMConfig) error {
 		return fmt.Errorf("drives/rootfs: %w", err)
 	}
 
-	if err := firecrackerRequest(client, http.MethodPut, "/network-interfaces/eth0", map[string]string{
+	if err := fcRequest(client, http.MethodPut, "/network-interfaces/eth0", map[string]string{
 		"iface_id":      "eth0",
 		"host_dev_name": cfg.TapDevice,
 		"guest_mac":     cfg.MacAddress,
@@ -155,14 +155,14 @@ func configureAndBoot(socketPath string, cfg cloud.FirecrackerVMConfig) error {
 		return fmt.Errorf("network-interfaces: %w", err)
 	}
 
-	if err := firecrackerRequest(client, http.MethodPut, "/machine-config", map[string]any{
+	if err := fcRequest(client, http.MethodPut, "/machine-config", map[string]any{
 		"vcpu_count":   cfg.VCPUCount,
 		"mem_size_mib": cfg.MemSizeMib,
 	}); err != nil {
 		return fmt.Errorf("machine-config: %w", err)
 	}
 
-	if err := firecrackerRequest(client, http.MethodPut, "/actions", map[string]string{
+	if err := fcRequest(client, http.MethodPut, "/actions", map[string]string{
 		"action_type": "InstanceStart",
 	}); err != nil {
 		return fmt.Errorf("start instance: %w", err)
@@ -182,23 +182,23 @@ func waitForSocket(path string, timeout time.Duration) error {
 	return fmt.Errorf("timed out waiting for firecracker API socket %q", path)
 }
 
-// ProcessManager is the real cloud.FirecrackerProcess implementation: it
+// ProcessManager is the real cloud.FCProcess implementation: it
 // spawns the firecracker binary, configures it over its API socket and
 // manages the resulting OS process.
 type ProcessManager struct {
 	BinPath string
 }
 
-// NewProcessManager returns a cloud.FirecrackerProcess backed by the
+// NewProcessManager returns a cloud.FCProcess backed by the
 // firecracker binary at binPath ("firecracker" if empty).
-func NewProcessManager(binPath string) cloud.FirecrackerProcess {
+func NewProcessManager(binPath string) cloud.FCProcess {
 	if binPath == "" {
 		binPath = "firecracker"
 	}
 	return ProcessManager{BinPath: binPath}
 }
 
-func (m ProcessManager) Start(socketPath string, cfg cloud.FirecrackerVMConfig, logFile string) (int, error) {
+func (m ProcessManager) Start(socketPath string, cfg cloud.FCVMConfig, logFile string) (int, error) {
 	_ = os.Remove(socketPath)
 
 	logFd, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
@@ -288,18 +288,18 @@ func (m ProcessManager) Owns(pid int, socketPath string) bool {
 	return false
 }
 
-// APIClient is the real cloud.FirecrackerAPI implementation.
+// APIClient is the real cloud.FCAPI implementation.
 type APIClient struct{}
 
-// NewAPIClient returns a cloud.FirecrackerAPI that talks to firecracker over
+// NewAPIClient returns a cloud.FCAPI that talks to firecracker over
 // its API socket.
-func NewAPIClient() cloud.FirecrackerAPI {
+func NewAPIClient() cloud.FCAPI {
 	return APIClient{}
 }
 
 func (APIClient) SetState(socketPath, state string) error {
 	client := unixHTTPClient(socketPath)
-	return firecrackerRequest(client, http.MethodPatch, "/vm", map[string]string{"state": state})
+	return fcRequest(client, http.MethodPatch, "/vm", map[string]string{"state": state})
 }
 
 // LinuxNetworkManager is the real cloud.NetworkManager implementation,
@@ -369,7 +369,7 @@ func NewRootfsPreparer() cloud.RootfsPreparer {
 
 func (DebugfsRootfsPreparer) Prepare(baseImage, destPath, sshPublicKey, username string) error {
 	if baseImage == "" {
-		return errors.New("firecracker.rootfsImage is not configured")
+		return errors.New("fc.rootfsImage is not configured")
 	}
 	if err := copyFile(baseImage, destPath); err != nil {
 		return fmt.Errorf("failed to copy base rootfs %q: %w", baseImage, err)

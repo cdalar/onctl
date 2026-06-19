@@ -1,6 +1,6 @@
 //go:build !windows
 
-package providerfirecracker
+package providerfc
 
 import (
 	"os/exec"

@@ -8,7 +8,7 @@ import (
 
 	"github.com/cdalar/onctl/internal/provideraws"
 	"github.com/cdalar/onctl/internal/providerazure"
-	"github.com/cdalar/onctl/internal/providerfirecracker"
+	"github.com/cdalar/onctl/internal/providerfc"
 	"github.com/cdalar/onctl/internal/providergcp"
 	"github.com/cdalar/onctl/internal/providerhtz"
 	"github.com/cdalar/onctl/internal/tools"
@@ -66,7 +66,7 @@ var (
 		},
 	}
 	cloudProvider     string
-	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "firecracker"}
+	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "fc"}
 	provider          cloud.CloudProviderInterface
 	providerFlag      string
 )
@@ -103,16 +103,17 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
-// initState resolves the cloud provider and loads its config. Hetzner has
-// built-in defaults (see setDefaults), so a missing .onctl is best-effort
-// there; every other provider still requires its YAML config, so a missing
-// or unreadable config stays a fatal error, matching the pre-flags behavior.
+// initState resolves the cloud provider and loads its config. Hetzner and fc
+// have built-in defaults (see setDefaults), so a missing .onctl is
+// best-effort for them; every other provider still requires its YAML config,
+// so a missing or unreadable config stays a fatal error, matching the
+// pre-flags behavior.
 func initState() error {
 	setDefaults()
 	cloudProvider = checkCloudProvider()
 	log.Println("[DEBUG] Cloud: " + cloudProvider)
 	if err := ReadConfig(cloudProvider); err != nil {
-		if cloudProvider != "hetzner" {
+		if cloudProvider != "hetzner" && cloudProvider != "fc" {
 			return err
 		}
 		log.Println("[DEBUG] no config file loaded, using defaults:", err)
@@ -171,14 +172,14 @@ func initProvider(cloudProvider string) {
 			VnetClient:          providerazure.GetVnetClient(),
 			NSGClient:           providerazure.GetNSGClient(),
 		}
-	case "firecracker":
-		fcConfig := providerfirecracker.GetConfig()
-		provider = &cloud.ProviderFirecracker{
+	case "fc":
+		fcConfig := providerfc.GetConfig()
+		provider = &cloud.ProviderFC{
 			Config:  fcConfig,
-			Process: providerfirecracker.NewProcessManager(fcConfig.BinPath),
-			API:     providerfirecracker.NewAPIClient(),
-			Net:     providerfirecracker.NewNetworkManager(),
-			Rootfs:  providerfirecracker.NewRootfsPreparer(),
+			Process: providerfc.NewProcessManager(fcConfig.BinPath),
+			API:     providerfc.NewAPIClient(),
+			Net:     providerfc.NewNetworkManager(),
+			Rootfs:  providerfc.NewRootfsPreparer(),
 		}
 	}
 }
