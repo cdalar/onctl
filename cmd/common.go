@@ -46,6 +46,25 @@ func GenerateIDToken() uuid.UUID {
 	return u1
 }
 
+// setDefaults registers built-in defaults for every setting that was
+// previously supplied by the YAML files written by `onctl init`. With these in
+// place onctl works for Hetzner with no .onctl config present; CLI flags and an
+// existing .onctl config still override them (viper precedence: flag > env >
+// config > default). See ROADMAP/PR: "Remove onctl's YAML config in favor of
+// CLI flags with defaults (Hetzner)".
+func setDefaults() {
+	// Global (was onctl.yaml)
+	viper.SetDefault("ssh.publicKey", "~/.ssh/id_rsa.pub")
+	viper.SetDefault("ssh.privateKey", "~/.ssh/id_rsa")
+	viper.SetDefault("vm.cloud-init.timeout", "3m")
+	viper.SetDefault("actions.githubOwner", "cdalar")
+	// Hetzner (was hetzner.yaml)
+	viper.SetDefault("hetzner.location", "fsn1")
+	viper.SetDefault("hetzner.vm.type", "cpx21")
+	viper.SetDefault("hetzner.vm.image", "ubuntu-22.04")
+	viper.SetDefault("hetzner.vm.username", "root")
+}
+
 func ReadConfig(cloudProvider string) error {
 	// Check current working directory
 	dir, err := os.Getwd()

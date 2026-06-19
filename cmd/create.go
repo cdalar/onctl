@@ -34,6 +34,12 @@ type cmdCreateOptions struct {
 
 var (
 	opt cmdCreateOptions
+	// Generic VM flags bound to viper keys (see init below). Kept as package
+	// vars only to satisfy cobra's StringVar; the values are read via viper.
+	flagType             string
+	flagLocation         string
+	flagUsername         string
+	flagCloudInitTimeout string
 )
 
 func parseConfigFile(configFile string) (*cmdCreateOptions, error) {
@@ -69,6 +75,24 @@ func init() {
 	createCmd.Flags().StringSliceVarP(&opt.Variables, "vars", "e", []string{}, "Environment variables passed to the script")
 	createCmd.Flags().StringVarP(&opt.ConfigFile, "file", "f", "", "Path to configuration YAML file")
 	createCmd.Flags().StringVar(&opt.Vm.Image, "image", "", "OS image to use (e.g. ubuntu-22.04, fedora-42)")
+
+	// Generic VM flags. These replace the per-provider YAML written by
+	// `onctl init` (Hetzner pass): each is bound to the viper key the rest of
+	// the code already reads, so values flow through unchanged. Defaults match
+	// the previous hetzner.yaml/onctl.yaml so behavior is identical with no
+	// config present. See setDefaults() in common.go.
+	createCmd.Flags().StringVar(&flagType, "type", "cpx21", "instance type (provider-specific; Hetzner default cpx21)")
+	createCmd.Flags().StringVar(&flagLocation, "location", "fsn1", "location/region for the VM")
+	createCmd.Flags().StringVar(&flagUsername, "username", "root", "ssh username on the VM")
+	createCmd.Flags().StringVar(&flagCloudInitTimeout, "cloud-init-timeout", "3m", "max wait for cloud-init (e.g. 3m, 180s)")
+	_ = viper.BindPFlag("hetzner.vm.type", createCmd.Flags().Lookup("type"))
+	_ = viper.BindPFlag("hetzner.location", createCmd.Flags().Lookup("location"))
+	_ = viper.BindPFlag("hetzner.vm.username", createCmd.Flags().Lookup("username"))
+	_ = viper.BindPFlag("vm.cloud-init.timeout", createCmd.Flags().Lookup("cloud-init-timeout"))
+	// --image keeps an empty flag default (so the non-hetzner guard below and
+	// opt.Vm.Image stay empty when unset); viper supplies the real default.
+	_ = viper.BindPFlag("hetzner.vm.image", createCmd.Flags().Lookup("image"))
+
 	// Register create command at root level for convenience
 	rootCmd.AddCommand(createCmd)
 	createCmd.SetUsageTemplate(createCmd.UsageTemplate() + `
