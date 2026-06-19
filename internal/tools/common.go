@@ -96,10 +96,17 @@ func onctlConfigDirs() []string {
 	return dirs
 }
 
+// WhichCloudProvider resolves the single provider for non-ls commands. It only
+// looks at credential env vars (matching its pre-multi-provider behavior), not
+// the yaml-presence heuristics in DetectCloudProviders: a placeholder
+// <provider>.yaml from `onctl init` should not make create/destroy/ssh/etc.
+// silently target an uncredentialed cloud instead of failing with "No Cloud
+// Provider Set".
 func WhichCloudProvider() string {
-	found := DetectCloudProviders()
-	if len(found) == 0 {
-		return "none"
+	for _, c := range providerEnvChecks {
+		if c.check() {
+			return c.name
+		}
 	}
-	return found[0]
+	return "none"
 }
