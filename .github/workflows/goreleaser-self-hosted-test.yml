@@ -1,0 +1,52 @@
+name: goreleaser (self-hosted test)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (must already exist, e.g. v0.1.27)"
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  goreleaser:
+    runs-on: [self-hosted, macOS, ARM64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag }}
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+          cache: true
+      - name: Import GPG Key
+        run: |
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --import --no-tty --batch
+          gpg --list-secret-keys
+      - name: Import Code-Signing Certificates
+        uses: apple-actions/import-codesign-certs@v7
+        with:
+          # The certificates in a PKCS12 file encoded as a base64 string
+          p12-file-base64: ${{ secrets.APPLE_DEVELOPER_CERTIFICATE_P12_BASE64 }}
+          # The password used to import the PKCS12 file.
+          p12-password: ${{ secrets.APPLE_DEVELOPER_CERTIFICATE_PASSWORD }}
+      - name: install brew and gon
+        run: |
+          brew tap mitchellh/gon
+          brew install mitchellh/gon/gon
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v7.2.2
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --timeout 120m --clean --skip=publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GORELEASER_GH_TOKEN }}
+          AC_PASSWORD: ${{ secrets.AC_PASSWORD }}
