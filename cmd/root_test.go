@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -65,4 +66,39 @@ func TestExecute_Function(t *testing.T) {
 	// We can't actually call it in tests as it would try to read config files
 	// but we can verify it's properly declared
 	assert.NotNil(t, Execute)
+}
+
+func TestResolveAzureIdentifiers(t *testing.T) {
+	originalSub := viper.GetString("azure.subscriptionId")
+	originalRG := viper.GetString("azure.resourceGroup")
+	defer func() {
+		viper.Set("azure.subscriptionId", originalSub)
+		viper.Set("azure.resourceGroup", originalRG)
+	}()
+
+	t.Run("already set", func(t *testing.T) {
+		viper.Set("azure.subscriptionId", "explicit-sub")
+		viper.Set("azure.resourceGroup", "explicit-rg")
+		assert.NoError(t, resolveAzureIdentifiers())
+		assert.Equal(t, "explicit-sub", viper.GetString("azure.subscriptionId"))
+		assert.Equal(t, "explicit-rg", viper.GetString("azure.resourceGroup"))
+	})
+
+	t.Run("fails clearly when unresolvable", func(t *testing.T) {
+		viper.Set("azure.subscriptionId", "")
+		viper.Set("azure.resourceGroup", "")
+		t.Setenv("PATH", "") // no az on PATH
+		err := resolveAzureIdentifiers()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "azure.subscriptionId is required")
+	})
+
+	t.Run("subscriptionId resolved, resourceGroup still required", func(t *testing.T) {
+		viper.Set("azure.subscriptionId", "explicit-sub")
+		viper.Set("azure.resourceGroup", "")
+		t.Setenv("PATH", "") // no az on PATH
+		err := resolveAzureIdentifiers()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "azure.resourceGroup is required")
+	})
 }

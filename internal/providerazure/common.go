@@ -1,7 +1,11 @@
 package providerazure
 
 import (
+	"context"
 	"log"
+	"os/exec"
+	"strings"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -109,4 +113,38 @@ func connectionAzure() (azcore.TokenCredential, error) {
 		return nil, err
 	}
 	return cred, nil
+}
+
+func runAzCLI(args ...string) string {
+	if _, err := exec.LookPath("az"); err != nil {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "az", args...).Output()
+	if err != nil {
+		return ""
+	}
+	value := strings.TrimSpace(string(out))
+	if value == "" || value == "null" {
+		return ""
+	}
+	return value
+}
+
+// AzureCLISubscriptionID best-effort resolves the az CLI's active
+// subscription (the same one `az` commands run against), so onctl can
+// default azure.subscriptionId to it when neither a flag, env var, nor
+// .onctl/azure.yaml set one. Returns "" if az isn't installed, isn't logged
+// in, or errors out.
+func AzureCLISubscriptionID() string {
+	return runAzCLI("account", "show", "--query", "id", "-o", "tsv")
+}
+
+// AzureCLIDefaultResourceGroup best-effort resolves the az CLI's configured
+// default resource group (`az configure --defaults group=<name>`). Most
+// users won't have this set, so an empty result here is expected and not an
+// error on its own.
+func AzureCLIDefaultResourceGroup() string {
+	return runAzCLI("config", "get", "defaults.group", "-o", "tsv")
 }

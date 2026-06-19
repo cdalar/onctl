@@ -47,6 +47,11 @@ var (
 	flagFCBinary      string
 	flagFCVCPU        int64
 	flagFCMemory      int64
+	// Azure-specific flags bound to azure.* viper keys (see init below).
+	// These replace azure.subscriptionId/azure.resourceGroup, the two
+	// azure.yaml settings with no static default (they're account-specific).
+	flagAzureSubscriptionID string
+	flagAzureResourceGroup  string
 )
 
 func parseConfigFile(configFile string) (*cmdCreateOptions, error) {
@@ -116,6 +121,18 @@ func init() {
 	_ = viper.BindPFlag("fc.vcpuCount", createCmd.Flags().Lookup("vcpu"))
 	_ = viper.BindPFlag("fc.memSizeMib", createCmd.Flags().Lookup("memory"))
 	_ = viper.BindPFlag("fc.vm.username", createCmd.Flags().Lookup("username"))
+
+	// Azure. Same generic flags, bound to the azure.* keys read by
+	// pkg/cloud/azure.go. azure.subscriptionId/azure.resourceGroup have no
+	// static default (see setDefaults() in common.go); --subscription-id/
+	// --resource-group replace them. Defaults for the rest match azure.yaml.
+	createCmd.Flags().StringVar(&flagAzureSubscriptionID, "subscription-id", "", "Azure: subscription ID (required for the azure provider; falls back to `az account show`)")
+	createCmd.Flags().StringVar(&flagAzureResourceGroup, "resource-group", "", "Azure: resource group (required for the azure provider; falls back to the az CLI's configured default group, if any)")
+	_ = viper.BindPFlag("azure.subscriptionId", createCmd.Flags().Lookup("subscription-id"))
+	_ = viper.BindPFlag("azure.resourceGroup", createCmd.Flags().Lookup("resource-group"))
+	_ = viper.BindPFlag("azure.location", createCmd.Flags().Lookup("location"))
+	_ = viper.BindPFlag("azure.vm.type", createCmd.Flags().Lookup("type"))
+	_ = viper.BindPFlag("azure.vm.username", createCmd.Flags().Lookup("username"))
 
 	// Register create command at root level for convenience
 	rootCmd.AddCommand(createCmd)

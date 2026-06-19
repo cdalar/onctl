@@ -48,7 +48,7 @@ func GenerateIDToken() uuid.UUID {
 
 // setDefaults registers built-in defaults for every setting that was
 // previously supplied by the YAML files written by `onctl init`. With these in
-// place onctl works for Hetzner and Firecracker with no .onctl config present; CLI flags and an
+// place onctl works for Hetzner, Firecracker and Azure with no .onctl config present; CLI flags and an
 // existing .onctl config still override them (viper precedence: flag > env >
 // config > default). See ROADMAP/PR: "Remove onctl's YAML config in favor of
 // CLI flags with defaults (Hetzner)".
@@ -75,6 +75,23 @@ func setDefaults() {
 	viper.SetDefault("fc.network.bridge", "fcbr0")
 	viper.SetDefault("fc.network.cidr", "172.16.0.1/24")
 	viper.SetDefault("fc.vm.username", "root")
+	// Azure (was azure.yaml). azure.subscriptionId and azure.resourceGroup
+	// have no static default: initState() falls back to the az CLI's active
+	// subscription/default resource group for them, and fails fast if
+	// they're still empty.
+	viper.SetDefault("azure.location", "westeurope")
+	viper.SetDefault("azure.vm.username", "azureuser")
+	viper.SetDefault("azure.vm.type", "Standard_D4s_v3")
+	viper.SetDefault("azure.vm.priority", "Spot")
+	viper.SetDefault("azure.vm.image.publisher", "canonical")
+	viper.SetDefault("azure.vm.image.offer", "0001-com-ubuntu-server-jammy")
+	viper.SetDefault("azure.vm.image.version", "latest")
+	viper.SetDefault("azure.vm.image.sku", "22_04-lts-gen2")
+	viper.SetDefault("azure.vm.vnet.create", true)
+	viper.SetDefault("azure.vm.vnet.name", "onctl-vnet")
+	viper.SetDefault("azure.vm.vnet.cidr", "10.1.0.0/16")
+	viper.SetDefault("azure.vm.vnet.subnet.name", "onctl-subnet1")
+	viper.SetDefault("azure.vm.vnet.subnet.cidr", "10.1.1.0/24")
 }
 
 func ReadConfig(cloudProvider string) error {

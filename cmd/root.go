@@ -103,8 +103,8 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
-// initState resolves the cloud provider and loads its config. Hetzner and fc
-// have built-in defaults (see setDefaults), so a missing .onctl is
+// initState resolves the cloud provider and loads its config. Hetzner, fc and
+// azure have built-in defaults (see setDefaults), so a missing .onctl is
 // best-effort for them; every other provider still requires its YAML config,
 // so a missing or unreadable config stays a fatal error, matching the
 // pre-flags behavior.
@@ -113,10 +113,39 @@ func initState() error {
 	cloudProvider = checkCloudProvider()
 	log.Println("[DEBUG] Cloud: " + cloudProvider)
 	if err := ReadConfig(cloudProvider); err != nil {
-		if cloudProvider != "hetzner" && cloudProvider != "fc" {
+		if cloudProvider != "hetzner" && cloudProvider != "fc" && cloudProvider != "azure" {
 			return err
 		}
 		log.Println("[DEBUG] no config file loaded, using defaults:", err)
+	}
+	if cloudProvider == "azure" {
+		if err := resolveAzureIdentifiers(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// resolveAzureIdentifiers fills azure.subscriptionId/azure.resourceGroup from
+// the az CLI when no flag/env/yaml already set them, and fails clearly if
+// they're still unset (unlike the other Azure settings, these two are
+// account-specific and have no static default).
+func resolveAzureIdentifiers() error {
+	if viper.GetString("azure.subscriptionId") == "" {
+		if id := providerazure.AzureCLISubscriptionID(); id != "" {
+			viper.SetDefault("azure.subscriptionId", id)
+		}
+	}
+	if viper.GetString("azure.subscriptionId") == "" {
+		return fmt.Errorf(`azure.subscriptionId is required: set --subscription-id, .onctl/azure.yaml, or run "az login"`)
+	}
+	if viper.GetString("azure.resourceGroup") == "" {
+		if rg := providerazure.AzureCLIDefaultResourceGroup(); rg != "" {
+			viper.SetDefault("azure.resourceGroup", rg)
+		}
+	}
+	if viper.GetString("azure.resourceGroup") == "" {
+		return fmt.Errorf(`azure.resourceGroup is required: set --resource-group or .onctl/azure.yaml`)
 	}
 	return nil
 }
