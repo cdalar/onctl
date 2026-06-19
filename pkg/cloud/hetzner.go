@@ -363,6 +363,9 @@ func (p ProviderHetzner) findReservedPrimaryIPs(name string) []*hcloud.PrimaryIP
 // snapshots. The preserved primary IPv4 (tagged at pause time) is shown so the
 // user sees the address that will return on Resume.
 func (p ProviderHetzner) ListPaused() (VmList, error) {
+	if p.Client == nil {
+		return VmList{}, fmt.Errorf("hetzner client not configured (missing HCLOUD_TOKEN)")
+	}
 	images, err := p.Client.Image.AllWithOpts(context.TODO(), hcloud.ImageListOpts{
 		Type:     []hcloud.ImageType{hcloud.ImageTypeSnapshot},
 		ListOpts: hcloud.ListOpts{LabelSelector: labelOwner + "=onctl"},
@@ -423,6 +426,9 @@ func (p ProviderHetzner) ListPaused() (VmList, error) {
 
 func (p ProviderHetzner) List() (VmList, error) {
 	log.Println("[DEBUG] List Servers")
+	if p.Client == nil {
+		return VmList{}, fmt.Errorf("hetzner client not configured (missing HCLOUD_TOKEN)")
+	}
 	list, _, err := p.Client.Server.List(context.TODO(), hcloud.ServerListOpts{
 		ListOpts: hcloud.ListOpts{
 			LabelSelector: "Owner=onctl",

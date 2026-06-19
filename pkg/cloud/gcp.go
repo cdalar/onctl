@@ -33,6 +33,9 @@ func (p ProviderGcp) ListPaused() (VmList, error) {
 
 func (p ProviderGcp) List() (VmList, error) {
 	log.Println("[DEBUG] List Servers")
+	if p.Client == nil {
+		return VmList{}, fmt.Errorf("gcp client not configured (missing credentials)")
+	}
 	cloudList := make([]Vm, 0, 100)
 	it := p.Client.AggregatedList(context.Background(), &computepb.AggregatedListInstancesRequest{
 		Project: viper.GetString("gcp.project"),
@@ -43,7 +46,7 @@ func (p ProviderGcp) List() (VmList, error) {
 			break
 		}
 		if err != nil {
-			log.Fatalln(err)
+			return VmList{}, fmt.Errorf("gcp aggregated list error: %w", err)
 		}
 		for _, instance := range resp.Value.Instances {
 			cloudList = append(cloudList, mapGcpServer(instance))
@@ -222,7 +225,8 @@ func (p ProviderGcp) SSHInto(serverName string, port int, privateKey string, com
 func mapGcpServer(server *computepb.Instance) Vm {
 	createdAt, err := time.Parse(time.RFC3339, *server.CreationTimestamp)
 	if err != nil {
-		log.Fatalln(err)
+		log.Printf("[DEBUG] gcp bad CreationTimestamp: %v", err)
+		createdAt = time.Time{}
 	}
 
 	return Vm{

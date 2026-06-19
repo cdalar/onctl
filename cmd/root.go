@@ -47,6 +47,11 @@ var (
 			case "init", "version", "help", "__complete", "__completeNoDesc":
 				return nil
 			}
+			// Capture before checkCloudProvider() (inside initState) sets
+			// ONCTL_CLOUD as a side effect when it falls back to env-var
+			// detection: `ls` uses this to decide whether to aggregate
+			// across every detected provider or stick to a single one.
+			providerExplicitlyChosen = providerFlag != "" || os.Getenv("ONCTL_CLOUD") != ""
 			if providerFlag != "" {
 				if !tools.Contains(cloudProviderList, providerFlag) {
 					return fmt.Errorf("unsupported provider %q; use one of: %s", providerFlag, strings.Join(cloudProviderList, ", "))
@@ -69,6 +74,11 @@ var (
 	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "fc"}
 	provider          cloud.CloudProviderInterface
 	providerFlag      string
+	// providerExplicitlyChosen records whether --provider/ONCTL_CLOUD was set
+	// before provider resolution ran. `ls` uses it to decide whether to
+	// aggregate across every detected provider (see resolveListProviders in
+	// list.go) or keep today's single-provider behavior.
+	providerExplicitlyChosen bool
 )
 
 func checkCloudProvider() string {
@@ -140,9 +150,17 @@ func ensureProvider() {
 
 // initProvider builds the global provider client for the selected cloud.
 func initProvider(cloudProvider string) {
-	switch cloudProvider {
+	provider = buildProvider(cloudProvider)
+}
+
+// buildProvider constructs a provider client for the named cloud, without
+// touching the global provider/cloudProvider vars. Extracted from
+// initProvider so `ls` can build one client per auto-detected provider (see
+// resolveListProviders in list.go) alongside the normal single-provider path.
+func buildProvider(name string) cloud.CloudProviderInterface {
+	switch name {
 	case "hetzner":
-		provider = &cloud.ProviderHetzner{
+		return &cloud.ProviderHetzner{
 			Client: providerhtz.GetClient(),
 			Config: cloud.HetznerConfig{
 				Location:      viper.GetString("hetzner.location"),
@@ -153,17 +171,16 @@ func initProvider(cloudProvider string) {
 			},
 		}
 	case "gcp":
-		provider = &cloud.ProviderGcp{
+		return &cloud.ProviderGcp{
 			Client:      providergcp.GetClient(),
 			GroupClient: providergcp.GetGroupClient(),
 		}
-
 	case "aws":
-		provider = &cloud.ProviderAws{
+		return &cloud.ProviderAws{
 			Client: provideraws.GetClient(),
 		}
 	case "azure":
-		provider = &cloud.ProviderAzure{
+		return &cloud.ProviderAzure{
 			ResourceGraphClient: providerazure.GetResourceGraphClient(),
 			VmClient:            providerazure.GetVmClient(),
 			NicClient:           providerazure.GetNicClient(),
@@ -174,7 +191,7 @@ func initProvider(cloudProvider string) {
 		}
 	case "fc":
 		fcConfig := providerfc.GetConfig()
-		provider = &cloud.ProviderFC{
+		return &cloud.ProviderFC{
 			Config:  fcConfig,
 			Process: providerfc.NewProcessManager(fcConfig.BinPath),
 			API:     providerfc.NewAPIClient(),
@@ -182,6 +199,7 @@ func initProvider(cloudProvider string) {
 			Rootfs:  providerfc.NewRootfsPreparer(),
 		}
 	}
+	return nil
 }
 
 func init() {

@@ -12,9 +12,7 @@ func GetClient() *hcloud.Client {
 	if token != "" {
 		client := hcloud.NewClient(hcloud.WithToken(token))
 		return client
-	} else {
-		log.Println("HCLOUD_TOKEN is not set")
-		os.Exit(1)
 	}
+	log.Printf("[DEBUG] HCLOUD_TOKEN is not set")
 	return nil
 }

@@ -316,6 +316,9 @@ func (p ProviderAws) ListPaused() (VmList, error) {
 }
 
 func (p ProviderAws) List() (VmList, error) {
+	if p.Client == nil {
+		return VmList{}, fmt.Errorf("aws client not configured")
+	}
 
 	input := &ec2.DescribeInstancesInput{
 		Filters: []types.Filter{

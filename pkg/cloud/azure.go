@@ -42,6 +42,9 @@ func (p ProviderAzure) ListPaused() (VmList, error) {
 
 func (p ProviderAzure) List() (VmList, error) {
 	log.Println("[DEBUG] List Servers")
+	if p.ResourceGraphClient == nil {
+		return VmList{}, fmt.Errorf("azure client not configured (missing subscriptionId or credentials)")
+	}
 	query := `
 	resources
     | where type =~ 'microsoft.compute/virtualmachines' and resourceGroup =~ '` + viper.GetString("azure.resourceGroup") + `'	
@@ -79,12 +82,11 @@ func (p ProviderAzure) List() (VmList, error) {
 		},
 		nil)
 	if err != nil {
-		log.Fatalf("failed to finish the request: %v", err)
-	} else {
-		// Print the obtained query results
-		log.Printf("[DEBUG] Resources found: %d\n", *resp.TotalRecords)
-		log.Printf("[DEBUG] Results: %v\n", resp.Data)
+		return VmList{}, fmt.Errorf("azure resource graph query failed: %w", err)
 	}
+	// Print the obtained query results
+	log.Printf("[DEBUG] Resources found: %d\n", *resp.TotalRecords)
+	log.Printf("[DEBUG] Results: %v\n", resp.Data)
 	if len(strconv.FormatInt(*resp.TotalRecords, 10)) == 0 {
 		return VmList{}, nil
 	}
@@ -95,7 +97,7 @@ func (p ProviderAzure) List() (VmList, error) {
 			items := r.(map[string]interface{})
 			createdAt, err := time.Parse("2006-01-02T15:04:05Z", items["timeCreated"].(string))
 			if err != nil {
-				log.Fatalln(err)
+				return VmList{}, fmt.Errorf("failed to parse azure timeCreated: %w", err)
 			}
 			if items["publicIpAddress"] == nil {
 				items["publicIpAddress"] = "N/A"

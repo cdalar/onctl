@@ -14,7 +14,8 @@ import (
 func GetResourceGraphClient() (resourceGraphClient *armresourcegraph.Client) {
 	cred, err := connectionAzure()
 	if err != nil {
-		log.Fatalf("cannot connect to Azure:%+v", err)
+		log.Printf("[DEBUG] cannot connect to Azure: %+v", err)
+		return nil
 	}
 	resourceGraphClient, err = armresourcegraph.NewClient(cred, nil)
 	if err != nil {
@@ -25,11 +26,17 @@ func GetResourceGraphClient() (resourceGraphClient *armresourcegraph.Client) {
 }
 
 func GetVmClient() (vmClient *armcompute.VirtualMachinesClient) {
+	sub := viper.GetString("azure.subscriptionId")
+	if sub == "" {
+		log.Printf("[DEBUG] azure.subscriptionId not configured")
+		return nil
+	}
 	cred, err := connectionAzure()
 	if err != nil {
-		log.Fatalf("cannot connect to Azure:%+v", err)
+		log.Printf("[DEBUG] cannot connect to Azure: %+v", err)
+		return nil
 	}
-	vmClient, err = armcompute.NewVirtualMachinesClient(viper.GetString("azure.subscriptionId"), cred, nil)
+	vmClient, err = armcompute.NewVirtualMachinesClient(sub, cred, nil)
 	// armCompute, err = armcompute.
 	if err != nil {
 		return nil
@@ -39,11 +46,17 @@ func GetVmClient() (vmClient *armcompute.VirtualMachinesClient) {
 }
 
 func GetNicClient() (nicClient *armnetwork.InterfacesClient) {
+	sub := viper.GetString("azure.subscriptionId")
+	if sub == "" {
+		log.Printf("[DEBUG] azure.subscriptionId not configured")
+		return nil
+	}
 	cred, err := connectionAzure()
 	if err != nil {
-		log.Fatalf("cannot connect to Azure:%+v", err)
+		log.Printf("[DEBUG] cannot connect to Azure: %+v", err)
+		return nil
 	}
-	nicClient, err = armnetwork.NewInterfacesClient(viper.GetString("azure.subscriptionId"), cred, nil)
+	nicClient, err = armnetwork.NewInterfacesClient(sub, cred, nil)
 	if err != nil {
 		return nil
 	}
@@ -52,11 +65,17 @@ func GetNicClient() (nicClient *armnetwork.InterfacesClient) {
 }
 
 func GetSSHKeyClient() (sshClient *armcompute.SSHPublicKeysClient) {
+	sub := viper.GetString("azure.subscriptionId")
+	if sub == "" {
+		log.Printf("[DEBUG] azure.subscriptionId not configured")
+		return nil
+	}
 	cred, err := connectionAzure()
 	if err != nil {
-		log.Fatalf("cannot connect to Azure:%+v", err)
+		log.Printf("[DEBUG] cannot connect to Azure: %+v", err)
+		return nil
 	}
-	sshClient, err = armcompute.NewSSHPublicKeysClient(viper.GetString("azure.subscriptionId"), cred, nil)
+	sshClient, err = armcompute.NewSSHPublicKeysClient(sub, cred, nil)
 	if err != nil {
 		return nil
 	}
@@ -65,11 +84,17 @@ func GetSSHKeyClient() (sshClient *armcompute.SSHPublicKeysClient) {
 }
 
 func GetIPClient() (publicIpClient *armnetwork.PublicIPAddressesClient) {
+	sub := viper.GetString("azure.subscriptionId")
+	if sub == "" {
+		log.Printf("[DEBUG] azure.subscriptionId not configured")
+		return nil
+	}
 	cred, err := connectionAzure()
 	if err != nil {
-		log.Fatalf("cannot connect to Azure:%+v", err)
+		log.Printf("[DEBUG] cannot connect to Azure: %+v", err)
+		return nil
 	}
-	ipClient, err := armnetwork.NewPublicIPAddressesClient(viper.GetString("azure.subscriptionId"), cred, nil)
+	ipClient, err := armnetwork.NewPublicIPAddressesClient(sub, cred, nil)
 	if err != nil {
 		return nil
 	}
@@ -78,11 +103,17 @@ func GetIPClient() (publicIpClient *armnetwork.PublicIPAddressesClient) {
 }
 
 func GetVnetClient() (vnetClient *armnetwork.VirtualNetworksClient) {
+	sub := viper.GetString("azure.subscriptionId")
+	if sub == "" {
+		log.Printf("[DEBUG] azure.subscriptionId not configured")
+		return nil
+	}
 	cred, err := connectionAzure()
 	if err != nil {
-		log.Fatalf("cannot connect to Azure:%+v", err)
+		log.Printf("[DEBUG] cannot connect to Azure: %+v", err)
+		return nil
 	}
-	vnetClient, err = armnetwork.NewVirtualNetworksClient(viper.GetString("azure.subscriptionId"), cred, nil)
+	vnetClient, err = armnetwork.NewVirtualNetworksClient(sub, cred, nil)
 	if err != nil {
 		return nil
 	}
@@ -91,11 +122,17 @@ func GetVnetClient() (vnetClient *armnetwork.VirtualNetworksClient) {
 }
 
 func GetNSGClient() (nsgClient *armnetwork.SecurityGroupsClient) {
+	sub := viper.GetString("azure.subscriptionId")
+	if sub == "" {
+		log.Printf("[DEBUG] azure.subscriptionId not configured")
+		return nil
+	}
 	cred, err := connectionAzure()
 	if err != nil {
-		log.Fatalf("cannot connect to Azure:%+v", err)
+		log.Printf("[DEBUG] cannot connect to Azure: %+v", err)
+		return nil
 	}
-	nsgClient, err = armnetwork.NewSecurityGroupsClient(viper.GetString("azure.subscriptionId"), cred, nil)
+	nsgClient, err = armnetwork.NewSecurityGroupsClient(sub, cred, nil)
 	if err != nil {
 		return nil
 	}
