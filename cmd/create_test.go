@@ -114,7 +114,7 @@ func TestCreateCmd_HasFlags(t *testing.T) {
 		{"download", "d", "List of files to download"},
 		{"upload", "u", "List of files to upload"},
 		{"name", "n", "vm name"},
-		{"ssh-port", "p", "ssh port"},
+		{"ssh-port", "P", "ssh port"},
 		{"cloud-init", "i", "cloud-init file"},
 		{"dot-env", "", "dot-env (.env) file"},
 		{"domain", "", "request a domain name for the VM"},
