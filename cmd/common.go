@@ -48,7 +48,7 @@ func GenerateIDToken() uuid.UUID {
 
 // setDefaults registers built-in defaults for every setting that was
 // previously supplied by the YAML files written by `onctl init`. With these in
-// place onctl works for Hetzner with no .onctl config present; CLI flags and an
+// place onctl works for Hetzner and Firecracker with no .onctl config present; CLI flags and an
 // existing .onctl config still override them (viper precedence: flag > env >
 // config > default). See ROADMAP/PR: "Remove onctl's YAML config in favor of
 // CLI flags with defaults (Hetzner)".
@@ -63,6 +63,18 @@ func setDefaults() {
 	viper.SetDefault("hetzner.vm.type", "cpx21")
 	viper.SetDefault("hetzner.vm.image", "ubuntu-22.04")
 	viper.SetDefault("hetzner.vm.username", "root")
+	// Firecracker (was firecracker.yaml). providerfirecracker.GetConfig also
+	// defaults these for direct package use; kept here so the values are part
+	// of the CLI config layer (and so kernelImage/rootfsImage, which GetConfig
+	// leaves empty, resolve to the conventional ~/.onctl paths with no config).
+	viper.SetDefault("firecracker.kernelImage", "~/.onctl/firecracker/images/vmlinux")
+	viper.SetDefault("firecracker.rootfsImage", "~/.onctl/firecracker/images/rootfs.ext4")
+	viper.SetDefault("firecracker.vcpuCount", 1)
+	viper.SetDefault("firecracker.memSizeMib", 512)
+	viper.SetDefault("firecracker.binPath", "firecracker")
+	viper.SetDefault("firecracker.network.bridge", "fcbr0")
+	viper.SetDefault("firecracker.network.cidr", "172.16.0.1/24")
+	viper.SetDefault("firecracker.vm.username", "root")
 }
 
 func ReadConfig(cloudProvider string) error {

@@ -11,7 +11,8 @@ import (
 
 // TestGenericCreateFlagsExist verifies the YAML-replacing flags are registered.
 func TestGenericCreateFlagsExist(t *testing.T) {
-	for _, name := range []string{"type", "location", "username", "cloud-init-timeout", "image"} {
+	for _, name := range []string{"type", "location", "username", "cloud-init-timeout", "image",
+		"kernel-image", "rootfs-image", "fc-binary", "vcpu", "memory"} {
 		assert.NotNil(t, createCmd.Flags().Lookup(name), "create should have --%s flag", name)
 	}
 	assert.NotNil(t, rootCmd.PersistentFlags().Lookup("provider"), "root should have persistent --provider flag")
@@ -48,6 +49,12 @@ func TestCreateFlagsBindToViper(t *testing.T) {
 		{"location", "hetzner.location", "fsn1", "nbg1"},
 		{"username", "hetzner.vm.username", "root", "admin"},
 		{"cloud-init-timeout", "vm.cloud-init.timeout", "3m", "180s"},
+		// Firecracker (replaces firecracker.yaml).
+		{"kernel-image", "firecracker.kernelImage", "~/.onctl/firecracker/images/vmlinux", "/img/vmlinux"},
+		{"rootfs-image", "firecracker.rootfsImage", "~/.onctl/firecracker/images/rootfs.ext4", "/img/rootfs.ext4"},
+		{"fc-binary", "firecracker.binPath", "firecracker", "/usr/local/bin/firecracker"},
+		{"vcpu", "firecracker.vcpuCount", "1", "4"},
+		{"memory", "firecracker.memSizeMib", "512", "2048"},
 	}
 	for _, c := range cases {
 		// Default (flag unchanged) resolves via the binding.
@@ -58,4 +65,10 @@ func TestCreateFlagsBindToViper(t *testing.T) {
 		// Restore so other tests see the default again.
 		assert.NoError(t, createCmd.Flags().Set(c.flag, c.def))
 	}
+
+	// The generic --username flag drives the Firecracker microVM user too.
+	assert.Equal(t, "root", viper.GetString("firecracker.vm.username"))
+	assert.NoError(t, createCmd.Flags().Set("username", "ubuntu"))
+	assert.Equal(t, "ubuntu", viper.GetString("firecracker.vm.username"))
+	assert.NoError(t, createCmd.Flags().Set("username", "root"))
 }
