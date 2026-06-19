@@ -16,18 +16,18 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// defaultFirecrackerKernelArgs are the boot args used when
-// firecracker.kernelArgs is not set. The ip= parameter is appended at deploy
+// defaultFCKernelArgs are the boot args used when
+// fc.kernelArgs is not set. The ip= parameter is appended at deploy
 // time once the guest IP is known.
-const defaultFirecrackerKernelArgs = "console=ttyS0 reboot=k panic=1 pci=off"
+const defaultFCKernelArgs = "console=ttyS0 reboot=k panic=1 pci=off"
 
 const (
-	firecrackerStatusRunning = "running"
-	firecrackerStatusPaused  = "paused"
+	fcStatusRunning = "running"
+	fcStatusPaused  = "paused"
 )
 
-// FirecrackerConfig holds configuration for the local Firecracker microVM provider.
-type FirecrackerConfig struct {
+// FCConfig holds configuration for the local Firecracker microVM provider.
+type FCConfig struct {
 	// KernelImage is the path to the uncompressed Linux kernel image (vmlinux).
 	KernelImage string
 	// RootfsImage is the path to the base rootfs image used as a template for
@@ -54,9 +54,9 @@ type FirecrackerConfig struct {
 	StateDir string
 }
 
-// FirecrackerVMConfig describes a microVM to be configured and booted by a
-// FirecrackerProcess.
-type FirecrackerVMConfig struct {
+// FCVMConfig describes a microVM to be configured and booted by a
+// FCProcess.
+type FCVMConfig struct {
 	KernelImage string
 	KernelArgs  string
 	RootfsPath  string
@@ -66,11 +66,11 @@ type FirecrackerVMConfig struct {
 	MacAddress  string
 }
 
-// FirecrackerProcess starts and stops firecracker VMM processes.
-type FirecrackerProcess interface {
+// FCProcess starts and stops firecracker VMM processes.
+type FCProcess interface {
 	// Start launches a firecracker process bound to socketPath, configures it
 	// per cfg and boots it. It returns the PID of the running process.
-	Start(socketPath string, cfg FirecrackerVMConfig, logFile string) (pid int, err error)
+	Start(socketPath string, cfg FCVMConfig, logFile string) (pid int, err error)
 	// Stop terminates the firecracker process with the given PID.
 	Stop(pid int) error
 	// IsRunning reports whether a process with the given PID is alive.
@@ -81,9 +81,9 @@ type FirecrackerProcess interface {
 	Owns(pid int, socketPath string) bool
 }
 
-// FirecrackerAPI issues runtime control requests to a running firecracker
+// FCAPI issues runtime control requests to a running firecracker
 // process over its API socket.
-type FirecrackerAPI interface {
+type FCAPI interface {
 	// SetState transitions the microVM's state (e.g. "Paused" or "Resumed").
 	SetState(socketPath, state string) error
 }
@@ -107,19 +107,19 @@ type RootfsPreparer interface {
 	Prepare(baseImage, destPath, sshPublicKey, username string) error
 }
 
-// ProviderFirecracker manages local Firecracker microVMs as onctl-managed VMs.
+// ProviderFC manages local Firecracker microVMs as onctl-managed VMs.
 // Unlike the other providers, there is no remote API: state is tracked on
 // disk under Config.StateDir, and Net/Process/API are local-host operations.
-type ProviderFirecracker struct {
-	Config  FirecrackerConfig
-	Process FirecrackerProcess
-	API     FirecrackerAPI
+type ProviderFC struct {
+	Config  FCConfig
+	Process FCProcess
+	API     FCAPI
 	Net     NetworkManager
 	Rootfs  RootfsPreparer
 }
 
-// firecrackerVM is the on-disk metadata persisted for each managed microVM.
-type firecrackerVM struct {
+// fcVM is the on-disk metadata persisted for each managed microVM.
+type fcVM struct {
 	Name        string    `json:"name"`
 	PID         int       `json:"pid"`
 	SocketPath  string    `json:"socketPath"`
@@ -134,27 +134,27 @@ type firecrackerVM struct {
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
-func (p ProviderFirecracker) vmDir(name string) string {
+func (p ProviderFC) vmDir(name string) string {
 	return filepath.Join(p.Config.StateDir, "vms", name)
 }
 
-func (p ProviderFirecracker) metadataPath(name string) string {
+func (p ProviderFC) metadataPath(name string) string {
 	return filepath.Join(p.vmDir(name), "metadata.json")
 }
 
-func loadFirecrackerMetadata(path string) (firecrackerVM, error) {
+func loadFCMetadata(path string) (fcVM, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return firecrackerVM{}, err
+		return fcVM{}, err
 	}
-	var vm firecrackerVM
+	var vm fcVM
 	if err := json.Unmarshal(data, &vm); err != nil {
-		return firecrackerVM{}, err
+		return fcVM{}, err
 	}
 	return vm, nil
 }
 
-func saveFirecrackerMetadata(path string, vm firecrackerVM) error {
+func saveFCMetadata(path string, vm fcVM) error {
 	data, err := json.MarshalIndent(vm, "", "  ")
 	if err != nil {
 		return err
@@ -162,9 +162,9 @@ func saveFirecrackerMetadata(path string, vm firecrackerVM) error {
 	return os.WriteFile(path, data, 0600)
 }
 
-func mapFirecrackerVM(vm firecrackerVM) Vm {
+func mapFCVM(vm fcVM) Vm {
 	return Vm{
-		Provider:  "firecracker",
+		Provider:  "fc",
 		ID:        vm.Name,
 		Name:      vm.Name,
 		IP:        vm.IPAddress,
@@ -175,10 +175,10 @@ func mapFirecrackerVM(vm firecrackerVM) Vm {
 	}
 }
 
-// parseFirecrackerType parses a "<vcpu>vcpu-<mem>mb" type string (e.g.
+// parseFCType parses a "<vcpu>vcpu-<mem>mb" type string (e.g.
 // "2vcpu-1024mb"). If t is empty or doesn't match, the provided defaults are
 // returned.
-func parseFirecrackerType(t string, defaultVCPU, defaultMem int64) (vcpu, mem int64) {
+func parseFCType(t string, defaultVCPU, defaultMem int64) (vcpu, mem int64) {
 	if t == "" {
 		return defaultVCPU, defaultMem
 	}
@@ -189,16 +189,16 @@ func parseFirecrackerType(t string, defaultVCPU, defaultMem int64) (vcpu, mem in
 	return defaultVCPU, defaultMem
 }
 
-// firecrackerTapName derives a deterministic, <=15 char TAP device name from
+// fcTapName derives a deterministic, <=15 char TAP device name from
 // the VM name (the Linux interface name length limit).
-func firecrackerTapName(vmName string) string {
+func fcTapName(vmName string) string {
 	sum := md5.Sum([]byte(vmName))
 	return "fc" + fmt.Sprintf("%x", sum)[:13]
 }
 
-// firecrackerMAC derives a deterministic, locally-administered MAC address
+// fcMAC derives a deterministic, locally-administered MAC address
 // from the VM name so it stays stable across pause/resume.
-func firecrackerMAC(vmName string) string {
+func fcMAC(vmName string) string {
 	sum := md5.Sum([]byte(vmName))
 	return fmt.Sprintf("02:FC:%02x:%02x:%02x:%02x", sum[0], sum[1], sum[2], sum[3])
 }
@@ -216,10 +216,10 @@ func bridgeGatewayAndMask(cidr string) (gateway, mask string, err error) {
 	return ip.String(), net.IP(ipNet.Mask).String(), nil
 }
 
-// allocateFirecrackerIP returns the next free IPv4 address in cidr, skipping
+// allocateFCIP returns the next free IPv4 address in cidr, skipping
 // the network address, the gateway (first usable address), the broadcast
 // address and any address in used.
-func allocateFirecrackerIP(cidr string, used map[string]bool) (string, error) {
+func allocateFCIP(cidr string, used map[string]bool) (string, error) {
 	gateway, ipNet, err := net.ParseCIDR(cidr)
 	if err != nil {
 		return "", fmt.Errorf("invalid network %q: %w", cidr, err)
@@ -254,7 +254,7 @@ func incIP(ip net.IP) {
 }
 
 // usedIPs returns the set of IP addresses already assigned to managed microVMs.
-func (p ProviderFirecracker) usedIPs() (map[string]bool, error) {
+func (p ProviderFC) usedIPs() (map[string]bool, error) {
 	all, err := p.listAll()
 	if err != nil {
 		return nil, err
@@ -269,7 +269,7 @@ func (p ProviderFirecracker) usedIPs() (map[string]bool, error) {
 }
 
 // listAll returns the metadata for every managed microVM, regardless of status.
-func (p ProviderFirecracker) listAll() ([]firecrackerVM, error) {
+func (p ProviderFC) listAll() ([]fcVM, error) {
 	root := filepath.Join(p.Config.StateDir, "vms")
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -278,12 +278,12 @@ func (p ProviderFirecracker) listAll() ([]firecrackerVM, error) {
 		}
 		return nil, err
 	}
-	vms := make([]firecrackerVM, 0, len(entries))
+	vms := make([]fcVM, 0, len(entries))
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
-		vm, err := loadFirecrackerMetadata(filepath.Join(root, e.Name(), "metadata.json"))
+		vm, err := loadFCMetadata(filepath.Join(root, e.Name(), "metadata.json"))
 		if err != nil {
 			log.Println("[DEBUG] skipping " + e.Name() + ": " + err.Error())
 			continue
@@ -295,14 +295,14 @@ func (p ProviderFirecracker) listAll() ([]firecrackerVM, error) {
 
 // Deploy creates and boots a new microVM. If a microVM with the same name
 // already exists, its current state is returned unchanged.
-func (p ProviderFirecracker) Deploy(server Vm) (Vm, error) {
+func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 	if server.Name == "" {
 		return Vm{}, errors.New("vm name is required")
 	}
 
-	if existing, err := loadFirecrackerMetadata(p.metadataPath(server.Name)); err == nil {
+	if existing, err := loadFCMetadata(p.metadataPath(server.Name)); err == nil {
 		log.Println("[DEBUG] microVM " + server.Name + " already exists")
-		return mapFirecrackerVM(existing), nil
+		return mapFCVM(existing), nil
 	}
 
 	kernelImage := p.Config.KernelImage
@@ -311,7 +311,7 @@ func (p ProviderFirecracker) Deploy(server Vm) (Vm, error) {
 		rootfsImage = server.Image
 	}
 	if kernelImage == "" || rootfsImage == "" {
-		return Vm{}, errors.New("firecracker.kernelImage and firecracker.rootfsImage must be configured (see onctl init)")
+		return Vm{}, errors.New("fc.kernelImage and fc.rootfsImage must be configured (see onctl init)")
 	}
 
 	dir := p.vmDir(server.Name)
@@ -319,7 +319,7 @@ func (p ProviderFirecracker) Deploy(server Vm) (Vm, error) {
 		return Vm{}, fmt.Errorf("failed to create vm directory: %w", err)
 	}
 
-	vcpu, mem := parseFirecrackerType(server.Type, p.Config.VCPUCount, p.Config.MemSizeMib)
+	vcpu, mem := parseFCType(server.Type, p.Config.VCPUCount, p.Config.MemSizeMib)
 
 	username := p.Config.Username
 	if username == "" {
@@ -355,7 +355,7 @@ func (p ProviderFirecracker) Deploy(server Vm) (Vm, error) {
 		return Vm{}, fmt.Errorf("failed to set up bridge %q: %w", bridge, err)
 	}
 
-	tapDevice := firecrackerTapName(server.Name)
+	tapDevice := fcTapName(server.Name)
 	if err := p.Net.CreateTap(tapDevice, bridge); err != nil {
 		_ = os.RemoveAll(dir)
 		return Vm{}, fmt.Errorf("failed to create tap device: %w", err)
@@ -367,7 +367,7 @@ func (p ProviderFirecracker) Deploy(server Vm) (Vm, error) {
 		_ = os.RemoveAll(dir)
 		return Vm{}, err
 	}
-	ip, err := allocateFirecrackerIP(cidr, used)
+	ip, err := allocateFCIP(cidr, used)
 	if err != nil {
 		_ = p.Net.DeleteTap(tapDevice)
 		_ = os.RemoveAll(dir)
@@ -382,15 +382,15 @@ func (p ProviderFirecracker) Deploy(server Vm) (Vm, error) {
 
 	kernelArgs := strings.TrimSpace(p.Config.KernelArgs)
 	if kernelArgs == "" {
-		kernelArgs = defaultFirecrackerKernelArgs
+		kernelArgs = defaultFCKernelArgs
 	}
 	kernelArgs = fmt.Sprintf("%s ip=%s::%s:%s::eth0:off", kernelArgs, ip, gateway, mask)
 
-	mac := firecrackerMAC(server.Name)
-	socketPath := filepath.Join(dir, "firecracker.sock")
-	logFile := filepath.Join(dir, "firecracker.log")
+	mac := fcMAC(server.Name)
+	socketPath := filepath.Join(dir, "fc.sock")
+	logFile := filepath.Join(dir, "fc.log")
 
-	pid, err := p.Process.Start(socketPath, FirecrackerVMConfig{
+	pid, err := p.Process.Start(socketPath, FCVMConfig{
 		KernelImage: kernelImage,
 		KernelArgs:  kernelArgs,
 		RootfsPath:  rootfsPath,
@@ -405,7 +405,7 @@ func (p ProviderFirecracker) Deploy(server Vm) (Vm, error) {
 		return Vm{}, fmt.Errorf("failed to start microVM: %w", err)
 	}
 
-	vm := firecrackerVM{
+	vm := fcVM{
 		Name:        server.Name,
 		PID:         pid,
 		SocketPath:  socketPath,
@@ -414,24 +414,24 @@ func (p ProviderFirecracker) Deploy(server Vm) (Vm, error) {
 		MacAddress:  mac,
 		VCPUCount:   vcpu,
 		MemSizeMib:  mem,
-		Status:      firecrackerStatusRunning,
+		Status:      fcStatusRunning,
 		KernelImage: kernelImage,
 		RootfsPath:  rootfsPath,
 		CreatedAt:   time.Now(),
 	}
-	if err := saveFirecrackerMetadata(p.metadataPath(server.Name), vm); err != nil {
+	if err := saveFCMetadata(p.metadataPath(server.Name), vm); err != nil {
 		return Vm{}, fmt.Errorf("microVM started but failed to persist metadata: %w", err)
 	}
-	return mapFirecrackerVM(vm), nil
+	return mapFCVM(vm), nil
 }
 
 // Destroy stops the microVM (if running), removes its TAP device and deletes
 // its on-disk state.
-func (p ProviderFirecracker) Destroy(server Vm) error {
+func (p ProviderFC) Destroy(server Vm) error {
 	if server.Name == "" {
 		return errors.New("vm name is required")
 	}
-	vm, err := loadFirecrackerMetadata(p.metadataPath(server.Name))
+	vm, err := loadFCMetadata(p.metadataPath(server.Name))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("no microVM found with name %q", server.Name)
@@ -456,94 +456,94 @@ func (p ProviderFirecracker) Destroy(server Vm) error {
 // Pause freezes the microVM's vCPUs via the Firecracker API. The hot flag is
 // accepted for interface symmetry: a Firecracker pause is always a live,
 // in-memory vCPU freeze (no snapshot-to-disk), so there is no "cold" variant.
-func (p ProviderFirecracker) Pause(server Vm, hot bool) error {
-	vm, err := loadFirecrackerMetadata(p.metadataPath(server.Name))
+func (p ProviderFC) Pause(server Vm, hot bool) error {
+	vm, err := loadFCMetadata(p.metadataPath(server.Name))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("no microVM found with name %q", server.Name)
 		}
 		return err
 	}
-	if vm.Status == firecrackerStatusPaused {
+	if vm.Status == fcStatusPaused {
 		return nil
 	}
 	if err := p.API.SetState(vm.SocketPath, "Paused"); err != nil {
 		return fmt.Errorf("failed to pause microVM: %w", err)
 	}
-	vm.Status = firecrackerStatusPaused
-	return saveFirecrackerMetadata(p.metadataPath(server.Name), vm)
+	vm.Status = fcStatusPaused
+	return saveFCMetadata(p.metadataPath(server.Name), vm)
 }
 
 // Resume unfreezes a paused microVM's vCPUs via the Firecracker API.
-func (p ProviderFirecracker) Resume(server Vm) (Vm, error) {
-	vm, err := loadFirecrackerMetadata(p.metadataPath(server.Name))
+func (p ProviderFC) Resume(server Vm) (Vm, error) {
+	vm, err := loadFCMetadata(p.metadataPath(server.Name))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return Vm{}, fmt.Errorf("no microVM found with name %q", server.Name)
 		}
 		return Vm{}, err
 	}
-	if vm.Status != firecrackerStatusPaused {
-		return mapFirecrackerVM(vm), nil
+	if vm.Status != fcStatusPaused {
+		return mapFCVM(vm), nil
 	}
 	if err := p.API.SetState(vm.SocketPath, "Resumed"); err != nil {
 		return Vm{}, fmt.Errorf("failed to resume microVM: %w", err)
 	}
-	vm.Status = firecrackerStatusRunning
-	if err := saveFirecrackerMetadata(p.metadataPath(server.Name), vm); err != nil {
+	vm.Status = fcStatusRunning
+	if err := saveFCMetadata(p.metadataPath(server.Name), vm); err != nil {
 		return Vm{}, err
 	}
-	return mapFirecrackerVM(vm), nil
+	return mapFCVM(vm), nil
 }
 
 // List returns all running (non-paused) managed microVMs.
-func (p ProviderFirecracker) List() (VmList, error) {
+func (p ProviderFC) List() (VmList, error) {
 	all, err := p.listAll()
 	if err != nil {
 		return VmList{}, err
 	}
 	var list VmList
 	for _, vm := range all {
-		if vm.Status == firecrackerStatusPaused {
+		if vm.Status == fcStatusPaused {
 			continue
 		}
-		list.List = append(list.List, mapFirecrackerVM(vm))
+		list.List = append(list.List, mapFCVM(vm))
 	}
 	return list, nil
 }
 
 // ListPaused returns all paused managed microVMs.
-func (p ProviderFirecracker) ListPaused() (VmList, error) {
+func (p ProviderFC) ListPaused() (VmList, error) {
 	all, err := p.listAll()
 	if err != nil {
 		return VmList{}, err
 	}
 	var list VmList
 	for _, vm := range all {
-		if vm.Status == firecrackerStatusPaused {
-			list.List = append(list.List, mapFirecrackerVM(vm))
+		if vm.Status == fcStatusPaused {
+			list.List = append(list.List, mapFCVM(vm))
 		}
 	}
 	return list, nil
 }
 
 // GetByName returns the named microVM, or a zero-value Vm if it doesn't exist.
-func (p ProviderFirecracker) GetByName(serverName string) (Vm, error) {
-	vm, err := loadFirecrackerMetadata(p.metadataPath(serverName))
+func (p ProviderFC) GetByName(serverName string) (Vm, error) {
+	vm, err := loadFCMetadata(p.metadataPath(serverName))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return Vm{}, nil
 		}
 		return Vm{}, err
 	}
-	return mapFirecrackerVM(vm), nil
+	return mapFCVM(vm), nil
 }
 
 // CreateSSHKey validates the given public key file and returns its absolute
 // path. Unlike the remote providers there is no key registry to upload to:
 // Deploy reads the key directly from this path and injects it into the
 // microVM's rootfs.
-func (p ProviderFirecracker) CreateSSHKey(publicKeyFile string) (keyID string, err error) {
+func (p ProviderFC) CreateSSHKey(publicKeyFile string) (keyID string, err error) {
 	data, err := os.ReadFile(publicKeyFile)
 	if err != nil {
 		return "", err
@@ -555,7 +555,7 @@ func (p ProviderFirecracker) CreateSSHKey(publicKeyFile string) (keyID string, e
 }
 
 // SSHInto connects to the microVM over its TAP device IP address.
-func (p ProviderFirecracker) SSHInto(serverName string, port int, privateKey string, command []string) {
+func (p ProviderFC) SSHInto(serverName string, port int, privateKey string, command []string) {
 	vm, err := p.GetByName(serverName)
 	if err != nil || vm.Name == "" {
 		log.Fatalln("no microVM found with name " + serverName)

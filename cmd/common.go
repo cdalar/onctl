@@ -63,18 +63,18 @@ func setDefaults() {
 	viper.SetDefault("hetzner.vm.type", "cpx21")
 	viper.SetDefault("hetzner.vm.image", "ubuntu-22.04")
 	viper.SetDefault("hetzner.vm.username", "root")
-	// Firecracker (was firecracker.yaml). providerfirecracker.GetConfig also
+	// Firecracker (was fc.yaml). providerfc.GetConfig also
 	// defaults these for direct package use; kept here so the values are part
 	// of the CLI config layer (and so kernelImage/rootfsImage, which GetConfig
 	// leaves empty, resolve to the conventional ~/.onctl paths with no config).
-	viper.SetDefault("firecracker.kernelImage", "~/.onctl/firecracker/images/vmlinux")
-	viper.SetDefault("firecracker.rootfsImage", "~/.onctl/firecracker/images/rootfs.ext4")
-	viper.SetDefault("firecracker.vcpuCount", 1)
-	viper.SetDefault("firecracker.memSizeMib", 512)
-	viper.SetDefault("firecracker.binPath", "firecracker")
-	viper.SetDefault("firecracker.network.bridge", "fcbr0")
-	viper.SetDefault("firecracker.network.cidr", "172.16.0.1/24")
-	viper.SetDefault("firecracker.vm.username", "root")
+	viper.SetDefault("fc.kernelImage", "~/.onctl/firecracker/images/vmlinux")
+	viper.SetDefault("fc.rootfsImage", "~/.onctl/firecracker/images/rootfs.ext4")
+	viper.SetDefault("fc.vcpuCount", 1)
+	viper.SetDefault("fc.memSizeMib", 512)
+	viper.SetDefault("fc.binPath", "firecracker")
+	viper.SetDefault("fc.network.bridge", "fcbr0")
+	viper.SetDefault("fc.network.cidr", "172.16.0.1/24")
+	viper.SetDefault("fc.vm.username", "root")
 }
 
 func ReadConfig(cloudProvider string) error {

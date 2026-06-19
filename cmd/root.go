@@ -8,7 +8,7 @@ import (
 
 	"github.com/cdalar/onctl/internal/provideraws"
 	"github.com/cdalar/onctl/internal/providerazure"
-	"github.com/cdalar/onctl/internal/providerfirecracker"
+	"github.com/cdalar/onctl/internal/providerfc"
 	"github.com/cdalar/onctl/internal/providergcp"
 	"github.com/cdalar/onctl/internal/providerhtz"
 	"github.com/cdalar/onctl/internal/tools"
@@ -66,7 +66,7 @@ var (
 		},
 	}
 	cloudProvider     string
-	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "firecracker"}
+	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "fc"}
 	provider          cloud.CloudProviderInterface
 	providerFlag      string
 )
@@ -171,14 +171,14 @@ func initProvider(cloudProvider string) {
 			VnetClient:          providerazure.GetVnetClient(),
 			NSGClient:           providerazure.GetNSGClient(),
 		}
-	case "firecracker":
-		fcConfig := providerfirecracker.GetConfig()
-		provider = &cloud.ProviderFirecracker{
+	case "fc":
+		fcConfig := providerfc.GetConfig()
+		provider = &cloud.ProviderFC{
 			Config:  fcConfig,
-			Process: providerfirecracker.NewProcessManager(fcConfig.BinPath),
-			API:     providerfirecracker.NewAPIClient(),
-			Net:     providerfirecracker.NewNetworkManager(),
-			Rootfs:  providerfirecracker.NewRootfsPreparer(),
+			Process: providerfc.NewProcessManager(fcConfig.BinPath),
+			API:     providerfc.NewAPIClient(),
+			Net:     providerfc.NewNetworkManager(),
+			Rootfs:  providerfc.NewRootfsPreparer(),
 		}
 	}
 }

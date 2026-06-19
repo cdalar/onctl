@@ -14,8 +14,8 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// fakeFirecrackerProcess is a test double for FirecrackerProcess.
-type fakeFirecrackerProcess struct {
+// fakeFCProcess is a test double for FCProcess.
+type fakeFCProcess struct {
 	pid        int
 	startCalls int
 	startErr   error
@@ -24,7 +24,7 @@ type fakeFirecrackerProcess struct {
 	notOwned   map[int]bool
 }
 
-func (f *fakeFirecrackerProcess) Start(_ string, _ FirecrackerVMConfig, _ string) (int, error) {
+func (f *fakeFCProcess) Start(_ string, _ FCVMConfig, _ string) (int, error) {
 	f.startCalls++
 	if f.startErr != nil {
 		return 0, f.startErr
@@ -36,26 +36,26 @@ func (f *fakeFirecrackerProcess) Start(_ string, _ FirecrackerVMConfig, _ string
 	return f.pid, nil
 }
 
-func (f *fakeFirecrackerProcess) Stop(pid int) error {
+func (f *fakeFCProcess) Stop(pid int) error {
 	f.stopCalls = append(f.stopCalls, pid)
 	delete(f.running, pid)
 	return nil
 }
 
-func (f *fakeFirecrackerProcess) IsRunning(pid int) bool {
+func (f *fakeFCProcess) IsRunning(pid int) bool {
 	return f.running[pid]
 }
 
-func (f *fakeFirecrackerProcess) Owns(pid int, _ string) bool {
+func (f *fakeFCProcess) Owns(pid int, _ string) bool {
 	return !f.notOwned[pid]
 }
 
-// fakeFirecrackerAPI is a test double for FirecrackerAPI.
-type fakeFirecrackerAPI struct {
+// fakeFCAPI is a test double for FCAPI.
+type fakeFCAPI struct {
 	states []string
 }
 
-func (f *fakeFirecrackerAPI) SetState(_ string, state string) error {
+func (f *fakeFCAPI) SetState(_ string, state string) error {
 	f.states = append(f.states, state)
 	return nil
 }
@@ -92,14 +92,14 @@ func (f *fakeRootfsPreparer) Prepare(_, destPath, _, _ string) error {
 	return os.WriteFile(destPath, []byte("rootfs"), 0600)
 }
 
-func newTestFirecrackerProvider(t *testing.T) (ProviderFirecracker, *fakeFirecrackerProcess, *fakeFirecrackerAPI, *fakeNetworkManager, *fakeRootfsPreparer) {
+func newTestFCProvider(t *testing.T) (ProviderFC, *fakeFCProcess, *fakeFCAPI, *fakeNetworkManager, *fakeRootfsPreparer) {
 	t.Helper()
-	proc := &fakeFirecrackerProcess{pid: 12345}
-	api := &fakeFirecrackerAPI{}
+	proc := &fakeFCProcess{pid: 12345}
+	api := &fakeFCAPI{}
 	net := &fakeNetworkManager{}
 	rootfs := &fakeRootfsPreparer{}
-	p := ProviderFirecracker{
-		Config: FirecrackerConfig{
+	p := ProviderFC{
+		Config: FCConfig{
 			KernelImage: "/images/vmlinux",
 			RootfsImage: "/images/rootfs.ext4",
 			VCPUCount:   1,
@@ -133,7 +133,7 @@ func writeTestPublicKey(t *testing.T) string {
 	return path
 }
 
-func TestParseFirecrackerType(t *testing.T) {
+func TestParseFCType(t *testing.T) {
 	tests := []struct {
 		in       string
 		wantVCPU int64
@@ -146,24 +146,24 @@ func TestParseFirecrackerType(t *testing.T) {
 		{"0vcpu-512mb", 1, 512},
 	}
 	for _, tt := range tests {
-		vcpu, mem := parseFirecrackerType(tt.in, 1, 512)
+		vcpu, mem := parseFCType(tt.in, 1, 512)
 		assert.Equal(t, tt.wantVCPU, vcpu, "vcpu for %q", tt.in)
 		assert.Equal(t, tt.wantMem, mem, "mem for %q", tt.in)
 	}
 }
 
-func TestFirecrackerTapName(t *testing.T) {
-	name := firecrackerTapName("my-test-vm")
+func TestFCTapName(t *testing.T) {
+	name := fcTapName("my-test-vm")
 	assert.LessOrEqual(t, len(name), 15)
 	assert.True(t, strings.HasPrefix(name, "fc"))
-	assert.Equal(t, name, firecrackerTapName("my-test-vm"))
-	assert.NotEqual(t, name, firecrackerTapName("other-vm"))
+	assert.Equal(t, name, fcTapName("my-test-vm"))
+	assert.NotEqual(t, name, fcTapName("other-vm"))
 }
 
-func TestFirecrackerMAC(t *testing.T) {
-	mac := firecrackerMAC("my-test-vm")
+func TestFCMAC(t *testing.T) {
+	mac := fcMAC("my-test-vm")
 	assert.Regexp(t, `^02:FC:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}$`, mac)
-	assert.Equal(t, mac, firecrackerMAC("my-test-vm"))
+	assert.Equal(t, mac, fcMAC("my-test-vm"))
 }
 
 func TestBridgeGatewayAndMask(t *testing.T) {
@@ -176,54 +176,54 @@ func TestBridgeGatewayAndMask(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestAllocateFirecrackerIP(t *testing.T) {
-	ip, err := allocateFirecrackerIP("172.16.0.1/24", nil)
+func TestAllocateFCIP(t *testing.T) {
+	ip, err := allocateFCIP("172.16.0.1/24", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "172.16.0.2", ip)
 
-	ip, err = allocateFirecrackerIP("172.16.0.1/24", map[string]bool{"172.16.0.2": true, "172.16.0.3": true})
+	ip, err = allocateFCIP("172.16.0.1/24", map[string]bool{"172.16.0.2": true, "172.16.0.3": true})
 	require.NoError(t, err)
 	assert.Equal(t, "172.16.0.4", ip)
 
 	// /30 network: .0 is the network address, .1 is the gateway, .3 is the
 	// broadcast address, leaving only .2 usable.
-	_, err = allocateFirecrackerIP("172.16.0.1/30", map[string]bool{"172.16.0.2": true})
+	_, err = allocateFCIP("172.16.0.1/30", map[string]bool{"172.16.0.2": true})
 	assert.Error(t, err)
 }
 
-func TestProviderFirecracker_Deploy(t *testing.T) {
-	p, proc, _, netMgr, rootfs := newTestFirecrackerProvider(t)
+func TestProviderFC_Deploy(t *testing.T) {
+	p, proc, _, netMgr, rootfs := newTestFCProvider(t)
 	pubKeyFile := writeTestPublicKey(t)
 
 	vm, err := p.Deploy(Vm{Name: "test-vm", SSHKeyID: pubKeyFile})
 	require.NoError(t, err)
 
-	assert.Equal(t, "firecracker", vm.Provider)
+	assert.Equal(t, "fc", vm.Provider)
 	assert.Equal(t, "test-vm", vm.Name)
 	assert.Equal(t, "running", vm.Status)
 	assert.Equal(t, "1vcpu-512mb", vm.Type)
 	assert.Equal(t, "172.16.0.2", vm.IP)
 	assert.Equal(t, 1, proc.startCalls)
 	assert.Equal(t, []string{"fcbr0"}, netMgr.bridges)
-	assert.Equal(t, []string{firecrackerTapName("test-vm")}, netMgr.taps)
+	assert.Equal(t, []string{fcTapName("test-vm")}, netMgr.taps)
 	assert.Len(t, rootfs.calls, 1)
 
-	meta, err := loadFirecrackerMetadata(p.metadataPath("test-vm"))
+	meta, err := loadFCMetadata(p.metadataPath("test-vm"))
 	require.NoError(t, err)
 	assert.Equal(t, 12345, meta.PID)
 	assert.Equal(t, "172.16.0.2", meta.IPAddress)
-	assert.Equal(t, firecrackerStatusRunning, meta.Status)
+	assert.Equal(t, fcStatusRunning, meta.Status)
 }
 
-func TestProviderFirecracker_Deploy_CustomType(t *testing.T) {
-	p, _, _, _, _ := newTestFirecrackerProvider(t)
+func TestProviderFC_Deploy_CustomType(t *testing.T) {
+	p, _, _, _, _ := newTestFCProvider(t)
 	vm, err := p.Deploy(Vm{Name: "big-vm", Type: "2vcpu-1024mb"})
 	require.NoError(t, err)
 	assert.Equal(t, "2vcpu-1024mb", vm.Type)
 }
 
-func TestProviderFirecracker_Deploy_Idempotent(t *testing.T) {
-	p, proc, _, _, _ := newTestFirecrackerProvider(t)
+func TestProviderFC_Deploy_Idempotent(t *testing.T) {
+	p, proc, _, _, _ := newTestFCProvider(t)
 
 	_, err := p.Deploy(Vm{Name: "test-vm"})
 	require.NoError(t, err)
@@ -235,62 +235,62 @@ func TestProviderFirecracker_Deploy_Idempotent(t *testing.T) {
 	assert.Equal(t, 1, proc.startCalls)
 }
 
-func TestProviderFirecracker_Deploy_MissingImages(t *testing.T) {
-	p, _, _, _, _ := newTestFirecrackerProvider(t)
+func TestProviderFC_Deploy_MissingImages(t *testing.T) {
+	p, _, _, _, _ := newTestFCProvider(t)
 	p.Config.KernelImage = ""
 	_, err := p.Deploy(Vm{Name: "test-vm"})
 	assert.Error(t, err)
 }
 
-func TestProviderFirecracker_Deploy_StartFailureCleansUp(t *testing.T) {
-	p, proc, _, netMgr, _ := newTestFirecrackerProvider(t)
+func TestProviderFC_Deploy_StartFailureCleansUp(t *testing.T) {
+	p, proc, _, netMgr, _ := newTestFCProvider(t)
 	proc.startErr = errors.New("boom")
 
 	_, err := p.Deploy(Vm{Name: "test-vm"})
 	assert.Error(t, err)
-	assert.Contains(t, netMgr.deleted, firecrackerTapName("test-vm"))
+	assert.Contains(t, netMgr.deleted, fcTapName("test-vm"))
 
 	_, statErr := os.Stat(p.vmDir("test-vm"))
 	assert.True(t, os.IsNotExist(statErr))
 }
 
-func TestProviderFirecracker_Destroy(t *testing.T) {
-	p, proc, _, netMgr, _ := newTestFirecrackerProvider(t)
+func TestProviderFC_Destroy(t *testing.T) {
+	p, proc, _, netMgr, _ := newTestFCProvider(t)
 	_, err := p.Deploy(Vm{Name: "test-vm"})
 	require.NoError(t, err)
 
 	require.NoError(t, p.Destroy(Vm{Name: "test-vm"}))
 	assert.Contains(t, proc.stopCalls, 12345)
-	assert.Contains(t, netMgr.deleted, firecrackerTapName("test-vm"))
+	assert.Contains(t, netMgr.deleted, fcTapName("test-vm"))
 
 	_, statErr := os.Stat(p.vmDir("test-vm"))
 	assert.True(t, os.IsNotExist(statErr))
 }
 
-// TestProviderFirecracker_Destroy_StalePID verifies that Destroy does not
+// TestProviderFC_Destroy_StalePID verifies that Destroy does not
 // signal a running process whose PID was persisted for this microVM but no
 // longer belongs to it (e.g. reused after a host reboot).
-func TestProviderFirecracker_Destroy_StalePID(t *testing.T) {
-	p, proc, _, netMgr, _ := newTestFirecrackerProvider(t)
+func TestProviderFC_Destroy_StalePID(t *testing.T) {
+	p, proc, _, netMgr, _ := newTestFCProvider(t)
 	_, err := p.Deploy(Vm{Name: "test-vm"})
 	require.NoError(t, err)
 	proc.notOwned = map[int]bool{12345: true}
 
 	require.NoError(t, p.Destroy(Vm{Name: "test-vm"}))
 	assert.NotContains(t, proc.stopCalls, 12345)
-	assert.Contains(t, netMgr.deleted, firecrackerTapName("test-vm"))
+	assert.Contains(t, netMgr.deleted, fcTapName("test-vm"))
 
 	_, statErr := os.Stat(p.vmDir("test-vm"))
 	assert.True(t, os.IsNotExist(statErr))
 }
 
-func TestProviderFirecracker_Destroy_NotFound(t *testing.T) {
-	p, _, _, _, _ := newTestFirecrackerProvider(t)
+func TestProviderFC_Destroy_NotFound(t *testing.T) {
+	p, _, _, _, _ := newTestFCProvider(t)
 	assert.Error(t, p.Destroy(Vm{Name: "nope"}))
 }
 
-func TestProviderFirecracker_PauseResume(t *testing.T) {
-	p, _, api, _, _ := newTestFirecrackerProvider(t)
+func TestProviderFC_PauseResume(t *testing.T) {
+	p, _, api, _, _ := newTestFCProvider(t)
 	_, err := p.Deploy(Vm{Name: "test-vm"})
 	require.NoError(t, err)
 
@@ -316,20 +316,20 @@ func TestProviderFirecracker_PauseResume(t *testing.T) {
 	require.Len(t, running.List, 1)
 }
 
-func TestProviderFirecracker_Pause_NotFound(t *testing.T) {
-	p, _, _, _, _ := newTestFirecrackerProvider(t)
+func TestProviderFC_Pause_NotFound(t *testing.T) {
+	p, _, _, _, _ := newTestFCProvider(t)
 	assert.Error(t, p.Pause(Vm{Name: "nope"}, true))
 }
 
-func TestProviderFirecracker_GetByName_NotFound(t *testing.T) {
-	p, _, _, _, _ := newTestFirecrackerProvider(t)
+func TestProviderFC_GetByName_NotFound(t *testing.T) {
+	p, _, _, _, _ := newTestFCProvider(t)
 	vm, err := p.GetByName("nope")
 	require.NoError(t, err)
 	assert.Equal(t, Vm{}, vm)
 }
 
-func TestProviderFirecracker_CreateSSHKey(t *testing.T) {
-	p, _, _, _, _ := newTestFirecrackerProvider(t)
+func TestProviderFC_CreateSSHKey(t *testing.T) {
+	p, _, _, _, _ := newTestFCProvider(t)
 	keyFile := writeTestPublicKey(t)
 
 	keyID, err := p.CreateSSHKey(keyFile)
@@ -337,8 +337,8 @@ func TestProviderFirecracker_CreateSSHKey(t *testing.T) {
 	assert.True(t, filepath.IsAbs(keyID))
 }
 
-func TestProviderFirecracker_CreateSSHKey_Invalid(t *testing.T) {
-	p, _, _, _, _ := newTestFirecrackerProvider(t)
+func TestProviderFC_CreateSSHKey_Invalid(t *testing.T) {
+	p, _, _, _, _ := newTestFCProvider(t)
 	keyFile := filepath.Join(t.TempDir(), "bad.pub")
 	require.NoError(t, os.WriteFile(keyFile, []byte("not a key"), 0644))
 
