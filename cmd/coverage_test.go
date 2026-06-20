@@ -30,12 +30,7 @@ func TestReadConfig_WithValidConfig(t *testing.T) {
 	err = os.Mkdir(onctlDir, 0755)
 	assert.NoError(t, err)
 
-	// Create configuration files
-	awsConfig := `
-region: us-east-1
-access_key: test-key
-secret_key: test-secret
-`
+	// Create configuration file
 	onctlConfig := `
 vm:
   name: test-vm
@@ -44,17 +39,16 @@ vm:
 ssh:
   publicKey: "~/.ssh/id_rsa.pub"
   privateKey: "~/.ssh/id_rsa"
+aws:
+  location: us-east-1
 `
-
-	err = os.WriteFile(onctlDir+"/aws.yaml", []byte(awsConfig), 0644)
-	assert.NoError(t, err)
 
 	err = os.WriteFile(onctlDir+"/onctl.yaml", []byte(onctlConfig), 0644)
 	assert.NoError(t, err)
 
-	// Test ReadConfig with existing files
-	err = ReadConfig("aws")
-	// Should not error with valid config files
+	// Test ReadConfig with an existing onctl.yaml
+	err = ReadConfig()
+	// Should not error with a valid config file
 	assert.NoError(t, err)
 }
 
@@ -81,7 +75,7 @@ func TestReadConfig_HomeDirectory(t *testing.T) {
 	homeOnctlDir := homeDir + "/.onctl"
 	if _, err := os.Stat(homeOnctlDir); os.IsNotExist(err) {
 		// Test with missing home config too
-		err = ReadConfig("aws")
+		err = ReadConfig()
 		assert.Error(t, err) // Should error when no config found
 	}
 }

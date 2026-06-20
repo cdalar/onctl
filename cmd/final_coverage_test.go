@@ -86,19 +86,34 @@ func TestGenerateIDToken_BranchCoverage(t *testing.T) {
 }
 
 func TestReadConfig_ErrorPaths(t *testing.T) {
-	// Test ReadConfig with non-existent provider to improve branch coverage
+	// Test ReadConfig with no .onctl directory present (in cwd or home) to
+	// improve branch coverage.
 	originalWd, _ := os.Getwd()
 	defer func() { _ = os.Chdir(originalWd) }()
 
-	// Create temp directory without .onctl
+	originalHome, homeWasSet := os.LookupEnv("HOME")
+	defer func() {
+		if homeWasSet {
+			_ = os.Setenv("HOME", originalHome)
+		} else {
+			_ = os.Unsetenv("HOME")
+		}
+	}()
+
+	// Create temp directories without .onctl for both cwd and home, so this
+	// test doesn't depend on the real user's ~/.onctl.
 	tempDir, err := os.MkdirTemp("", "onctl-test")
 	assert.NoError(t, err)
 	defer func() { _ = os.RemoveAll(tempDir) }()
+	tempHome, err := os.MkdirTemp("", "onctl-test-home")
+	assert.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tempHome) }()
 
 	_ = os.Chdir(tempDir)
+	_ = os.Setenv("HOME", tempHome)
 
 	// This should fail with no config directory
-	err = ReadConfig("nonexistent-provider")
+	err = ReadConfig()
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no configuration")
 }
@@ -174,6 +189,21 @@ func TestInitializeOnctlEnv_Coverage(t *testing.T) {
 	originalSkip := skipInteractivePrompt
 	skipInteractivePrompt = true
 	defer func() { skipInteractivePrompt = originalSkip }()
+
+	// Isolate HOME so this doesn't create a real ~/.onctl directory, which
+	// would leak into other tests that assert no config exists.
+	originalHome, homeWasSet := os.LookupEnv("HOME")
+	defer func() {
+		if homeWasSet {
+			_ = os.Setenv("HOME", originalHome)
+		} else {
+			_ = os.Unsetenv("HOME")
+		}
+	}()
+	tempHome, err := os.MkdirTemp("", "onctl-test-home")
+	assert.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tempHome) }()
+	_ = os.Setenv("HOME", tempHome)
 
 	// Test initializeOnctlEnv to improve coverage
 	tempDir, err := os.MkdirTemp("", "onctl-test")

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,6 +22,21 @@ func TestInitializeOnctlEnv_NewDirectory(t *testing.T) {
 	originalSkip := skipInteractivePrompt
 	skipInteractivePrompt = true
 	defer func() { skipInteractivePrompt = originalSkip }()
+
+	// Isolate HOME so this test doesn't create a real ~/.onctl directory,
+	// which would leak into other tests that assert no config exists.
+	originalHome, homeWasSet := os.LookupEnv("HOME")
+	defer func() {
+		if homeWasSet {
+			_ = os.Setenv("HOME", originalHome)
+		} else {
+			_ = os.Unsetenv("HOME")
+		}
+	}()
+	tempHome, err := os.MkdirTemp("", "onctl-test-home")
+	assert.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tempHome) }()
+	_ = os.Setenv("HOME", tempHome)
 
 	// Create a temporary directory for testing
 	tempDir, err := os.MkdirTemp("", "onctl-test")
@@ -278,6 +294,106 @@ func TestInitializeOnctlEnv_ExistingLocalConfig(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = os.Stat(localOnctlPath)
 	assert.NoError(t, err)
+}
+
+func TestWarnLegacyProviderConfigFiles_WarnsWhenPresent(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "onctl-test")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tempDir) }()
+
+	// Simulate a pre-single-yaml .onctl directory: a legacy per-provider file
+	// alongside the current onctl.yaml. ReadConfig only reads onctl.yaml, so
+	// settings left in gcp.yaml would otherwise be silently ignored.
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "gcp.yaml"), []byte("project: my-project\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, onctlYamlFile), []byte("vm:\n  name: onctl-vm\n"), 0644))
+
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	originalStdout := os.Stdout
+	os.Stdout = w
+
+	warnLegacyProviderConfigFiles(tempDir)
+
+	require.NoError(t, w.Close())
+	os.Stdout = originalStdout
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(r)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "gcp.yaml")
+	assert.Contains(t, output, "no longer reads")
+}
+
+func TestWarnLegacyProviderConfigFiles_SilentWhenAbsent(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "onctl-test")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tempDir) }()
+
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, onctlYamlFile), []byte("vm:\n  name: onctl-vm\n"), 0644))
+
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	originalStdout := os.Stdout
+	os.Stdout = w
+
+	warnLegacyProviderConfigFiles(tempDir)
+
+	require.NoError(t, w.Close())
+	os.Stdout = originalStdout
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(r)
+	require.NoError(t, err)
+
+	assert.Empty(t, buf.String())
+}
+
+func TestInitializeOnctlEnv_RepairsMissingOnctlYamlInExistingHomeDir(t *testing.T) {
+	// Reproduces the migration bug flagged in review: a .onctl directory that
+	// predates the single-onctl.yaml config (e.g. only had per-provider yaml
+	// files) was treated as "already initialized" and left without an
+	// onctl.yaml, so every later command would fail with "no configuration
+	// directory found". initializeOnctlEnv must populate onctl.yaml in that
+	// case instead of just printing "already initialized".
+	originalSkip := skipInteractivePrompt
+	skipInteractivePrompt = true
+	defer func() { skipInteractivePrompt = originalSkip }()
+
+	originalHome, homeWasSet := os.LookupEnv("HOME")
+	defer func() {
+		if homeWasSet {
+			_ = os.Setenv("HOME", originalHome)
+		} else {
+			_ = os.Unsetenv("HOME")
+		}
+	}()
+	tempHome, err := os.MkdirTemp("", "onctl-test-home")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tempHome) }()
+	require.NoError(t, os.Setenv("HOME", tempHome))
+
+	tempProject, err := os.MkdirTemp("", "onctl-test-project")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tempProject) }()
+	originalWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(originalWd) }()
+	require.NoError(t, os.Chdir(tempProject))
+
+	// Pre-create a legacy home .onctl directory with no onctl.yaml, as a
+	// pre-migration install would have left it.
+	homeOnctlPath := filepath.Join(tempHome, onctlDirName)
+	require.NoError(t, os.MkdirAll(homeOnctlPath, os.ModePerm))
+	require.NoError(t, os.WriteFile(filepath.Join(homeOnctlPath, "gcp.yaml"), []byte("project: my-project\n"), 0644))
+
+	_, err = os.Stat(filepath.Join(homeOnctlPath, onctlYamlFile))
+	require.True(t, os.IsNotExist(err), "onctl.yaml should not exist before repair")
+
+	err = initializeOnctlEnv()
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(homeOnctlPath, onctlYamlFile))
+	assert.NoError(t, err, "initializeOnctlEnv should populate onctl.yaml in an already-initialized directory that's missing it")
 }
 
 func TestInitCmd_Run(t *testing.T) {

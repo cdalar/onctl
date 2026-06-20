@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cdalar/onctl/internal/files"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
@@ -20,29 +21,29 @@ func TestGenericCreateFlagsExist(t *testing.T) {
 }
 
 // TestCreateFlagsBindToViper verifies that setting a create flag is reflected
-// through its viper binding (the path the rest of the code reads), and that the
-// default value matches the old hetzner.yaml. Deterministic: it sets values
-// explicitly and restores them.
+// through its viper binding (the path the rest of the code reads), and that
+// the default value matches the production onctl.yaml template written by
+// `onctl init`. Deterministic: it sets values explicitly and restores them.
 func TestCreateFlagsBindToViper(t *testing.T) {
-	// viper.ReadInConfig() replaces (not merges) the general-config layer,
-	// which outranks our SetDefault values. Loading an empty config here
-	// clears any values a sibling test (e.g. TestReadConfig_WithValidConfig)
-	// left behind in the shared, global viper instance, so this test's
-	// outcome doesn't depend on `go test`'s randomized run order.
+	// Loading the real init template (rather than an empty config) clears any
+	// values a sibling test (e.g. TestReadConfig_WithValidConfig) left behind
+	// in the shared, global viper instance, so this test's outcome doesn't
+	// depend on `go test`'s randomized run order, while also keeping this
+	// test's expectations in sync with the file onctl init actually writes.
 	tempDir, err := os.MkdirTemp("", "onctl-flags-test")
 	assert.NoError(t, err)
 	defer func() { _ = os.RemoveAll(tempDir) }()
 	onctlDir := filepath.Join(tempDir, ".onctl")
 	assert.NoError(t, os.Mkdir(onctlDir, 0755))
-	assert.NoError(t, os.WriteFile(filepath.Join(onctlDir, "onctl.yaml"), []byte("{}\n"), 0644))
-	assert.NoError(t, os.WriteFile(filepath.Join(onctlDir, "hetzner.yaml"), []byte("{}\n"), 0644))
+	template, err := files.EmbededFiles.ReadFile("init/onctl.yaml")
+	assert.NoError(t, err)
+	assert.NoError(t, os.WriteFile(filepath.Join(onctlDir, "onctl.yaml"), template, 0644))
 
 	originalWd, err := os.Getwd()
 	assert.NoError(t, err)
 	defer func() { _ = os.Chdir(originalWd) }()
 	assert.NoError(t, os.Chdir(tempDir))
-	assert.NoError(t, ReadConfig("hetzner"))
-	setDefaults()
+	assert.NoError(t, ReadConfig())
 
 	cases := []struct{ flag, key, def, override string }{
 		{"type", "hetzner.vm.type", "cpx21", "cpx31"},

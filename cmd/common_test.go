@@ -489,7 +489,7 @@ func TestMergeConfig_PreferCmdLineOptions(t *testing.T) {
 
 func TestReadConfig_NoConfigDirectory(t *testing.T) {
 	// Test that ReadConfig function handles missing config directories properly
-	err := ReadConfig("nonexistent-provider")
+	err := ReadConfig()
 	assert.Error(t, err)
 }
 

@@ -1,21 +1,16 @@
 # Getting Started
 
 ## initialize
-1. `onctl init` on your project folder. This will create a `.onctl` directory and create files related to each cloud configuration. The directory will look like this. 
+1. `onctl init` is required before using onctl. It creates a `.onctl` directory with a single configuration file. The directory will look like this. 
 ```
 ❯ tree
 .
-├── aws.yaml
-├── azure.yaml
-├── hetzner.yaml
-├── <cloud provider>.yaml
 └── onctl.yaml
 
-1 directory, 3 files
+1 directory, 1 file
 ```
-    1. `onctl.yaml` file is the main configuration file and holds the all non-cloud specific parameters. 
-    2. each provider has it's own configuration yaml file to define things specific things like (*azure resourceGroups*)
-    3. change each configuration file depending on your needs. 
+    1. `onctl.yaml` is the single source of truth for every configurable parameter for every provider (global settings, hetzner, aws, gcp, azure, fc), each grouped under its own section, pre-filled with working defaults.
+    2. edit the values you want to change; CLI flags (`onctl create --help`) still override whatever is in this file. `gcp.project` and `azure.subscriptionId` ship as placeholders and must be set to use those providers.
 
 ## set cloud provider
 1. set `ONCTL_CLOUD` environment variables to the name of the cloud provider. Supported values; 

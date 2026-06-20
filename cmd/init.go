@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/cdalar/onctl/internal/files"
 	"github.com/spf13/cobra"
@@ -12,9 +13,17 @@ import (
 )
 
 const (
-	onctlDirName = ".onctl"
-	initDir      = "init"
+	onctlDirName  = ".onctl"
+	initDir       = "init"
+	onctlYamlFile = "onctl.yaml"
 )
+
+// legacyProviderConfigFiles lists the per-provider YAML files written by
+// onctl releases prior to the single onctl.yaml config. They are no longer
+// read by ReadConfig, so any settings in them (e.g. a custom gcp.project or
+// azure subscription) are silently ignored once a .onctl directory has an
+// onctl.yaml of the current format.
+var legacyProviderConfigFiles = []string{"aws.yaml", "azure.yaml", "fc.yaml", "gcp.yaml", "hetzner.yaml"}
 
 // skipInteractivePrompt is used to skip interactive prompts during testing
 var skipInteractivePrompt = false
@@ -57,11 +66,26 @@ func initializeOnctlEnv() error {
 		return fmt.Errorf("failed to check %s: %w", homeOnctlPath, err)
 	} else {
 		fmt.Printf("Global onctl environment already initialized in %s\n", homeOnctlPath)
+		// A directory from before the single onctl.yaml config (e.g. one that
+		// only had per-provider yaml files) has no onctl.yaml of its own;
+		// populate it now instead of leaving ReadConfig to fail.
+		if _, err := os.Stat(filepath.Join(homeOnctlPath, onctlYamlFile)); os.IsNotExist(err) {
+			if err := populateOnctlEnv(homeOnctlPath); err != nil {
+				return err
+			}
+		}
+		warnLegacyProviderConfigFiles(homeOnctlPath)
 	}
 
 	// Check if local .onctl already exists
 	if _, err := os.Stat(localOnctlPath); err == nil {
 		fmt.Printf("Project-based onctl environment already initialized in %s\n", localOnctlPath)
+		if _, err := os.Stat(filepath.Join(localOnctlPath, onctlYamlFile)); os.IsNotExist(err) {
+			if err := populateOnctlEnv(localOnctlPath); err != nil {
+				return err
+			}
+		}
+		warnLegacyProviderConfigFiles(localOnctlPath)
 		return nil
 	} else if !os.IsNotExist(err) {
 		// Handle other os.Stat errors (not IsNotExist)
@@ -91,6 +115,23 @@ func initializeOnctlEnv() error {
 // isInteractive checks if stdin is connected to a terminal (TTY)
 func isInteractive() bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
+// warnLegacyProviderConfigFiles warns when configDir still has per-provider
+// YAML files from before the single onctl.yaml config. ReadConfig only reads
+// onctl.yaml, so settings left in these files (e.g. a custom gcp.project)
+// are silently ignored; surface that instead of failing quietly.
+func warnLegacyProviderConfigFiles(configDir string) {
+	var found []string
+	for _, name := range legacyProviderConfigFiles {
+		if _, err := os.Stat(filepath.Join(configDir, name)); err == nil {
+			found = append(found, name)
+		}
+	}
+	if len(found) > 0 {
+		fmt.Printf("Warning: %s no longer reads %s. Move any custom settings from these files into the matching provider section of %s.\n",
+			configDir, strings.Join(found, ", "), filepath.Join(configDir, onctlYamlFile))
+	}
 }
 
 func populateOnctlEnv(targetPath string) error {
