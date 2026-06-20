@@ -83,11 +83,10 @@ func init() {
 	createCmd.Flags().StringVarP(&opt.ConfigFile, "file", "f", "", "Path to configuration YAML file")
 	createCmd.Flags().StringVar(&opt.Vm.Image, "image", "", "OS image to use (e.g. ubuntu-22.04, fedora-42)")
 
-	// Generic VM flags. These replace the per-provider YAML written by
-	// `onctl init` (Hetzner pass): each is bound to the viper key the rest of
-	// the code already reads, so values flow through unchanged. Defaults match
-	// the previous hetzner.yaml/onctl.yaml so behavior is identical with no
-	// config present. See setDefaults() in common.go.
+	// Generic VM flags, bound to the viper key the rest of the code already
+	// reads. The hetzner.* defaults live in internal/files/init/onctl.yaml,
+	// written by `onctl init`; these flag defaults only act as a last-resort
+	// fallback if that file is somehow missing.
 	createCmd.Flags().StringVar(&flagType, "type", "cpx21", "instance type (provider-specific; Hetzner default cpx21)")
 	createCmd.Flags().StringVar(&flagLocation, "location", "fsn1", "location/region for the VM")
 	createCmd.Flags().StringVar(&flagUsername, "username", "root", "ssh username on the VM")
@@ -97,22 +96,20 @@ func init() {
 	_ = viper.BindPFlag("hetzner.vm.username", createCmd.Flags().Lookup("username"))
 	_ = viper.BindPFlag("vm.cloud-init.timeout", createCmd.Flags().Lookup("cloud-init-timeout"))
 	// --image keeps an empty flag default (so the image guard below and
-	// opt.Vm.Image stay empty when unset); viper supplies the real default.
+	// opt.Vm.Image stay empty when unset); onctl.yaml supplies the real default.
 	_ = viper.BindPFlag("hetzner.vm.image", createCmd.Flags().Lookup("image"))
 
 	// AWS. Same generic flags, bound to the aws.* keys read by
-	// provideraws/pkg/cloud/aws.go. Defaults match the previous aws.yaml; see
-	// setDefaults() in common.go.
+	// provideraws/pkg/cloud/aws.go. Defaults live in onctl.yaml's aws: section.
 	_ = viper.BindPFlag("aws.vm.type", createCmd.Flags().Lookup("type"))
 	_ = viper.BindPFlag("aws.location", createCmd.Flags().Lookup("location"))
 	_ = viper.BindPFlag("aws.vm.username", createCmd.Flags().Lookup("username"))
 	_ = viper.BindPFlag("aws.vm.image", createCmd.Flags().Lookup("image"))
 
-	// Firecracker-specific flags. These replace the embedded fc.yaml
-	// written by `onctl init`: each is bound to the fc.* key read by
-	// providerfc.GetConfig, with defaults matching the old YAML so
-	// behavior is identical with no config present. See setDefaults() in
-	// common.go. The generic --username flag also drives the microVM user.
+	// Firecracker-specific flags, each bound to the fc.* key read by
+	// providerfc.GetConfig. Defaults live in onctl.yaml's fc: section (and
+	// providerfc.GetConfig has its own inline fallback besides). The generic
+	// --username flag also drives the microVM user.
 	createCmd.Flags().StringVar(&flagFCKernelImage, "kernel-image", "~/.onctl/firecracker/images/vmlinux", "Firecracker: path to the uncompressed kernel (vmlinux)")
 	createCmd.Flags().StringVar(&flagFCRootfsImage, "rootfs-image", "~/.onctl/firecracker/images/rootfs.ext4", "Firecracker: path to the base rootfs (ext4)")
 	createCmd.Flags().StringVar(&flagFCBinary, "fc-binary", "firecracker", "Firecracker: path to the firecracker binary")

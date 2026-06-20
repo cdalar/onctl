@@ -1,0 +1,83 @@
+# onctl configuration file
+#
+# This file is the single source of truth for every provider's default
+# settings. CLI flags, when explicitly passed, still override these values
+# (precedence: flag > env var > this file).
+#
+# Edit the values you need; `onctl init` will not overwrite an existing file.
+
+# ---- Global ----
+vm:
+  name: onctl-vm
+  cloud-init:
+    timeout: 3m                  # max wait for cloud-init to finish (e.g. 3m, 180s)
+ssh:
+  publicKey: ~/.ssh/id_rsa.pub
+  privateKey: ~/.ssh/id_rsa
+actions:
+  githubOwner: cdalar             # used to resolve GitHub Action runner images
+
+# ---- Hetzner Cloud ----
+hetzner:
+  location: fsn1                  # datacenter location
+  vm:
+    type: cpx21                    # instance type
+    username: root                 # ssh user
+    image: ubuntu-22.04            # OS image
+
+# ---- AWS ----
+aws:
+  location: eu-central-1
+  vm:
+    type: t2.micro
+    username: ubuntu
+    image: ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*
+
+# ---- Google Cloud (GCP) ----
+gcp:
+  project: <project-id>           # REQUIRED: no default, set your GCP project ID
+  zone: europe-west4-a
+  type: n1-standard-1
+  vm:
+    username: root
+    # Enable nested virtualization (Intel VT-x) on the instance. Required to
+    # run KVM-based hypervisors (e.g. Firecracker microVMs) on this VM.
+    # Only supported on N1/N2/C2 machine types.
+    # nestedVirtualization: true
+
+# ---- Azure ----
+azure:
+  subscriptionId: <subscription-id> # REQUIRED: no default, set your Azure subscription ID
+  resourceGroup: test
+  location: westeurope
+  vm:
+    username: azureuser
+    type: Standard_D4s_v3
+    priority: Spot                 # Spot or Regular
+    image:
+      publisher: canonical
+      offer: 0001-com-ubuntu-server-jammy
+      version: latest
+      sku: 22_04-lts-gen2
+    vnet:
+      create: true
+      name: onctl-vnet
+      cidr: 10.1.0.0/16
+      subnet:
+        name: onctl-subnet1
+        cidr: 10.1.1.0/24
+
+# ---- Firecracker (fc) ----
+fc:
+  kernelImage: ~/.onctl/firecracker/images/vmlinux  # uncompressed kernel (vmlinux)
+  rootfsImage: ~/.onctl/firecracker/images/rootfs.ext4 # base rootfs, copied per-VM
+  # kernelArgs: "console=ttyS0 reboot=k panic=1 pci=off"  # network args appended automatically
+  vcpuCount: 1
+  memSizeMib: 512
+  binPath: firecracker            # path to the firecracker binary
+  network:
+    bridge: fcbr0                  # host bridge microVM TAP devices attach to
+    cidr: 172.16.0.1/24            # bridge address/subnet; address is the microVM gateway
+  vm:
+    username: root                 # ssh user configured in the rootfs image
+  # stateDir: ~/.onctl/firecracker  # default: ~/.onctl/firecracker
