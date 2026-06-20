@@ -81,6 +81,8 @@ func ReadConfig() error {
 		return fmt.Errorf("failed to read onctl.yaml in %s: %w", configDir, err)
 	}
 
+	warnLegacyProviderConfigFiles(configDir)
+
 	log.Println("[DEBUG] Loaded Settings:", viper.AllSettings())
 	return nil
 }

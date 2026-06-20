@@ -190,6 +190,21 @@ func TestInitializeOnctlEnv_Coverage(t *testing.T) {
 	skipInteractivePrompt = true
 	defer func() { skipInteractivePrompt = originalSkip }()
 
+	// Isolate HOME so this doesn't create a real ~/.onctl directory, which
+	// would leak into other tests that assert no config exists.
+	originalHome, homeWasSet := os.LookupEnv("HOME")
+	defer func() {
+		if homeWasSet {
+			_ = os.Setenv("HOME", originalHome)
+		} else {
+			_ = os.Unsetenv("HOME")
+		}
+	}()
+	tempHome, err := os.MkdirTemp("", "onctl-test-home")
+	assert.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tempHome) }()
+	_ = os.Setenv("HOME", tempHome)
+
 	// Test initializeOnctlEnv to improve coverage
 	tempDir, err := os.MkdirTemp("", "onctl-test")
 	assert.NoError(t, err)
