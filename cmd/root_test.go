@@ -87,3 +87,21 @@ func TestResolveGCPProject(t *testing.T) {
 		assert.Contains(t, err.Error(), "gcp.project is required")
 	})
 }
+
+func TestResolveAzureIdentifiers(t *testing.T) {
+	origSub := viper.GetString("azure.subscriptionId")
+	origRG := viper.GetString("azure.resourceGroup")
+	defer func() {
+		viper.Set("azure.subscriptionId", origSub)
+		viper.Set("azure.resourceGroup", origRG)
+	}()
+
+	t.Run("subscription placeholder without az errors clearly", func(t *testing.T) {
+		viper.Set("azure.subscriptionId", "<subscription-id>")
+		viper.Set("azure.resourceGroup", "test")
+		t.Setenv("PATH", "") // no az
+		err := resolveAzureIdentifiers()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "azure.subscriptionId is required")
+	})
+}
