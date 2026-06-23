@@ -13,7 +13,7 @@ import (
 // TestGenericCreateFlagsExist verifies the YAML-replacing flags are registered.
 func TestGenericCreateFlagsExist(t *testing.T) {
 	for _, name := range []string{"type", "location", "username", "cloud-init-timeout", "image",
-		"kernel-image", "rootfs-image", "fc-binary", "vcpu", "memory"} {
+		"kernel-image", "rootfs-image", "fc-binary", "vcpu", "memory", "project"} {
 		assert.NotNil(t, createCmd.Flags().Lookup(name), "create should have --%s flag", name)
 	}
 	assert.NotNil(t, rootCmd.PersistentFlags().Lookup("provider"), "root should have persistent --provider flag")
@@ -60,6 +60,10 @@ func TestCreateFlagsBindToViper(t *testing.T) {
 		{"type", "aws.vm.type", "t2.micro", "m5.large"},
 		{"location", "aws.location", "eu-central-1", "us-east-1"},
 		{"username", "aws.vm.username", "ubuntu", "ec2-user"},
+		// GCP (from onctl.yaml gcp: section; project is account-specific placeholder
+		// resolved via gcloud or --project; tested separately).
+		{"type", "gcp.type", "n1-standard-1", "n2-standard-2"},
+		{"location", "gcp.zone", "europe-west4-a", "us-central1-a"},
 	}
 	// Check every default before mutating any flag. Several keys share a
 	// flag with a different per-provider default (e.g. --type backs both
@@ -72,6 +76,7 @@ func TestCreateFlagsBindToViper(t *testing.T) {
 		assert.Equal(t, c.def, viper.GetString(c.key), "default for %s", c.key)
 	}
 	assert.Equal(t, "root", viper.GetString("fc.vm.username"))
+	assert.Equal(t, "root", viper.GetString("gcp.vm.username"))
 
 	for _, c := range cases {
 		assert.NoError(t, createCmd.Flags().Set(c.flag, c.override))
@@ -79,10 +84,10 @@ func TestCreateFlagsBindToViper(t *testing.T) {
 		assert.NoError(t, createCmd.Flags().Set(c.flag, c.def))
 	}
 
-	// The generic --username flag drives the Firecracker and AWS users too.
+	// The generic --username flag drives the Firecracker and GCP users too.
 	assert.NoError(t, createCmd.Flags().Set("username", "admin"))
 	assert.Equal(t, "admin", viper.GetString("fc.vm.username"))
-	assert.Equal(t, "admin", viper.GetString("aws.vm.username"))
+	assert.Equal(t, "admin", viper.GetString("gcp.vm.username"))
 
 	// Restore the shared flags to their own intrinsic defaults (not
 	// whichever per-provider case happened to run last) so sibling tests in

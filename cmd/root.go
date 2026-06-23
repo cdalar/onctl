@@ -103,14 +103,40 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
-// initState resolves the cloud provider and loads its config. Defaults for
-// every provider live in the onctl.yaml written by `onctl init` (see
-// internal/files/init/onctl.yaml), so a missing or unreadable config is a
-// fatal error here.
+// initState resolves the cloud provider and loads its config. The onctl.yaml
+// written by `onctl init` is the source of truth (see internal/files/init/onctl.yaml).
+// A missing file is fatal. For gcp (and later azure) we additionally resolve
+// account-specific placeholders using the cloud CLIs after loading.
 func initState() error {
 	cloudProvider = checkCloudProvider()
 	log.Println("[DEBUG] Cloud: " + cloudProvider)
-	return ReadConfig()
+	if err := ReadConfig(); err != nil {
+		return err
+	}
+	if cloudProvider == "gcp" {
+		if err := resolveGCPProject(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// resolveGCPProject fills gcp.project from the gcloud CLI's active project
+// when the value loaded from onctl.yaml is still the placeholder
+// ("<project-id>") or empty. This keeps the single onctl.yaml usable out of
+// the box for users who have gcloud configured. If still unset it returns a
+// clear actionable error.
+func resolveGCPProject() error {
+	proj := viper.GetString("gcp.project")
+	if proj != "" && proj != "<project-id>" {
+		return nil
+	}
+	if project := providergcp.GCloudDefaultProject(); project != "" {
+		viper.Set("gcp.project", project)
+		log.Printf("[DEBUG] resolved gcp.project from gcloud: %s", project)
+		return nil
+	}
+	return fmt.Errorf(`gcp.project is required: set --project, edit .onctl/onctl.yaml, or run "gcloud config set project <id>"`)
 }
 
 // ensureProvider builds the provider client if it hasn't been already.
