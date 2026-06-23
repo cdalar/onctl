@@ -91,11 +91,6 @@ func init() {
 	createCmd.Flags().StringVarP(&opt.ConfigFile, "file", "f", "", "Path to configuration YAML file")
 	createCmd.Flags().StringVar(&opt.Vm.Image, "image", "", "OS image to use (e.g. ubuntu-22.04, fedora-42)")
 
-	// Register Azure special flags locally too (root registers them as persistent
-	// for ls/destroy etc). This makes Lookup work and shows them under create --help.
-	createCmd.Flags().StringVar(&flagAzureSubscriptionID, "subscription-id", "", "Azure: subscription ID (required for the azure provider; falls back to `az account show`)")
-	createCmd.Flags().StringVar(&flagAzureResourceGroup, "resource-group", "", "Azure: resource group (required for the azure provider; falls back to the az CLI's configured default group, if any)")
-
 	// Generic VM flags, bound to the viper key the rest of the code already
 	// reads. The hetzner.* defaults live in internal/files/init/onctl.yaml,
 	// written by `onctl init`; these flag defaults only act as a last-resort
@@ -119,22 +114,15 @@ func init() {
 	_ = viper.BindPFlag("aws.vm.username", createCmd.Flags().Lookup("username"))
 	_ = viper.BindPFlag("aws.vm.image", createCmd.Flags().Lookup("image"))
 
-	// GCP. Same generic flags, bound to the gcp.* keys read by pkg/cloud/gcp.go.
-	// gcp.project has the placeholder in onctl.yaml; --project + resolveGCPProject
-	// in root.go provide the fallback to `gcloud config`. --type/--location/--username
-	// work the same as for other providers.
-	createCmd.Flags().StringVar(&flagGCPProject, "project", "", "GCP: project ID (falls back to `gcloud config get-value project` when the onctl.yaml placeholder is present)")
-	_ = viper.BindPFlag("gcp.project", createCmd.Flags().Lookup("project"))
+	// GCP. Bind the shared generic flags to gcp.* (gcp.project is bound as
+	// a root persistent flag so it is available to ls/ssh/destroy etc.).
+	// --type/--location/--username work the same as for other providers.
 	_ = viper.BindPFlag("gcp.zone", createCmd.Flags().Lookup("location"))
 	_ = viper.BindPFlag("gcp.type", createCmd.Flags().Lookup("type"))
 	_ = viper.BindPFlag("gcp.vm.username", createCmd.Flags().Lookup("username"))
 
-	// Azure. Bind generics + the two account-specific ones.
-	// subscriptionId and resourceGroup have no static defaults (placeholders
-	// in onctl.yaml); --subscription-id / --resource-group + resolve fill them.
-	// Use root persistent lookups because those flags are registered as persistent.
-	_ = viper.BindPFlag("azure.subscriptionId", rootCmd.PersistentFlags().Lookup("subscription-id"))
-	_ = viper.BindPFlag("azure.resourceGroup", rootCmd.PersistentFlags().Lookup("resource-group"))
+	// Azure. Bind the shared generic flags (account-specific ones are bound
+	// as root persistent flags for availability outside create).
 	_ = viper.BindPFlag("azure.location", createCmd.Flags().Lookup("location"))
 	_ = viper.BindPFlag("azure.vm.type", createCmd.Flags().Lookup("type"))
 	_ = viper.BindPFlag("azure.vm.username", createCmd.Flags().Lookup("username"))
