@@ -103,14 +103,72 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
-// initState resolves the cloud provider and loads its config. Defaults for
-// every provider live in the onctl.yaml written by `onctl init` (see
-// internal/files/init/onctl.yaml), so a missing or unreadable config is a
-// fatal error here.
+// initState resolves the cloud provider and loads its config. The onctl.yaml
+// written by `onctl init` is the source of truth (see internal/files/init/onctl.yaml).
+// A missing file is fatal. For gcp (and later azure) we additionally resolve
+// account-specific placeholders using the cloud CLIs after loading.
 func initState() error {
 	cloudProvider = checkCloudProvider()
 	log.Println("[DEBUG] Cloud: " + cloudProvider)
-	return ReadConfig()
+	if err := ReadConfig(); err != nil {
+		return err
+	}
+	if cloudProvider == "gcp" {
+		if err := resolveGCPProject(); err != nil {
+			return err
+		}
+	}
+	if cloudProvider == "azure" {
+		if err := resolveAzureIdentifiers(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// resolveGCPProject fills gcp.project from the gcloud CLI's active project
+// when the value loaded from onctl.yaml is still the placeholder
+// ("<project-id>") or empty. This keeps the single onctl.yaml usable out of
+// the box for users who have gcloud configured. If still unset it returns a
+// clear actionable error.
+func resolveGCPProject() error {
+	proj := viper.GetString("gcp.project")
+	if proj != "" && proj != "<project-id>" {
+		return nil
+	}
+	if project := providergcp.GCloudDefaultProject(); project != "" {
+		viper.Set("gcp.project", project)
+		log.Printf("[DEBUG] resolved gcp.project from gcloud: %s", project)
+		return nil
+	}
+	return fmt.Errorf(`gcp.project is required: set --project, edit .onctl/onctl.yaml, or run "gcloud config set project <id>"`)
+}
+
+// resolveAzureIdentifiers fills azure.subscriptionId and azure.resourceGroup
+// from az CLI when the onctl.yaml still has the placeholders. Both are
+// required to talk to Azure; the resource group one may legitimately stay
+// empty for users who always pass it or set it in az defaults.
+func resolveAzureIdentifiers() error {
+	sub := viper.GetString("azure.subscriptionId")
+	if sub == "" || sub == "<subscription-id>" {
+		if id := providerazure.AzureCLISubscriptionID(); id != "" {
+			viper.Set("azure.subscriptionId", id)
+			log.Printf("[DEBUG] resolved azure.subscriptionId from az: %s", id)
+		} else {
+			return fmt.Errorf(`azure.subscriptionId is required: set --subscription-id, edit .onctl/onctl.yaml, or run "az login"`)
+		}
+	}
+
+	rg := viper.GetString("azure.resourceGroup")
+	if rg == "" {
+		// Only fill from az default if no value was provided in onctl.yaml
+		// (respect an explicit "test" or other name the user may have set).
+		if group := providerazure.AzureCLIDefaultResourceGroup(); group != "" {
+			viper.Set("azure.resourceGroup", group)
+			log.Printf("[DEBUG] resolved azure.resourceGroup from az: %s", group)
+		}
+	}
+	return nil
 }
 
 // ensureProvider builds the provider client if it hasn't been already.
@@ -178,6 +236,19 @@ func initProvider(cloudProvider string) {
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&providerFlag, "provider", "p", "", "cloud provider: "+strings.Join(cloudProviderList, ", ")+" (overrides ONCTL_CLOUD)")
+	// GCP project and Azure account-specific settings are needed for many
+	// commands (ls, ssh, destroy...), not just create. Register as persistent
+	// so resolve runs and flags are available everywhere.
+	rootCmd.PersistentFlags().StringVar(&flagGCPProject, "project", "", "GCP: project ID (falls back to `gcloud config get-value project` when the onctl.yaml placeholder is present)")
+	rootCmd.PersistentFlags().StringVar(&flagAzureSubscriptionID, "subscription-id", "", "Azure: subscription ID (required for the azure provider; falls back to `az account show`)")
+	rootCmd.PersistentFlags().StringVar(&flagAzureResourceGroup, "resource-group", "", "Azure: resource group (required for the azure provider; falls back to the az CLI's configured default group, if any)")
+
+	// Bind the account-specific global flags early (persistent on root) so
+	// viper sees the CLI values in initState/resolve for all commands.
+	_ = viper.BindPFlag("gcp.project", rootCmd.PersistentFlags().Lookup("project"))
+	_ = viper.BindPFlag("azure.subscriptionId", rootCmd.PersistentFlags().Lookup("subscription-id"))
+	_ = viper.BindPFlag("azure.resourceGroup", rootCmd.PersistentFlags().Lookup("resource-group"))
+
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(initCmd)
 }

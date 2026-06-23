@@ -47,6 +47,14 @@ var (
 	flagFCBinary      string
 	flagFCVCPU        int64
 	flagFCMemory      int64
+	// GCP-specific flag bound to gcp.project (see init below). This replaces
+	// the placeholder in onctl.yaml's gcp.project (the one GCP setting with
+	// no static default; it's account-specific).
+	flagGCPProject string
+	// Azure account-specific flags (moved to persistent in root so resolve
+	// works for ls/destroy/ssh too, not just create). Bound to azure.* .
+	flagAzureSubscriptionID string
+	flagAzureResourceGroup  string
 )
 
 func parseConfigFile(configFile string) (*cmdCreateOptions, error) {
@@ -105,6 +113,19 @@ func init() {
 	_ = viper.BindPFlag("aws.location", createCmd.Flags().Lookup("location"))
 	_ = viper.BindPFlag("aws.vm.username", createCmd.Flags().Lookup("username"))
 	_ = viper.BindPFlag("aws.vm.image", createCmd.Flags().Lookup("image"))
+
+	// GCP. Bind the shared generic flags to gcp.* (gcp.project is bound as
+	// a root persistent flag so it is available to ls/ssh/destroy etc.).
+	// --type/--location/--username work the same as for other providers.
+	_ = viper.BindPFlag("gcp.zone", createCmd.Flags().Lookup("location"))
+	_ = viper.BindPFlag("gcp.type", createCmd.Flags().Lookup("type"))
+	_ = viper.BindPFlag("gcp.vm.username", createCmd.Flags().Lookup("username"))
+
+	// Azure. Bind the shared generic flags (account-specific ones are bound
+	// as root persistent flags for availability outside create).
+	_ = viper.BindPFlag("azure.location", createCmd.Flags().Lookup("location"))
+	_ = viper.BindPFlag("azure.vm.type", createCmd.Flags().Lookup("type"))
+	_ = viper.BindPFlag("azure.vm.username", createCmd.Flags().Lookup("username"))
 
 	// Firecracker-specific flags, each bound to the fc.* key read by
 	// providerfc.GetConfig. Defaults live in onctl.yaml's fc: section (and

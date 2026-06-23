@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -65,4 +66,42 @@ func TestExecute_Function(t *testing.T) {
 	// We can't actually call it in tests as it would try to read config files
 	// but we can verify it's properly declared
 	assert.NotNil(t, Execute)
+}
+
+func TestResolveGCPProject(t *testing.T) {
+	original := viper.GetString("gcp.project")
+	defer viper.Set("gcp.project", original)
+
+	t.Run("already set to real value", func(t *testing.T) {
+		viper.Set("gcp.project", "my-real-project")
+		assert.NoError(t, resolveGCPProject())
+		assert.Equal(t, "my-real-project", viper.GetString("gcp.project"))
+	})
+
+	t.Run("placeholder is filled from gcloud if available or errors clearly", func(t *testing.T) {
+		viper.Set("gcp.project", "<project-id>")
+		// Force no gcloud by clearing PATH for the lookup
+		t.Setenv("PATH", "")
+		err := resolveGCPProject()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "gcp.project is required")
+	})
+}
+
+func TestResolveAzureIdentifiers(t *testing.T) {
+	origSub := viper.GetString("azure.subscriptionId")
+	origRG := viper.GetString("azure.resourceGroup")
+	defer func() {
+		viper.Set("azure.subscriptionId", origSub)
+		viper.Set("azure.resourceGroup", origRG)
+	}()
+
+	t.Run("subscription placeholder without az errors clearly", func(t *testing.T) {
+		viper.Set("azure.subscriptionId", "<subscription-id>")
+		viper.Set("azure.resourceGroup", "test")
+		t.Setenv("PATH", "") // no az
+		err := resolveAzureIdentifiers()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "azure.subscriptionId is required")
+	})
 }
