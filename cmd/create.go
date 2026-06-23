@@ -47,6 +47,10 @@ var (
 	flagFCBinary      string
 	flagFCVCPU        int64
 	flagFCMemory      int64
+	// GCP-specific flag bound to gcp.project (see init below). This replaces
+	// the placeholder in onctl.yaml's gcp.project (the one GCP setting with
+	// no static default; it's account-specific).
+	flagGCPProject string
 )
 
 func parseConfigFile(configFile string) (*cmdCreateOptions, error) {
@@ -105,6 +109,16 @@ func init() {
 	_ = viper.BindPFlag("aws.location", createCmd.Flags().Lookup("location"))
 	_ = viper.BindPFlag("aws.vm.username", createCmd.Flags().Lookup("username"))
 	_ = viper.BindPFlag("aws.vm.image", createCmd.Flags().Lookup("image"))
+
+	// GCP. Same generic flags, bound to the gcp.* keys read by pkg/cloud/gcp.go.
+	// gcp.project has the placeholder in onctl.yaml; --project + resolveGCPProject
+	// in root.go provide the fallback to `gcloud config`. --type/--location/--username
+	// work the same as for other providers.
+	createCmd.Flags().StringVar(&flagGCPProject, "project", "", "GCP: project ID (falls back to `gcloud config get-value project` when the onctl.yaml placeholder is present)")
+	_ = viper.BindPFlag("gcp.project", createCmd.Flags().Lookup("project"))
+	_ = viper.BindPFlag("gcp.zone", createCmd.Flags().Lookup("location"))
+	_ = viper.BindPFlag("gcp.type", createCmd.Flags().Lookup("type"))
+	_ = viper.BindPFlag("gcp.vm.username", createCmd.Flags().Lookup("username"))
 
 	// Firecracker-specific flags, each bound to the fc.* key read by
 	// providerfc.GetConfig. Defaults live in onctl.yaml's fc: section (and
