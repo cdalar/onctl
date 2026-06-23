@@ -13,9 +13,13 @@ import (
 // TestGenericCreateFlagsExist verifies the YAML-replacing flags are registered.
 func TestGenericCreateFlagsExist(t *testing.T) {
 	for _, name := range []string{"type", "location", "username", "cloud-init-timeout", "image",
-		"kernel-image", "rootfs-image", "fc-binary", "vcpu", "memory", "project",
-		"subscription-id", "resource-group"} {
+		"kernel-image", "rootfs-image", "fc-binary", "vcpu", "memory"} {
 		assert.NotNil(t, createCmd.Flags().Lookup(name), "create should have --%s flag", name)
+	}
+	// project, subscription-id, and resource-group are registered as root
+	// persistent flags (not create-local) so ls/ssh/destroy can use them too.
+	for _, name := range []string{"project", "subscription-id", "resource-group"} {
+		assert.NotNil(t, rootCmd.PersistentFlags().Lookup(name), "root should have persistent --%s flag", name)
 	}
 	assert.NotNil(t, rootCmd.PersistentFlags().Lookup("provider"), "root should have persistent --provider flag")
 	assert.NotNil(t, actionCmd.Flags().Lookup("github-owner"), "action should have --github-owner flag")
