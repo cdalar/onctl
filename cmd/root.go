@@ -160,7 +160,7 @@ func resolveAzureIdentifiers() error {
 	}
 
 	rg := viper.GetString("azure.resourceGroup")
-	if rg == "" || rg == "test" {  // "test" is the placeholder/default in onctl.yaml
+	if rg == "" || rg == "test" { // "test" is the placeholder/default in onctl.yaml
 		if group := providerazure.AzureCLIDefaultResourceGroup(); group != "" {
 			viper.Set("azure.resourceGroup", group)
 			log.Printf("[DEBUG] resolved azure.resourceGroup from az: %s", group)
