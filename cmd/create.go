@@ -51,6 +51,10 @@ var (
 	// the placeholder in onctl.yaml's gcp.project (the one GCP setting with
 	// no static default; it's account-specific).
 	flagGCPProject string
+	// Azure account-specific flags (moved to persistent in root so resolve
+	// works for ls/destroy/ssh too, not just create). Bound to azure.* .
+	flagAzureSubscriptionID string
+	flagAzureResourceGroup  string
 )
 
 func parseConfigFile(configFile string) (*cmdCreateOptions, error) {
@@ -87,6 +91,11 @@ func init() {
 	createCmd.Flags().StringVarP(&opt.ConfigFile, "file", "f", "", "Path to configuration YAML file")
 	createCmd.Flags().StringVar(&opt.Vm.Image, "image", "", "OS image to use (e.g. ubuntu-22.04, fedora-42)")
 
+	// Register Azure special flags locally too (root registers them as persistent
+	// for ls/destroy etc). This makes Lookup work and shows them under create --help.
+	createCmd.Flags().StringVar(&flagAzureSubscriptionID, "subscription-id", "", "Azure: subscription ID (required for the azure provider; falls back to `az account show`)")
+	createCmd.Flags().StringVar(&flagAzureResourceGroup, "resource-group", "", "Azure: resource group (required for the azure provider; falls back to the az CLI's configured default group, if any)")
+
 	// Generic VM flags, bound to the viper key the rest of the code already
 	// reads. The hetzner.* defaults live in internal/files/init/onctl.yaml,
 	// written by `onctl init`; these flag defaults only act as a last-resort
@@ -119,6 +128,16 @@ func init() {
 	_ = viper.BindPFlag("gcp.zone", createCmd.Flags().Lookup("location"))
 	_ = viper.BindPFlag("gcp.type", createCmd.Flags().Lookup("type"))
 	_ = viper.BindPFlag("gcp.vm.username", createCmd.Flags().Lookup("username"))
+
+	// Azure. Bind generics + the two account-specific ones.
+	// subscriptionId and resourceGroup have no static defaults (placeholders
+	// in onctl.yaml); --subscription-id / --resource-group + resolve fill them.
+	// Use root persistent lookups because those flags are registered as persistent.
+	_ = viper.BindPFlag("azure.subscriptionId", rootCmd.PersistentFlags().Lookup("subscription-id"))
+	_ = viper.BindPFlag("azure.resourceGroup", rootCmd.PersistentFlags().Lookup("resource-group"))
+	_ = viper.BindPFlag("azure.location", createCmd.Flags().Lookup("location"))
+	_ = viper.BindPFlag("azure.vm.type", createCmd.Flags().Lookup("type"))
+	_ = viper.BindPFlag("azure.vm.username", createCmd.Flags().Lookup("username"))
 
 	// Firecracker-specific flags, each bound to the fc.* key read by
 	// providerfc.GetConfig. Defaults live in onctl.yaml's fc: section (and

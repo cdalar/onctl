@@ -13,7 +13,8 @@ import (
 // TestGenericCreateFlagsExist verifies the YAML-replacing flags are registered.
 func TestGenericCreateFlagsExist(t *testing.T) {
 	for _, name := range []string{"type", "location", "username", "cloud-init-timeout", "image",
-		"kernel-image", "rootfs-image", "fc-binary", "vcpu", "memory", "project"} {
+		"kernel-image", "rootfs-image", "fc-binary", "vcpu", "memory", "project",
+		"subscription-id", "resource-group"} {
 		assert.NotNil(t, createCmd.Flags().Lookup(name), "create should have --%s flag", name)
 	}
 	assert.NotNil(t, rootCmd.PersistentFlags().Lookup("provider"), "root should have persistent --provider flag")
@@ -64,6 +65,10 @@ func TestCreateFlagsBindToViper(t *testing.T) {
 		// resolved via gcloud or --project; tested separately).
 		{"type", "gcp.type", "n1-standard-1", "n2-standard-2"},
 		{"location", "gcp.zone", "europe-west4-a", "us-central1-a"},
+		// Azure (from onctl.yaml azure: section).
+		{"type", "azure.vm.type", "Standard_D4s_v3", "Standard_D8s_v3"},
+		{"location", "azure.location", "westeurope", "northeurope"},
+		{"username", "azure.vm.username", "azureuser", "adminuser"},
 	}
 	// Check every default before mutating any flag. Several keys share a
 	// flag with a different per-provider default (e.g. --type backs both
@@ -77,6 +82,7 @@ func TestCreateFlagsBindToViper(t *testing.T) {
 	}
 	assert.Equal(t, "root", viper.GetString("fc.vm.username"))
 	assert.Equal(t, "root", viper.GetString("gcp.vm.username"))
+	assert.Equal(t, "azureuser", viper.GetString("azure.vm.username"))
 
 	for _, c := range cases {
 		assert.NoError(t, createCmd.Flags().Set(c.flag, c.override))
@@ -84,10 +90,11 @@ func TestCreateFlagsBindToViper(t *testing.T) {
 		assert.NoError(t, createCmd.Flags().Set(c.flag, c.def))
 	}
 
-	// The generic --username flag drives the Firecracker and GCP users too.
+	// The generic --username flag drives the Firecracker , GCP and Azure users too.
 	assert.NoError(t, createCmd.Flags().Set("username", "admin"))
 	assert.Equal(t, "admin", viper.GetString("fc.vm.username"))
 	assert.Equal(t, "admin", viper.GetString("gcp.vm.username"))
+	assert.Equal(t, "admin", viper.GetString("azure.vm.username"))
 
 	// Restore the shared flags to their own intrinsic defaults (not
 	// whichever per-provider case happened to run last) so sibling tests in
