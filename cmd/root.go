@@ -118,6 +118,11 @@ func initState() error {
 			return err
 		}
 	}
+	if cloudProvider == "azure" {
+		if err := resolveAzureIdentifiers(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -137,6 +142,32 @@ func resolveGCPProject() error {
 		return nil
 	}
 	return fmt.Errorf(`gcp.project is required: set --project, edit .onctl/onctl.yaml, or run "gcloud config set project <id>"`)
+}
+
+// resolveAzureIdentifiers fills azure.subscriptionId and azure.resourceGroup
+// from az CLI when the onctl.yaml still has the placeholders. Both are
+// required to talk to Azure; the resource group one may legitimately stay
+// empty for users who always pass it or set it in az defaults.
+func resolveAzureIdentifiers() error {
+	sub := viper.GetString("azure.subscriptionId")
+	if sub == "" || sub == "<subscription-id>" {
+		if id := providerazure.AzureCLISubscriptionID(); id != "" {
+			viper.Set("azure.subscriptionId", id)
+			log.Printf("[DEBUG] resolved azure.subscriptionId from az: %s", id)
+		} else {
+			return fmt.Errorf(`azure.subscriptionId is required: set --subscription-id, edit .onctl/onctl.yaml, or run "az login"`)
+		}
+	}
+
+	rg := viper.GetString("azure.resourceGroup")
+	if rg == "" || rg == "test" {  // "test" is the placeholder/default in onctl.yaml
+		if group := providerazure.AzureCLIDefaultResourceGroup(); group != "" {
+			viper.Set("azure.resourceGroup", group)
+			log.Printf("[DEBUG] resolved azure.resourceGroup from az: %s", group)
+		}
+		// If still empty it's ok for some users; the provider will error later if needed.
+	}
+	return nil
 }
 
 // ensureProvider builds the provider client if it hasn't been already.
@@ -204,6 +235,11 @@ func initProvider(cloudProvider string) {
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&providerFlag, "provider", "p", "", "cloud provider: "+strings.Join(cloudProviderList, ", ")+" (overrides ONCTL_CLOUD)")
+	// Azure account-specific settings are needed for many commands (ls, ssh,
+	// destroy...), not just create. Register as persistent so resolve runs
+	// and flags are available everywhere for the azure provider.
+	rootCmd.PersistentFlags().StringVar(&flagAzureSubscriptionID, "subscription-id", "", "Azure: subscription ID (required for the azure provider; falls back to `az account show`)")
+	rootCmd.PersistentFlags().StringVar(&flagAzureResourceGroup, "resource-group", "", "Azure: resource group (required for the azure provider; falls back to the az CLI's configured default group, if any)")
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(initCmd)
 }
