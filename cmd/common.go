@@ -46,32 +46,38 @@ func GenerateIDToken() uuid.UUID {
 	return u1
 }
 
-func ReadConfig() error {
-	// Check current working directory
+// resolveConfigDir finds the .onctl directory to use: the current working
+// directory's takes precedence over the one in the user's home directory.
+func resolveConfigDir() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("failed to get working directory: %v", err)
+		return "", fmt.Errorf("failed to get working directory: %v", err)
 	}
 
 	localConfigPath := filepath.Join(dir, ".onctl")
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("failed to get home directory: %v", err)
+		return "", fmt.Errorf("failed to get home directory: %v", err)
 	}
 	homeConfigPath := filepath.Join(homeDir, ".onctl")
 
 	log.Println("[DEBUG] Local Config Path:", localConfigPath)
 	log.Println("[DEBUG] Home Config Path:", homeConfigPath)
-	// Determine which directory to use
-	var configDir string
 	if _, err := os.Stat(localConfigPath); err == nil {
-		configDir = localConfigPath
 		log.Println("[DEBUG] Using local config directory")
-	} else if _, err := os.Stat(homeConfigPath); err == nil {
-		configDir = homeConfigPath
+		return localConfigPath, nil
+	}
+	if _, err := os.Stat(homeConfigPath); err == nil {
 		log.Println("[DEBUG] Using home config directory")
-	} else {
-		return fmt.Errorf("no configuration directory found in current directory or home directory. Please run `onctl init` first")
+		return homeConfigPath, nil
+	}
+	return "", fmt.Errorf("no configuration directory found in current directory or home directory. Please run `onctl init` first")
+}
+
+func ReadConfig() error {
+	configDir, err := resolveConfigDir()
+	if err != nil {
+		return err
 	}
 
 	viper.SetConfigName("onctl") // single config file holds settings for every provider
