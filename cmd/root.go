@@ -160,12 +160,13 @@ func resolveAzureIdentifiers() error {
 	}
 
 	rg := viper.GetString("azure.resourceGroup")
-	if rg == "" || rg == "test" {  // "test" is the placeholder/default in onctl.yaml
+	if rg == "" {
+		// Only fill from az default if no value was provided in onctl.yaml
+		// (respect an explicit "test" or other name the user may have set).
 		if group := providerazure.AzureCLIDefaultResourceGroup(); group != "" {
 			viper.Set("azure.resourceGroup", group)
 			log.Printf("[DEBUG] resolved azure.resourceGroup from az: %s", group)
 		}
-		// If still empty it's ok for some users; the provider will error later if needed.
 	}
 	return nil
 }
@@ -235,11 +236,19 @@ func initProvider(cloudProvider string) {
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&providerFlag, "provider", "p", "", "cloud provider: "+strings.Join(cloudProviderList, ", ")+" (overrides ONCTL_CLOUD)")
-	// Azure account-specific settings are needed for many commands (ls, ssh,
-	// destroy...), not just create. Register as persistent so resolve runs
-	// and flags are available everywhere for the azure provider.
+	// GCP project and Azure account-specific settings are needed for many
+	// commands (ls, ssh, destroy...), not just create. Register as persistent
+	// so resolve runs and flags are available everywhere.
+	rootCmd.PersistentFlags().StringVar(&flagGCPProject, "project", "", "GCP: project ID (falls back to `gcloud config get-value project` when the onctl.yaml placeholder is present)")
 	rootCmd.PersistentFlags().StringVar(&flagAzureSubscriptionID, "subscription-id", "", "Azure: subscription ID (required for the azure provider; falls back to `az account show`)")
 	rootCmd.PersistentFlags().StringVar(&flagAzureResourceGroup, "resource-group", "", "Azure: resource group (required for the azure provider; falls back to the az CLI's configured default group, if any)")
+
+	// Bind the account-specific global flags early (persistent on root) so
+	// viper sees the CLI values in initState/resolve for all commands.
+	_ = viper.BindPFlag("gcp.project", rootCmd.PersistentFlags().Lookup("project"))
+	_ = viper.BindPFlag("azure.subscriptionId", rootCmd.PersistentFlags().Lookup("subscription-id"))
+	_ = viper.BindPFlag("azure.resourceGroup", rootCmd.PersistentFlags().Lookup("resource-group"))
+
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(initCmd)
 }

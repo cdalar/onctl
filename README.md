@@ -73,6 +73,20 @@ root@onctl-test:~#
 brew install cdalar/tap/onctl
 ```
 
+#### Dev build (latest `main`)
+
+To install or update `onctl-dev`, a build of the latest `main` branch (installed alongside the regular `onctl`):
+
+```zsh
+./scripts/install-dev.sh
+```
+
+Or directly via Homebrew:
+
+```zsh
+brew install --HEAD --fetch-HEAD cdalar/tap/onctl-dev
+```
+
 ### Linux
 
 ```bash
