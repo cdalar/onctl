@@ -23,6 +23,7 @@ Check 🌍 https://docs.onctl.io for detailed documentation
 - ✨ Cloud-init support. Set your own cloud-init file `onctl up -n qwe --cloud-init <cloud.init.file>`
 - 🤖 Use ready to use templates to configure your vm. Check [onctl-templates](https://github.com/cdalar/onctl-templates) `onctl up -n qwe -a k3s/k3s-server.sh`
 - 🗂️ Use your custom local or http accessible scripts to configure your vm. `onctl ssh qwe -a <my_local_script.sh>`
+- 📥 Import a server onctl didn't create (e.g. a Hetzner auction/dedicated box) so you can `ssh`/`ls` it too: `onctl import <name> --ip <ip>`
   
 ## Quick Start
 
@@ -64,6 +65,19 @@ Welcome to Ubuntu 22.04.3 LTS (GNU/Linux 5.15.0-89-generic x86_64)
 .
 root@onctl-test:~# 
 ```
+
+## Import an existing server
+
+Already have a server onctl didn't create — a Hetzner auction/dedicated box (these live on Hetzner's Robot API, a different product from Hetzner Cloud, so the `hetzner` provider can never see them), or any other reachable host? Register it so `ssh`/`ls` work against it too:
+```
+❯ onctl import myauctionbox --ip 1.2.3.4 --user root --key ~/.ssh/auction_key
+✔ Imported "myauctionbox" (1.2.3.4)
+Use it with: onctl --provider static ssh myauctionbox
+
+❯ onctl --provider static ls
+❯ onctl --provider static ssh myauctionbox
+```
+Imported hosts only support `ssh`/`ls`/`destroy` — `destroy` just forgets the host locally, it never touches the real machine, since onctl didn't create it and has no lifecycle API for it.
 
 ## Installation
 
@@ -113,6 +127,7 @@ Available Commands:
   create      Create a VM
   destroy     Destroy VM(s)
   help        Help about any command
+  import      Import an existing server so it can be managed with ssh/ls
   init        init onctl environment
   ls          List VMs
   ssh         Spawn an SSH connection to a VM

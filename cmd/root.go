@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/cdalar/onctl/internal/provideraws"
@@ -44,7 +45,7 @@ var (
 				return nil
 			}
 			switch cmd.Name() {
-			case "init", "version", "help", "__complete", "__completeNoDesc":
+			case "init", "version", "help", "import", "__complete", "__completeNoDesc":
 				return nil
 			}
 			if providerFlag != "" {
@@ -66,7 +67,7 @@ var (
 		},
 	}
 	cloudProvider     string
-	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "fc"}
+	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "fc", "static"}
 	provider          cloud.CloudProviderInterface
 	providerFlag      string
 )
@@ -231,6 +232,12 @@ func initProvider(cloudProvider string) {
 			Net:     providerfc.NewNetworkManager(),
 			Rootfs:  providerfc.NewRootfsPreparer(),
 		}
+	case "static":
+		configDir, err := resolveConfigDir()
+		if err != nil {
+			log.Fatalln(err)
+		}
+		provider = &cloud.ProviderStatic{InventoryPath: filepath.Join(configDir, importedHostsFile)}
 	}
 }
 
