@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/cdalar/onctl/internal/tools"
@@ -34,6 +35,11 @@ type ProviderStatic struct {
 }
 
 var errStaticUnsupported = errors.New("not supported for imported hosts; use 'onctl import' to add one, or manage the underlying machine directly")
+
+// staticInventoryMu serializes load-modify-save of the inventory file so
+// concurrent destroys (e.g. `destroy all` launches one goroutine per VM)
+// don't race and clobber each other's writes.
+var staticInventoryMu sync.Mutex
 
 func (p ProviderStatic) LoadInventory() (StaticInventory, error) {
 	var inv StaticInventory
@@ -140,6 +146,8 @@ func (p ProviderStatic) SSHInto(serverName string, port int, privateKey string, 
 // touch the underlying machine: onctl did not create it and has no
 // lifecycle API for it, so "destroying" here only means onctl forgets it.
 func (p ProviderStatic) Destroy(server Vm) error {
+	staticInventoryMu.Lock()
+	defer staticInventoryMu.Unlock()
 	inv, err := p.LoadInventory()
 	if err != nil {
 		return err

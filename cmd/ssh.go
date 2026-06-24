@@ -139,9 +139,18 @@ var sshCmd = &cobra.Command{
 		_, privateKeyFile := getSSHKeyFilePaths(sshOpt.Key)
 		log.Println("[DEBUG] privateKeyFile:", privateKeyFile)
 
-		privateKey, err := os.ReadFile(privateKeyFile)
-		if err != nil {
-			log.Fatal(err)
+		isDirectSSH := sshOpt.ConfigFile == "" && len(applyFileFound) == 0 && len(sshOpt.DownloadFiles) == 0 && len(sshOpt.UploadFiles) == 0
+		// Imported (static) hosts carry their own key/port from `onctl import`;
+		// skip requiring a global default key so static.SSHInto can fall back to them.
+		usesImportedKey := cloudProvider == "static" && sshOpt.Key == ""
+
+		var privateKey []byte
+		if !(isDirectSSH && usesImportedKey) {
+			pk, err := os.ReadFile(privateKeyFile)
+			if err != nil {
+				log.Fatal(err)
+			}
+			privateKey = pk
 		}
 		vm, err := provider.GetByName(args[0])
 		if err != nil {
@@ -188,8 +197,19 @@ var sshCmd = &cobra.Command{
 		if len(sshOpt.DownloadFiles) > 0 {
 			ProcessDownloadSlice(sshOpt.DownloadFiles, remote)
 		}
-		if sshOpt.ConfigFile == "" && len(applyFileFound) == 0 && len(sshOpt.DownloadFiles) == 0 && len(sshOpt.UploadFiles) == 0 {
-			provider.SSHInto(args[0], sshOpt.Port, privateKeyFile, parseRemoteCmd(os.Args))
+		if isDirectSSH {
+			sshKey := privateKeyFile
+			sshPort := sshOpt.Port
+			if cloudProvider == "static" {
+				if usesImportedKey {
+					sshKey = ""
+				}
+				if !cmd.Flags().Changed("port") {
+					// let static.SSHInto fall back to the imported host's own port
+					sshPort = 0
+				}
+			}
+			provider.SSHInto(args[0], sshPort, sshKey, parseRemoteCmd(os.Args))
 		}
 	},
 }
