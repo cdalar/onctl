@@ -135,7 +135,7 @@ func init() {
 	createCmd.Flags().StringVar(&flagFCRootfsImage, "rootfs-image", "~/.onctl/firecracker/images/rootfs.ext4", "Firecracker: path to the base rootfs (ext4)")
 	createCmd.Flags().StringVar(&flagFCBinary, "fc-binary", "firecracker", "Firecracker: path to the firecracker binary")
 	createCmd.Flags().Int64Var(&flagFCVCPU, "vcpu", 1, "Firecracker: number of vCPUs")
-	createCmd.Flags().Int64Var(&flagFCMemory, "memory", 4096, "Firecracker: memory size in MiB")
+	createCmd.Flags().Int64Var(&flagFCMemory, "memory", 2048, "Firecracker: memory size in MiB")
 	_ = viper.BindPFlag("fc.kernelImage", createCmd.Flags().Lookup("kernel-image"))
 	_ = viper.BindPFlag("fc.rootfsImage", createCmd.Flags().Lookup("rootfs-image"))
 	_ = viper.BindPFlag("fc.binPath", createCmd.Flags().Lookup("fc-binary"))

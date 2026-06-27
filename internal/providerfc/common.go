@@ -58,7 +58,7 @@ func GetConfig() cloud.FCConfig {
 	}
 	mem := viper.GetInt64("fc.memSizeMib")
 	if mem == 0 {
-		mem = 4096
+		mem = 2048
 	}
 	bridge := viper.GetString("fc.network.bridge")
 	if bridge == "" {
