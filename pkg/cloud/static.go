@@ -105,9 +105,9 @@ func (p ProviderStatic) GetByName(serverName string) (Vm, error) {
 	return Vm{}, fmt.Errorf("no imported host found with name: %s", serverName)
 }
 
-// getHost is like GetByName but returns the raw StaticHost (with
+// GetHost is like GetByName but returns the raw StaticHost (with
 // username/port/key) needed to actually connect.
-func (p ProviderStatic) getHost(serverName string) (StaticHost, error) {
+func (p ProviderStatic) GetHost(serverName string) (StaticHost, error) {
 	inv, err := p.LoadInventory()
 	if err != nil {
 		return StaticHost{}, err
@@ -121,7 +121,7 @@ func (p ProviderStatic) getHost(serverName string) (StaticHost, error) {
 }
 
 func (p ProviderStatic) SSHInto(serverName string, port int, privateKey string, command []string) {
-	host, err := p.getHost(serverName)
+	host, err := p.GetHost(serverName)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
