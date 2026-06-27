@@ -141,11 +141,11 @@ var sshCmd = &cobra.Command{
 
 		isDirectSSH := sshOpt.ConfigFile == "" && len(applyFileFound) == 0 && len(sshOpt.DownloadFiles) == 0 && len(sshOpt.UploadFiles) == 0
 		// Imported (static) hosts carry their own key/port from `onctl import`;
-		// skip requiring a global default key so static.SSHInto can fall back to them.
+		// skip reading the global default key — we'll load credentials from inventory below.
 		usesImportedKey := cloudProvider == "static" && sshOpt.Key == ""
 
 		var privateKey []byte
-		if !(isDirectSSH && usesImportedKey) {
+		if !usesImportedKey {
 			pk, err := os.ReadFile(privateKeyFile)
 			if err != nil {
 				log.Fatal(err)
@@ -162,6 +162,23 @@ var sshCmd = &cobra.Command{
 			SSHPort:    sshOpt.Port,
 			PrivateKey: string(privateKey),
 			Spinner:    s,
+		}
+		// For imported (static) hosts, the username/port/key live in the
+		// inventory, not in viper config or global SSH defaults.
+		if cloudProvider == "static" {
+			if sp, spErr := staticProvider(); spErr == nil {
+				if h, hErr := sp.GetHost(args[0]); hErr == nil {
+					remote.Username = h.Username
+					if !cmd.Flags().Changed("port") {
+						remote.SSHPort = h.SSHPort
+					}
+					if sshOpt.Key == "" && h.PrivateKey != "" {
+						if pk, err := os.ReadFile(h.PrivateKey); err == nil {
+							remote.PrivateKey = string(pk)
+						}
+					}
+				}
+			}
 		}
 
 		if sshOpt.DotEnvFile != "" {
