@@ -23,6 +23,12 @@ jobs:
       fail-fast: true
 
     steps:
+      - name: Show machine
+        run: |
+          lsb_release -a
+          lscpu | grep -E "Model name|^CPU\(s\)|Thread|Core"
+          free -h
+          df -h /
       - name: Checkout code
         uses: actions/checkout@v7
 
