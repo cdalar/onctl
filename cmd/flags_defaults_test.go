@@ -62,7 +62,7 @@ func TestCreateFlagsBindToViper(t *testing.T) {
 		{"rootfs-image", "fc.rootfsImage", "~/.onctl/firecracker/images/rootfs.ext4", "/img/rootfs.ext4"},
 		{"fc-binary", "fc.binPath", "firecracker", "/usr/local/bin/firecracker"},
 		{"vcpu", "fc.vcpuCount", "1", "4"},
-		{"memory", "fc.memSizeMib", "512", "2048"},
+		{"memory", "fc.memSizeMib", "4096", "2048"},
 		// AWS (replaces aws.yaml).
 		{"type", "aws.vm.type", "t2.micro", "m5.large"},
 		{"location", "aws.location", "eu-central-1", "us-east-1"},

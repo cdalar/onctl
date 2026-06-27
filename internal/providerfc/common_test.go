@@ -102,7 +102,7 @@ func TestGetConfig_Defaults(t *testing.T) {
 	cfg := GetConfig()
 	assert.Equal(t, filepath.Join(home, ".onctl", "firecracker"), cfg.StateDir)
 	assert.Equal(t, int64(1), cfg.VCPUCount)
-	assert.Equal(t, int64(512), cfg.MemSizeMib)
+	assert.Equal(t, int64(4096), cfg.MemSizeMib)
 	assert.Equal(t, "fcbr0", cfg.Bridge)
 	assert.Equal(t, "172.16.0.1/24", cfg.CIDR)
 	assert.Equal(t, "root", cfg.Username)
