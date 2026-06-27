@@ -73,7 +73,7 @@ fc:
   rootfsImage: ~/.onctl/firecracker/images/rootfs.ext4 # base rootfs, copied per-VM
   # kernelArgs: "console=ttyS0 reboot=k panic=1 pci=off"  # network args appended automatically
   vcpuCount: 1
-  memSizeMib: 512
+  memSizeMib: 2048
   binPath: firecracker            # path to the firecracker binary
   network:
     bridge: fcbr0                  # host bridge microVM TAP devices attach to
