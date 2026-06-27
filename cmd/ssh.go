@@ -173,8 +173,11 @@ var sshCmd = &cobra.Command{
 						remote.SSHPort = h.SSHPort
 					}
 					if sshOpt.Key == "" && h.PrivateKey != "" {
-						if pk, err := os.ReadFile(h.PrivateKey); err == nil {
+						_, privateKeyPath := getSSHKeyFilePaths(h.PrivateKey)
+						if pk, err := os.ReadFile(privateKeyPath); err == nil {
 							remote.PrivateKey = string(pk)
+						} else {
+							log.Println("[DEBUG] failed to read imported host private key:", err)
 						}
 					}
 				}
