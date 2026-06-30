@@ -23,13 +23,14 @@ const (
 )
 
 type Remote struct {
-	Username   string
-	IPAddress  string
-	SSHPort    int
-	PrivateKey string
-	Passphrase string
-	Spinner    *ui.Spinner
-	Client     *ssh.Client
+	Username    string
+	IPAddress   string
+	SSHPort     int
+	PrivateKey  string
+	Passphrase  string
+	Spinner     *ui.Spinner
+	Client      *ssh.Client
+	DialTimeout time.Duration // 0 means default (7s); set to a shorter value for fast-retry polling
 }
 
 type RemoteRunConfig struct {
@@ -91,10 +92,14 @@ func (r *Remote) NewSSHConnection() error {
 		}
 	}
 	// Authentication
+	dialTimeout := r.DialTimeout
+	if dialTimeout == 0 {
+		dialTimeout = 7 * time.Second
+	}
 	config := &ssh.ClientConfig{
 		User:            r.Username,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         time.Second * 7,
+		Timeout:         dialTimeout,
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(key),
 		},
@@ -120,6 +125,7 @@ func (r *Remote) WaitForSSH(timeout string) {
 
 	timer := time.After(duration)
 
+	r.DialTimeout = 2 * time.Second
 	for {
 		select {
 		case <-timer:
