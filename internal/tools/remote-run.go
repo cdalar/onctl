@@ -94,7 +94,7 @@ func (r *Remote) NewSSHConnection() error {
 	config := &ssh.ClientConfig{
 		User:            r.Username,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         time.Second * 7,
+		Timeout:         time.Second * 2,
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(key),
 		},
