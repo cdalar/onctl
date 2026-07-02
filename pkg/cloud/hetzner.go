@@ -163,7 +163,7 @@ func (p ProviderHetzner) Pause(server Vm, hot bool) error {
 			labelOwner:      "onctl",
 			labelSnapshot:   server.Name,
 			labelServerType: s.ServerType.Name,
-			labelLocation:   s.Datacenter.Location.Name,
+			labelLocation:   s.Location.Name,
 		},
 	})
 	if err != nil {
@@ -509,7 +509,7 @@ func mapHetznerServer(server hcloud.Server) Vm {
 	costPerMonth := 0.0
 	currency := "EUR"
 	for _, p := range server.ServerType.Pricings {
-		if p.Location.Name == server.Datacenter.Location.Name {
+		if p.Location.Name == server.Location.Name {
 			uptime := time.Since(server.Created)
 			hourlyGross, _ := strconv.ParseFloat(p.Hourly.Gross, 64) // Convert p.Hourly.Gross to float64
 			acculumatedCost = math.Round(hourlyGross*uptime.Hours()*10000) / 10000
@@ -533,7 +533,7 @@ func mapHetznerServer(server hcloud.Server) Vm {
 		Type:      server.ServerType.Name,
 		Status:    string(server.Status),
 		CreatedAt: server.Created,
-		Location:  server.Datacenter.Location.Name,
+		Location:  server.Location.Name,
 		Cost: CostStruct{
 			Currency:        currency,
 			CostPerHour:     costPerHour,
