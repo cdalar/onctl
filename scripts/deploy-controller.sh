@@ -3,6 +3,9 @@ set -euo pipefail
 
 REMOTE_PATH="/usr/local/bin/onctl"
 
+echo "Building onctl for the local host..."
+make build
+
 echo "Building onctl for linux/amd64..."
 make build-amd64
 
