@@ -25,7 +25,7 @@ jobs:
         with:
           go-version-file: 'go.mod'
           check-latest: true
-          cache: true
+          cache: false
       - name: Import GPG Key
         run: |
           export GNUPGHOME="$RUNNER_TEMP/gnupg"
