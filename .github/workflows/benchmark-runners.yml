@@ -2,6 +2,8 @@ name: benchmark-runners
 
 on:
   workflow_dispatch:
+  push:
+    branches: [benchmark/onctl-vs-github-runners]
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
