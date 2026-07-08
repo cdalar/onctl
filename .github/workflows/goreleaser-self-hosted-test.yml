@@ -30,7 +30,7 @@ jobs:
         run: |
           export GNUPGHOME="$RUNNER_TEMP/gnupg"
           mkdir -m 700 -p "$GNUPGHOME"
-          echo "$GNUPGHOME" >> "$GITHUB_ENV"
+          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
           echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --import --no-tty --batch
           gpg --list-secret-keys
           fingerprint=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ { print $10; exit }')
