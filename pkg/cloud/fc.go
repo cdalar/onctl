@@ -24,6 +24,12 @@ const defaultFCKernelArgs = "console=ttyS0 reboot=k panic=1 pci=off"
 const (
 	fcStatusRunning = "running"
 	fcStatusPaused  = "paused"
+	// fcStatusStopped marks a microVM whose firecracker process is no longer
+	// alive even though its persisted metadata was last written as "running"
+	// or "paused" (e.g. the host rebooted, or the process crashed).
+	// Firecracker VMMs have no restart-from-disk: recovering from this state
+	// requires destroying and redeploying the microVM.
+	fcStatusStopped = "stopped"
 )
 
 // FCConfig holds configuration for the local Firecracker microVM provider.
@@ -162,6 +168,35 @@ func saveFCMetadata(path string, vm fcVM) error {
 	return os.WriteFile(path, data, 0600)
 }
 
+// isAlive reports whether vm's firecracker process is actually running and
+// still bound to vm's socket, guarding against a persisted PID that is
+// either dead or was reused by an unrelated process after a VMM exit or
+// host reboot.
+func (p ProviderFC) isAlive(vm fcVM) bool {
+	return vm.PID > 0 && p.Process.IsRunning(vm.PID) && p.Process.Owns(vm.PID, vm.SocketPath)
+}
+
+// loadAndReconcile loads a microVM's on-disk metadata and, if its status
+// claims the process is running or paused but the firecracker process is no
+// longer alive, rewrites the persisted status to "stopped". Without this,
+// status read straight off disk (written once at Deploy/Pause/Resume time)
+// keeps reporting a microVM as live indefinitely after the process dies
+// out-of-band, e.g. a host reboot, which every running firecracker process
+// dies to.
+func (p ProviderFC) loadAndReconcile(path string) (fcVM, error) {
+	vm, err := loadFCMetadata(path)
+	if err != nil {
+		return fcVM{}, err
+	}
+	if vm.Status != fcStatusStopped && !p.isAlive(vm) {
+		vm.Status = fcStatusStopped
+		if err := saveFCMetadata(path, vm); err != nil {
+			log.Println("[DEBUG] failed to persist reconciled status for " + vm.Name + ": " + err.Error())
+		}
+	}
+	return vm, nil
+}
+
 func mapFCVM(vm fcVM) Vm {
 	return Vm{
 		Provider:  "fc",
@@ -283,7 +318,7 @@ func (p ProviderFC) listAll() ([]fcVM, error) {
 		if !e.IsDir() {
 			continue
 		}
-		vm, err := loadFCMetadata(filepath.Join(root, e.Name(), "metadata.json"))
+		vm, err := p.loadAndReconcile(filepath.Join(root, e.Name(), "metadata.json"))
 		if err != nil {
 			log.Println("[DEBUG] skipping " + e.Name() + ": " + err.Error())
 			continue
@@ -294,15 +329,29 @@ func (p ProviderFC) listAll() ([]fcVM, error) {
 }
 
 // Deploy creates and boots a new microVM. If a microVM with the same name
-// already exists, its current state is returned unchanged.
+// already exists and is alive, its current state is returned unchanged. If
+// its record is stale (the firecracker process is no longer running, e.g.
+// after a host reboot), the stale state is cleared and a fresh microVM is
+// deployed in its place.
 func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 	if server.Name == "" {
 		return Vm{}, errors.New("vm name is required")
 	}
 
-	if existing, err := loadFCMetadata(p.metadataPath(server.Name)); err == nil {
-		log.Println("[DEBUG] microVM " + server.Name + " already exists")
-		return mapFCVM(existing), nil
+	if existing, err := p.loadAndReconcile(p.metadataPath(server.Name)); err == nil {
+		if existing.Status != fcStatusStopped {
+			log.Println("[DEBUG] microVM " + server.Name + " already exists")
+			return mapFCVM(existing), nil
+		}
+		log.Println("[DEBUG] microVM " + server.Name + " has a stale record (firecracker process is no longer running); recreating")
+		if existing.TapDevice != "" {
+			if err := p.Net.DeleteTap(existing.TapDevice); err != nil {
+				log.Println("[DEBUG] failed to delete stale tap device " + existing.TapDevice + ": " + err.Error())
+			}
+		}
+		if err := os.RemoveAll(p.vmDir(server.Name)); err != nil {
+			return Vm{}, fmt.Errorf("failed to remove stale microVM state: %w", err)
+		}
 	}
 
 	kernelImage := p.Config.KernelImage
@@ -496,7 +545,10 @@ func (p ProviderFC) Resume(server Vm) (Vm, error) {
 	return mapFCVM(vm), nil
 }
 
-// List returns all running (non-paused) managed microVMs.
+// List returns all non-paused managed microVMs (see ListPaused for paused
+// ones). A microVM whose firecracker process has died out-of-band (e.g. a
+// host reboot, which no firecracker VMM survives) is included with status
+// "stopped" rather than the stale "running" last written to disk.
 func (p ProviderFC) List() (VmList, error) {
 	all, err := p.listAll()
 	if err != nil {
@@ -529,7 +581,7 @@ func (p ProviderFC) ListPaused() (VmList, error) {
 
 // GetByName returns the named microVM, or a zero-value Vm if it doesn't exist.
 func (p ProviderFC) GetByName(serverName string) (Vm, error) {
-	vm, err := loadFCMetadata(p.metadataPath(serverName))
+	vm, err := p.loadAndReconcile(p.metadataPath(serverName))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return Vm{}, nil
@@ -559,6 +611,9 @@ func (p ProviderFC) SSHInto(serverName string, port int, privateKey string, comm
 	vm, err := p.GetByName(serverName)
 	if err != nil || vm.Name == "" {
 		log.Fatalln("no microVM found with name " + serverName)
+	}
+	if vm.Status == fcStatusStopped {
+		log.Fatalln("microVM " + serverName + " is not running (its firecracker process is gone, e.g. after a host reboot) — destroy and recreate it")
 	}
 	username := p.Config.Username
 	if username == "" {
