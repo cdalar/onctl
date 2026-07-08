@@ -254,6 +254,67 @@ func TestProviderFC_Deploy_StartFailureCleansUp(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr))
 }
 
+// TestProviderFC_List_ReconcilesDeadProcess verifies that List() does not
+// keep reporting a microVM as running once its firecracker process is gone
+// out-of-band (e.g. the host rebooted, which every firecracker VMM dies to,
+// leaving the on-disk "running" status stale).
+func TestProviderFC_List_ReconcilesDeadProcess(t *testing.T) {
+	p, proc, _, _, _ := newTestFCProvider(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+
+	running, err := p.List()
+	require.NoError(t, err)
+	require.Len(t, running.List, 1)
+	assert.Equal(t, fcStatusRunning, running.List[0].Status)
+
+	// Simulate a host reboot: the firecracker process is gone.
+	proc.running = map[int]bool{}
+
+	running, err = p.List()
+	require.NoError(t, err)
+	require.Len(t, running.List, 1, "a dead microVM is still surfaced, just with an honest status")
+	assert.Equal(t, fcStatusStopped, running.List[0].Status)
+
+	meta, err := loadFCMetadata(p.metadataPath("test-vm"))
+	require.NoError(t, err)
+	assert.Equal(t, fcStatusStopped, meta.Status, "status should self-heal on disk")
+}
+
+// TestProviderFC_Deploy_RecreatesStaleRecord verifies that Deploy() does not
+// silently no-op when a same-named microVM's record exists but its process
+// is dead — it should clean up the stale state and boot a fresh microVM.
+func TestProviderFC_Deploy_RecreatesStaleRecord(t *testing.T) {
+	p, proc, _, netMgr, _ := newTestFCProvider(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	assert.Equal(t, 1, proc.startCalls)
+
+	// Simulate a host reboot: the firecracker process is gone.
+	proc.running = map[int]bool{}
+
+	vm, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	assert.Equal(t, 2, proc.startCalls, "Deploy should recreate a stale microVM instead of no-op'ing")
+	assert.Equal(t, fcStatusRunning, vm.Status)
+	assert.Contains(t, netMgr.deleted, fcTapName("test-vm"), "the stale tap device should be cleaned up")
+}
+
+// TestProviderFC_GetByName_ReconcilesDeadProcess verifies GetByName reports
+// a dead microVM's status as stopped rather than the stale "running" value
+// last persisted before the process died.
+func TestProviderFC_GetByName_ReconcilesDeadProcess(t *testing.T) {
+	p, proc, _, _, _ := newTestFCProvider(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+
+	proc.running = map[int]bool{}
+
+	vm, err := p.GetByName("test-vm")
+	require.NoError(t, err)
+	assert.Equal(t, fcStatusStopped, vm.Status)
+}
+
 func TestProviderFC_Destroy(t *testing.T) {
 	p, proc, _, netMgr, _ := newTestFCProvider(t)
 	_, err := p.Deploy(Vm{Name: "test-vm"})
