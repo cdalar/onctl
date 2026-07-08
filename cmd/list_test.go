@@ -30,6 +30,29 @@ func TestListCmd_FlagDefaults(t *testing.T) {
 	assert.Equal(t, "tab", output, "output flag should default to 'tab'")
 }
 
+// TestIsPausedStatus documents the cross-provider paused/resumable
+// convention (AWS "stopped", GCP "TERMINATED", Azure "...deallocated") and
+// guards against fc's "dead" status (a non-resumable, process-is-gone state
+// with no cross-provider equivalent) ever being folded back into it, which
+// would misreport a dead-after-host-reboot microVM as merely "paused" in
+// `onctl ls`.
+func TestIsPausedStatus(t *testing.T) {
+	tests := []struct {
+		status string
+		want   bool
+	}{
+		{"stopped", true},
+		{"TERMINATED", true},
+		{"VM deallocated", true},
+		{"running", false},
+		{"paused", false},
+		{"dead", false},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, isPausedStatus(tt.status), "status %q", tt.status)
+	}
+}
+
 // TestListCmd_PausedRowRenders verifies a paused server row (as produced by
 // ListPaused) renders through TabWriter without error — the separate PAUSED table.
 func TestListCmd_PausedRowRenders(t *testing.T) {

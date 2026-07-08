@@ -274,11 +274,11 @@ func TestProviderFC_List_ReconcilesDeadProcess(t *testing.T) {
 	running, err = p.List()
 	require.NoError(t, err)
 	require.Len(t, running.List, 1, "a dead microVM is still surfaced, just with an honest status")
-	assert.Equal(t, fcStatusStopped, running.List[0].Status)
+	assert.Equal(t, fcStatusDead, running.List[0].Status)
 
 	meta, err := loadFCMetadata(p.metadataPath("test-vm"))
 	require.NoError(t, err)
-	assert.Equal(t, fcStatusStopped, meta.Status, "status should self-heal on disk")
+	assert.Equal(t, fcStatusDead, meta.Status, "status should self-heal on disk")
 }
 
 // TestProviderFC_Deploy_RecreatesStaleRecord verifies that Deploy() does not
@@ -312,7 +312,7 @@ func TestProviderFC_GetByName_ReconcilesDeadProcess(t *testing.T) {
 
 	vm, err := p.GetByName("test-vm")
 	require.NoError(t, err)
-	assert.Equal(t, fcStatusStopped, vm.Status)
+	assert.Equal(t, fcStatusDead, vm.Status)
 }
 
 func TestProviderFC_Destroy(t *testing.T) {
