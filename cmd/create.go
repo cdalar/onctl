@@ -192,10 +192,10 @@ var createCmd = &cobra.Command{
 		}
 
 		for _, vm := range list.List {
-			// A "stopped" fc record means the microVM's firecracker process died
+			// A "dead" fc record means the microVM's firecracker process died
 			// out-of-band (e.g. host reboot) and cannot be restarted in place —
 			// Deploy() recreates it instead, so it isn't a live duplicate to abort on.
-			if vm.Provider == "fc" && vm.Status == "stopped" {
+			if vm.Provider == "fc" && vm.Status == "dead" {
 				continue
 			}
 			if vm.Name == opt.Vm.Name {
