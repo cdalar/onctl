@@ -135,7 +135,7 @@ func (r *Remote) WaitForSSH(timeout string) {
 			if err := r.NewSSHConnection(); err == nil {
 				return
 			}
-			time.Sleep(3 * time.Second)
+			time.Sleep(500 * time.Millisecond)
 		}
 	}
 }
