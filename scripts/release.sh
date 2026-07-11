@@ -6,14 +6,33 @@
 set -euo pipefail
 
 RUNNER_DIR="${RUNNER_DIR:-$HOME/cdalar/actions-runner}"
+RELEASE_BRANCH="${RELEASE_BRANCH:-main}"
 
 cd "$(git rev-parse --show-toplevel)"
 
-git fetch --tags --quiet
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+if [[ "$current_branch" != "$RELEASE_BRANCH" ]]; then
+  echo "Refusing to release: on branch '$current_branch', expected '$RELEASE_BRANCH'" >&2
+  exit 1
+fi
 
-latest_tag=$(git tag --list 'v*' --sort=-v:refname | head -1)
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "Refusing to release: working tree is not clean" >&2
+  exit 1
+fi
+
+git fetch origin "$RELEASE_BRANCH" --tags --quiet
+
+local_head=$(git rev-parse HEAD)
+remote_head=$(git rev-parse "origin/$RELEASE_BRANCH")
+if [[ "$local_head" != "$remote_head" ]]; then
+  echo "Refusing to release: local '$RELEASE_BRANCH' ($local_head) does not match origin/$RELEASE_BRANCH ($remote_head)" >&2
+  exit 1
+fi
+
+latest_tag=$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
 if [[ -z "$latest_tag" ]]; then
-  echo "No existing vX.Y.Z tag found" >&2
+  echo "No existing stable vX.Y.Z tag found" >&2
   exit 1
 fi
 
