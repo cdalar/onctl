@@ -4,9 +4,11 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -117,6 +119,40 @@ func newTestFCProvider(t *testing.T) (ProviderFC, *fakeFCProcess, *fakeFCAPI, *f
 	return p, proc, api, net, rootfs
 }
 
+// fakeCacheDiskPreparer is a test double for CacheDiskPreparer.
+type fakeCacheDiskPreparer struct {
+	prepareCalls   []string // "goldenImage->destPath"
+	prepareErr     error
+	mergeBackCalls []string // "vmCachePath->goldenImage"
+	mergeBackErr   error
+}
+
+func (f *fakeCacheDiskPreparer) Prepare(goldenImage, destPath string, _ int64) error {
+	f.prepareCalls = append(f.prepareCalls, goldenImage+"->"+destPath)
+	if f.prepareErr != nil {
+		return f.prepareErr
+	}
+	return os.WriteFile(destPath, []byte("cache"), 0600)
+}
+
+func (f *fakeCacheDiskPreparer) MergeBack(vmCachePath, goldenImage string) error {
+	f.mergeBackCalls = append(f.mergeBackCalls, vmCachePath+"->"+goldenImage)
+	return f.mergeBackErr
+}
+
+// newTestFCProviderWithCache is newTestFCProvider plus a fake
+// CacheDiskPreparer and Config.CacheImage set, for tests exercising the
+// cache-disk feature specifically.
+func newTestFCProviderWithCache(t *testing.T) (ProviderFC, *fakeCacheDiskPreparer) {
+	t.Helper()
+	p, _, _, _, _ := newTestFCProvider(t)
+	cache := &fakeCacheDiskPreparer{}
+	p.Config.CacheImage = filepath.Join(t.TempDir(), "golden.ext4")
+	p.Config.CacheSizeMib = 4096
+	p.Cache = cache
+	return p, cache
+}
+
 func generateTestPublicKey(t *testing.T) string {
 	t.Helper()
 	pub, _, err := ed25519.GenerateKey(rand.Reader)
@@ -189,6 +225,40 @@ func TestAllocateFCIP(t *testing.T) {
 	// broadcast address, leaving only .2 usable.
 	_, err = allocateFCIP("172.16.0.1/30", map[string]bool{"172.16.0.2": true})
 	assert.Error(t, err)
+}
+
+// TestProviderFC_AllocateAndReserveIP_ConcurrentCallsGetDistinctIPs
+// reproduces the race found while testing the cache-disk feature: two
+// concurrent `onctl create` calls (e.g. a Build and a Lint job for the
+// same repo, dispatched at once) reading usedIPs() before either has
+// persisted its own metadata could previously compute and allocate the
+// exact same "next free" address. allocateAndReserveIP fixes this by
+// reserving under an exclusive lock; this test drives it directly (not
+// through the full Deploy, whose other fakes aren't goroutine-safe) with
+// real concurrent goroutines against a real temp StateDir.
+func TestProviderFC_AllocateAndReserveIP_ConcurrentCallsGetDistinctIPs(t *testing.T) {
+	p := ProviderFC{Config: FCConfig{StateDir: t.TempDir()}}
+	const n = 8
+	ips := make([]string, n)
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		name := fmt.Sprintf("vm-%d", i)
+		require.NoError(t, os.MkdirAll(p.vmDir(name), 0755)) // Deploy always creates this before allocating an IP
+		wg.Add(1)
+		go func(i int, name string) {
+			defer wg.Done()
+			ips[i], errs[i] = p.allocateAndReserveIP(name, "172.16.0.1/24")
+		}(i, name)
+	}
+	wg.Wait()
+
+	seen := make(map[string]bool, n)
+	for i, err := range errs {
+		require.NoError(t, err)
+		require.False(t, seen[ips[i]], "IP %s allocated to more than one VM", ips[i])
+		seen[ips[i]] = true
+	}
 }
 
 func TestProviderFC_Deploy(t *testing.T) {
@@ -348,6 +418,83 @@ func TestProviderFC_Destroy_StalePID(t *testing.T) {
 func TestProviderFC_Destroy_NotFound(t *testing.T) {
 	p, _, _, _, _ := newTestFCProvider(t)
 	assert.Error(t, p.Destroy(Vm{Name: "nope"}))
+}
+
+// TestProviderFC_Deploy_NoCacheImage_SkipsCacheDisk verifies that Deploy
+// never touches Cache when FCConfig.CacheImage is unset (the default;
+// nil Cache must be safe here since most callers never configure this).
+func TestProviderFC_Deploy_NoCacheImage_SkipsCacheDisk(t *testing.T) {
+	p, _, _, _, _ := newTestFCProvider(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+
+	vm, err := loadFCMetadata(p.metadataPath("test-vm"))
+	require.NoError(t, err)
+	assert.Empty(t, vm.CachePath)
+	assert.Empty(t, vm.CacheImage)
+}
+
+// TestProviderFC_Deploy_PreparesCacheDisk verifies that Deploy attaches a
+// per-VM cache disk clone (drive config threaded through FCVMConfig,
+// covered by TestConfigureAndBoot-level behavior in providerfc) and
+// persists both CachePath and CacheImage for Destroy's later merge-back.
+func TestProviderFC_Deploy_PreparesCacheDisk(t *testing.T) {
+	p, cache := newTestFCProviderWithCache(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+
+	wantCachePath := filepath.Join(p.vmDir("test-vm"), "cache.ext4")
+	require.Len(t, cache.prepareCalls, 1)
+	assert.Equal(t, p.Config.CacheImage+"->"+wantCachePath, cache.prepareCalls[0])
+
+	vm, err := loadFCMetadata(p.metadataPath("test-vm"))
+	require.NoError(t, err)
+	assert.Equal(t, wantCachePath, vm.CachePath)
+	assert.Equal(t, p.Config.CacheImage, vm.CacheImage)
+}
+
+// TestProviderFC_Deploy_CacheDiskPrepareFailureCleansUp mirrors
+// TestProviderFC_Deploy_StartFailureCleansUp for the cache-disk step: a
+// Prepare failure must not leave a half-created VM directory behind.
+func TestProviderFC_Deploy_CacheDiskPrepareFailureCleansUp(t *testing.T) {
+	p, cache := newTestFCProviderWithCache(t)
+	cache.prepareErr = errors.New("boom")
+
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.Error(t, err)
+
+	_, statErr := os.Stat(p.vmDir("test-vm"))
+	assert.True(t, os.IsNotExist(statErr))
+}
+
+// TestProviderFC_Destroy_MergesCacheDiskBack verifies that Destroy folds
+// a VM's cache-disk changes back into the golden image before tearing
+// the VM down, so a later VM created against the same CacheImage
+// benefits from this job's work.
+func TestProviderFC_Destroy_MergesCacheDiskBack(t *testing.T) {
+	p, cache := newTestFCProviderWithCache(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+
+	wantCachePath := filepath.Join(p.vmDir("test-vm"), "cache.ext4")
+	require.NoError(t, p.Destroy(Vm{Name: "test-vm"}))
+
+	require.Len(t, cache.mergeBackCalls, 1)
+	assert.Equal(t, wantCachePath+"->"+p.Config.CacheImage, cache.mergeBackCalls[0])
+}
+
+// TestProviderFC_Destroy_CacheMergeBackFailureDoesNotBlockDestroy verifies
+// that a MergeBack error is logged, not propagated — a cache-disk hiccup
+// must never prevent a VM from being torn down.
+func TestProviderFC_Destroy_CacheMergeBackFailureDoesNotBlockDestroy(t *testing.T) {
+	p, cache := newTestFCProviderWithCache(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	cache.mergeBackErr = errors.New("disk full")
+
+	require.NoError(t, p.Destroy(Vm{Name: "test-vm"}))
+	_, statErr := os.Stat(p.vmDir("test-vm"))
+	assert.True(t, os.IsNotExist(statErr))
 }
 
 func TestProviderFC_PauseResume(t *testing.T) {

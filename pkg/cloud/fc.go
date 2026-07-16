@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cdalar/onctl/internal/tools"
@@ -61,6 +62,23 @@ type FCConfig struct {
 	// StateDir is the directory onctl stores microVM state under
 	// (default ~/.onctl/firecracker).
 	StateDir string
+	// CacheImage is the path to a persistent, host-owned cache disk image
+	// (ext4) attached as a second drive to every microVM, alongside the
+	// rootfs — e.g. a per-repo Go build cache that survives across many
+	// short-lived microVMs, so job N+1 reuses whatever job N compiled
+	// instead of starting cold. Empty (default) disables the feature
+	// entirely; onctl has no opinion on what the image represents or how
+	// its path is chosen — that's the caller's policy (e.g. onctl-runners'
+	// controller keys one golden image per GitHub repo, mirroring how
+	// GitHub's own actions/cache is itself scoped per-repo, not per-org).
+	CacheImage string
+	// CacheSizeMib formats CacheImage at this size (MiB) the first time
+	// it's used. Ignored once CacheImage already exists.
+	CacheSizeMib int64
+	// PrivateKey is the SSH private key path used to flush the guest's
+	// filesystem buffers before merging cache-disk changes back into
+	// CacheImage at Destroy time. Only read when CacheImage is set.
+	PrivateKey string
 }
 
 // FCVMConfig describes a microVM to be configured and booted by a
@@ -69,10 +87,14 @@ type FCVMConfig struct {
 	KernelImage string
 	KernelArgs  string
 	RootfsPath  string
-	VCPUCount   int64
-	MemSizeMib  int64
-	TapDevice   string
-	MacAddress  string
+	// CachePath is the per-VM writable clone of FCConfig.CacheImage,
+	// attached as a second, non-root drive. Empty if the cache feature
+	// isn't in use for this microVM.
+	CachePath  string
+	VCPUCount  int64
+	MemSizeMib int64
+	TapDevice  string
+	MacAddress string
 }
 
 // FCProcess starts and stops firecracker VMM processes.
@@ -116,6 +138,22 @@ type RootfsPreparer interface {
 	Prepare(baseImage, destPath, sshPublicKey, username string) error
 }
 
+// CacheDiskPreparer manages a persistent, host-owned disk image shared
+// across a series of microVMs (e.g. one per GitHub repo), so repeated jobs
+// reuse compiled build artifacts instead of starting cold every time,
+// independent of any CI provider's own cache backend.
+type CacheDiskPreparer interface {
+	// Prepare returns destPath as a writable CoW clone of goldenImage,
+	// creating and formatting goldenImage (ext4, sizeMib) first if it
+	// doesn't exist yet. Safe for concurrent callers targeting the same
+	// goldenImage (e.g. two jobs for the same repo dispatched at once).
+	Prepare(goldenImage, destPath string, sizeMib int64) error
+	// MergeBack folds changes from a per-VM cache clone (vmCachePath) back
+	// into goldenImage, so future VMs benefit from whatever this job
+	// populated. Safe for concurrent callers.
+	MergeBack(vmCachePath, goldenImage string) error
+}
+
 // ProviderFC manages local Firecracker microVMs as onctl-managed VMs.
 // Unlike the other providers, there is no remote API: state is tracked on
 // disk under Config.StateDir, and Net/Process/API are local-host operations.
@@ -125,6 +163,9 @@ type ProviderFC struct {
 	API     FCAPI
 	Net     NetworkManager
 	Rootfs  RootfsPreparer
+	// Cache prepares/merges back the optional cache disk (see
+	// FCConfig.CacheImage). May be nil if the cache feature is never used.
+	Cache CacheDiskPreparer
 }
 
 // fcVM is the on-disk metadata persisted for each managed microVM.
@@ -139,6 +180,12 @@ type fcVM struct {
 	MemSizeMib  int64     `json:"memSizeMib"`
 	Status      string    `json:"status"`
 	KernelImage string    `json:"kernelImage"`
+	// CachePath is this VM's per-VM writable clone of CacheImage, if the
+	// cache feature was used at create time. Empty otherwise.
+	CachePath string `json:"cachePath,omitempty"`
+	// CacheImage is the golden image CachePath was cloned from, and the
+	// target for MergeBack at Destroy time.
+	CacheImage string `json:"cacheImage,omitempty"`
 	RootfsPath  string    `json:"rootfsPath"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
@@ -306,6 +353,44 @@ func (p ProviderFC) usedIPs() (map[string]bool, error) {
 	return used, nil
 }
 
+// allocateAndReserveIP picks the next free IPv4 address in cidr and
+// immediately persists it as a metadata.json stub for name, all under an
+// exclusive lock — so a concurrent Deploy racing right behind this one
+// (e.g. two jobs dispatched for the same repo at once) sees this address
+// as already used via usedIPs, instead of both computing the same "next
+// free" address from the same on-disk snapshot and colliding. The stub is
+// overwritten by Deploy's normal final saveFCMetadata call once the
+// microVM actually boots; if boot fails, the caller's existing cleanup
+// (os.RemoveAll(vmDir)) removes it along with everything else.
+func (p ProviderFC) allocateAndReserveIP(name, cidr string) (string, error) {
+	lockPath := filepath.Join(p.Config.StateDir, "vms", ".ip.lock")
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0755); err != nil {
+		return "", err
+	}
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return "", fmt.Errorf("failed to open IP allocation lock %q: %w", lockPath, err)
+	}
+	defer func() { _ = lockFile.Close() }()
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+		return "", fmt.Errorf("failed to lock %q: %w", lockPath, err)
+	}
+	defer func() { _ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN) }()
+
+	used, err := p.usedIPs()
+	if err != nil {
+		return "", err
+	}
+	ip, err := allocateFCIP(cidr, used)
+	if err != nil {
+		return "", err
+	}
+	if err := saveFCMetadata(p.metadataPath(name), fcVM{Name: name, IPAddress: ip, CreatedAt: time.Now()}); err != nil {
+		return "", fmt.Errorf("failed to reserve IP %s: %w", ip, err)
+	}
+	return ip, nil
+}
+
 // listAll returns the metadata for every managed microVM, regardless of status.
 func (p ProviderFC) listAll() ([]fcVM, error) {
 	root := filepath.Join(p.Config.StateDir, "vms")
@@ -394,6 +479,15 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 		return Vm{}, fmt.Errorf("failed to prepare rootfs: %w", err)
 	}
 
+	var cachePath string
+	if p.Config.CacheImage != "" {
+		cachePath = filepath.Join(dir, "cache.ext4")
+		if err := p.Cache.Prepare(p.Config.CacheImage, cachePath, p.Config.CacheSizeMib); err != nil {
+			_ = os.RemoveAll(dir)
+			return Vm{}, fmt.Errorf("failed to prepare cache disk: %w", err)
+		}
+	}
+
 	bridge := p.Config.Bridge
 	if bridge == "" {
 		bridge = "fcbr0"
@@ -413,13 +507,7 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 		return Vm{}, fmt.Errorf("failed to create tap device: %w", err)
 	}
 
-	used, err := p.usedIPs()
-	if err != nil {
-		_ = p.Net.DeleteTap(tapDevice)
-		_ = os.RemoveAll(dir)
-		return Vm{}, err
-	}
-	ip, err := allocateFCIP(cidr, used)
+	ip, err := p.allocateAndReserveIP(server.Name, cidr)
 	if err != nil {
 		_ = p.Net.DeleteTap(tapDevice)
 		_ = os.RemoveAll(dir)
@@ -446,6 +534,7 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 		KernelImage: kernelImage,
 		KernelArgs:  kernelArgs,
 		RootfsPath:  rootfsPath,
+		CachePath:   cachePath,
 		VCPUCount:   vcpu,
 		MemSizeMib:  mem,
 		TapDevice:   tapDevice,
@@ -469,6 +558,8 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 		Status:      fcStatusRunning,
 		KernelImage: kernelImage,
 		RootfsPath:  rootfsPath,
+		CachePath:   cachePath,
+		CacheImage:  p.Config.CacheImage,
 		CreatedAt:   time.Now(),
 	}
 	if err := saveFCMetadata(p.metadataPath(server.Name), vm); err != nil {
@@ -490,6 +581,20 @@ func (p ProviderFC) Destroy(server Vm) error {
 		}
 		return err
 	}
+	if vm.CachePath != "" && vm.CacheImage != "" && p.Cache != nil {
+		// Best-effort: flush the guest's dirty pages for the cache drive
+		// through virtio-blk before merging its contents back and killing
+		// the process. A failure here (unreachable guest, SSH timeout)
+		// must not block destroy — worst case the merge picks up a
+		// slightly staler cache state, still strictly better than
+		// discarding this job's compiled output entirely.
+		if p.isAlive(vm) {
+			p.flushCacheDiskGuest(vm)
+		}
+		if err := p.Cache.MergeBack(vm.CachePath, vm.CacheImage); err != nil {
+			log.Println("[DEBUG] failed to merge cache disk back into " + vm.CacheImage + " for " + server.Name + ": " + err.Error())
+		}
+	}
 	if vm.PID > 0 && p.Process.IsRunning(vm.PID) {
 		if !p.Process.Owns(vm.PID, vm.SocketPath) {
 			log.Println("[DEBUG] persisted PID " + fmt.Sprint(vm.PID) + " for " + server.Name + " is no longer the firecracker process for this microVM; skipping stop")
@@ -503,6 +608,38 @@ func (p ProviderFC) Destroy(server Vm) error {
 		}
 	}
 	return os.RemoveAll(p.vmDir(server.Name))
+}
+
+// flushCacheDiskGuest asks vm's guest to flush all filesystem write
+// buffers (a global sync, not scoped to any particular mountpoint —
+// onctl has no visibility into where the cache drive was mounted, that's
+// an internal convention of whatever apply script attached it) before its
+// cache-disk changes are merged back into the golden image. Best-effort:
+// errors are only logged, never returned, so an unreachable guest can't
+// block Destroy.
+func (p ProviderFC) flushCacheDiskGuest(vm fcVM) {
+	if p.Config.PrivateKey == "" || vm.IPAddress == "" {
+		return
+	}
+	key, err := os.ReadFile(p.Config.PrivateKey)
+	if err != nil {
+		log.Println("[DEBUG] failed to read SSH private key for cache-disk sync: " + err.Error())
+		return
+	}
+	username := p.Config.Username
+	if username == "" {
+		username = "root"
+	}
+	r := &tools.Remote{
+		Username:    username,
+		IPAddress:   vm.IPAddress,
+		SSHPort:     22,
+		PrivateKey:  string(key),
+		DialTimeout: 5 * time.Second,
+	}
+	if _, err := r.RemoteRun(&tools.RemoteRunConfig{Command: "sync"}); err != nil {
+		log.Println("[DEBUG] cache-disk sync over SSH failed for " + vm.Name + " (proceeding with merge-back anyway): " + err.Error())
+	}
 }
 
 // Pause freezes the microVM's vCPUs via the Firecracker API. The hot flag is

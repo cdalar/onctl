@@ -231,6 +231,7 @@ func initProvider(cloudProvider string) {
 			API:     providerfc.NewAPIClient(),
 			Net:     providerfc.NewNetworkManager(),
 			Rootfs:  providerfc.NewRootfsPreparer(),
+			Cache:   providerfc.NewCacheDiskPreparer(),
 		}
 	case "static":
 		configDir, err := resolveConfigDir()

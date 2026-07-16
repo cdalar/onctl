@@ -44,9 +44,11 @@ var (
 	// below). These replace the embedded fc.yaml from `onctl init`.
 	flagFCKernelImage string
 	flagFCRootfsImage string
-	flagFCBinary      string
-	flagFCVCPU        int64
-	flagFCMemory      int64
+	flagFCBinary       string
+	flagFCVCPU         int64
+	flagFCMemory       int64
+	flagFCCacheImage   string
+	flagFCCacheSizeMib int64
 	// GCP-specific flag bound to gcp.project (see init below). This replaces
 	// the placeholder in onctl.yaml's gcp.project (the one GCP setting with
 	// no static default; it's account-specific).
@@ -136,12 +138,16 @@ func init() {
 	createCmd.Flags().StringVar(&flagFCBinary, "fc-binary", "firecracker", "Firecracker: path to the firecracker binary")
 	createCmd.Flags().Int64Var(&flagFCVCPU, "vcpu", 1, "Firecracker: number of vCPUs")
 	createCmd.Flags().Int64Var(&flagFCMemory, "memory", 2048, "Firecracker: memory size in MiB")
+	createCmd.Flags().StringVar(&flagFCCacheImage, "cache-image", "", "Firecracker: path to a persistent cache disk image (ext4), attached as a second drive; created and formatted on first use if missing. Empty (default) disables the feature")
+	createCmd.Flags().Int64Var(&flagFCCacheSizeMib, "cache-size", 8192, "Firecracker: size (MiB) to format --cache-image at, if it doesn't already exist")
 	_ = viper.BindPFlag("fc.kernelImage", createCmd.Flags().Lookup("kernel-image"))
 	_ = viper.BindPFlag("fc.rootfsImage", createCmd.Flags().Lookup("rootfs-image"))
 	_ = viper.BindPFlag("fc.binPath", createCmd.Flags().Lookup("fc-binary"))
 	_ = viper.BindPFlag("fc.vcpuCount", createCmd.Flags().Lookup("vcpu"))
 	_ = viper.BindPFlag("fc.memSizeMib", createCmd.Flags().Lookup("memory"))
 	_ = viper.BindPFlag("fc.vm.username", createCmd.Flags().Lookup("username"))
+	_ = viper.BindPFlag("fc.cacheImage", createCmd.Flags().Lookup("cache-image"))
+	_ = viper.BindPFlag("fc.cacheSizeMib", createCmd.Flags().Lookup("cache-size"))
 
 	// Register create command at root level for convenience
 	rootCmd.AddCommand(createCmd)
@@ -256,7 +262,9 @@ var createCmd = &cobra.Command{
 
 		vm, err := provider.Deploy(opt.Vm)
 		if err != nil {
-			log.Println(err)
+			s.Stop()
+			fmt.Println("\033[31m✘\033[0m VM Starting...")
+			log.Fatalln(err)
 		}
 		s.Stop()
 		fmt.Println("\033[32m✔\033[0m VM IP: " + vm.IP)

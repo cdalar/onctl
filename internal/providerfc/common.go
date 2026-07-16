@@ -76,18 +76,28 @@ func GetConfig() cloud.FCConfig {
 	if binPath == "" {
 		binPath = "firecracker"
 	}
+	cacheSizeMib := viper.GetInt64("fc.cacheSizeMib")
+	if cacheSizeMib == 0 {
+		cacheSizeMib = 8192
+	}
 
 	return cloud.FCConfig{
-		KernelImage: expandHome(viper.GetString("fc.kernelImage")),
-		RootfsImage: expandHome(viper.GetString("fc.rootfsImage")),
-		KernelArgs:  viper.GetString("fc.kernelArgs"),
-		VCPUCount:   vcpu,
-		MemSizeMib:  mem,
-		Bridge:      bridge,
-		CIDR:        cidr,
-		Username:    username,
-		BinPath:     binPath,
-		StateDir:    stateDir,
+		KernelImage:  expandHome(viper.GetString("fc.kernelImage")),
+		RootfsImage:  expandHome(viper.GetString("fc.rootfsImage")),
+		KernelArgs:   viper.GetString("fc.kernelArgs"),
+		VCPUCount:    vcpu,
+		MemSizeMib:   mem,
+		Bridge:       bridge,
+		CIDR:         cidr,
+		Username:     username,
+		BinPath:      binPath,
+		StateDir:     stateDir,
+		CacheImage:   expandHome(viper.GetString("fc.cacheImage")),
+		CacheSizeMib: cacheSizeMib,
+		// Shared with every other provider's SSH usage (onctl.yaml's
+		// top-level ssh.privateKey), not fc-specific — reused here only to
+		// flush a job VM's cache-disk writes before Destroy merges them back.
+		PrivateKey: expandHome(viper.GetString("ssh.privateKey")),
 	}
 }
 
@@ -145,6 +155,17 @@ func configureAndBoot(socketPath string, cfg cloud.FCVMConfig) error {
 		"is_read_only":   false,
 	}); err != nil {
 		return fmt.Errorf("drives/rootfs: %w", err)
+	}
+
+	if cfg.CachePath != "" {
+		if err := fcRequest(client, http.MethodPut, "/drives/cache", map[string]any{
+			"drive_id":       "cache",
+			"path_on_host":   cfg.CachePath,
+			"is_root_device": false,
+			"is_read_only":   false,
+		}); err != nil {
+			return fmt.Errorf("drives/cache: %w", err)
+		}
 	}
 
 	if err := fcRequest(client, http.MethodPut, "/network-interfaces/eth0", map[string]string{
@@ -378,6 +399,128 @@ func (DebugfsRootfsPreparer) Prepare(baseImage, destPath, sshPublicKey, username
 		return nil
 	}
 	return injectSSHKey(destPath, sshPublicKey, username)
+}
+
+// ReflinkCacheDiskPreparer is the real cloud.CacheDiskPreparer
+// implementation. It clones the golden cache image into a per-VM copy via
+// a copy-on-write reflink (`cp --reflink=always`), so attaching a multi-GB
+// pre-warmed cache costs the same near-zero time regardless of image
+// size — a plain byte-for-byte copy here would defeat the point of
+// pre-warming (every VM boot would pay the full copy cost up front).
+// Requires a CoW-capable host filesystem (btrfs, or XFS with reflink=1) —
+// fc-host already relies on btrfs for VM state.
+type ReflinkCacheDiskPreparer struct{}
+
+// NewCacheDiskPreparer returns a cloud.CacheDiskPreparer backed by reflink
+// copies and mkfs.ext4.
+func NewCacheDiskPreparer() cloud.CacheDiskPreparer {
+	return ReflinkCacheDiskPreparer{}
+}
+
+func (ReflinkCacheDiskPreparer) Prepare(goldenImage, destPath string, sizeMib int64) error {
+	if goldenImage == "" {
+		return errors.New("golden cache image path is empty")
+	}
+	if err := ensureCacheImage(goldenImage, sizeMib); err != nil {
+		return err
+	}
+	return reflinkCopy(goldenImage, destPath)
+}
+
+func (ReflinkCacheDiskPreparer) MergeBack(vmCachePath, goldenImage string) error {
+	if vmCachePath == "" || goldenImage == "" {
+		return nil
+	}
+	if _, err := os.Stat(vmCachePath); os.IsNotExist(err) {
+		// Nothing to merge back — the VM never got as far as having its
+		// cache drive attached (e.g. it failed to boot).
+		return nil
+	}
+	unlock, err := lockCacheImage(goldenImage)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	tmp := goldenImage + ".merging"
+	if err := reflinkCopy(vmCachePath, tmp); err != nil {
+		return err
+	}
+	return os.Rename(tmp, goldenImage)
+}
+
+// ensureCacheImage creates and formats goldenImage (empty ext4, sizeMib)
+// if it doesn't already exist. Safe for concurrent callers racing to
+// create the same repo's golden image for the first time — the loser
+// blocks on the lock and then finds the image already there.
+func ensureCacheImage(goldenImage string, sizeMib int64) error {
+	if _, err := os.Stat(goldenImage); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if sizeMib <= 0 {
+		sizeMib = 8192
+	}
+	if err := os.MkdirAll(filepath.Dir(goldenImage), 0755); err != nil {
+		return err
+	}
+	unlock, err := lockCacheImage(goldenImage)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	if _, err := os.Stat(goldenImage); err == nil {
+		return nil // another caller won the race while we waited for the lock
+	}
+	tmp := goldenImage + ".building"
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	if err := f.Truncate(sizeMib * 1024 * 1024); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if out, err := exec.Command("mkfs.ext4", "-q", "-F", tmp).CombinedOutput(); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("mkfs.ext4 failed: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return os.Rename(tmp, goldenImage)
+}
+
+// lockCacheImage acquires an exclusive advisory lock scoped to goldenImage,
+// serializing concurrent create/merge-back calls for the same image (e.g.
+// Build and Lint jobs for the same repo finishing at the same time).
+// Returns an unlock func; callers must defer it.
+func lockCacheImage(goldenImage string) (unlock func(), err error) {
+	lockPath := goldenImage + ".lock"
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open lock file %q: %w", lockPath, err)
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		_ = f.Close()
+		return nil, fmt.Errorf("failed to lock %q: %w", lockPath, err)
+	}
+	return func() {
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		_ = f.Close()
+	}, nil
+}
+
+func reflinkCopy(src, dst string) error {
+	out, err := exec.Command("cp", "--reflink=always", src, dst).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("cp --reflink=always %s %s failed (requires a CoW filesystem like btrfs): %w: %s", src, dst, err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 func copyFile(src, dst string) error {
