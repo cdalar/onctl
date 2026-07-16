@@ -42,8 +42,8 @@ var (
 	flagCloudInitTimeout string
 	// Firecracker-specific flags bound to fc.* viper keys (see init
 	// below). These replace the embedded fc.yaml from `onctl init`.
-	flagFCKernelImage string
-	flagFCRootfsImage string
+	flagFCKernelImage  string
+	flagFCRootfsImage  string
 	flagFCBinary       string
 	flagFCVCPU         int64
 	flagFCMemory       int64

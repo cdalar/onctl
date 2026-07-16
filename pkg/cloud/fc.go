@@ -170,24 +170,24 @@ type ProviderFC struct {
 
 // fcVM is the on-disk metadata persisted for each managed microVM.
 type fcVM struct {
-	Name        string    `json:"name"`
-	PID         int       `json:"pid"`
-	SocketPath  string    `json:"socketPath"`
-	TapDevice   string    `json:"tapDevice"`
-	IPAddress   string    `json:"ipAddress"`
-	MacAddress  string    `json:"macAddress"`
-	VCPUCount   int64     `json:"vcpuCount"`
-	MemSizeMib  int64     `json:"memSizeMib"`
-	Status      string    `json:"status"`
-	KernelImage string    `json:"kernelImage"`
+	Name        string `json:"name"`
+	PID         int    `json:"pid"`
+	SocketPath  string `json:"socketPath"`
+	TapDevice   string `json:"tapDevice"`
+	IPAddress   string `json:"ipAddress"`
+	MacAddress  string `json:"macAddress"`
+	VCPUCount   int64  `json:"vcpuCount"`
+	MemSizeMib  int64  `json:"memSizeMib"`
+	Status      string `json:"status"`
+	KernelImage string `json:"kernelImage"`
 	// CachePath is this VM's per-VM writable clone of CacheImage, if the
 	// cache feature was used at create time. Empty otherwise.
 	CachePath string `json:"cachePath,omitempty"`
 	// CacheImage is the golden image CachePath was cloned from, and the
 	// target for MergeBack at Destroy time.
-	CacheImage string `json:"cacheImage,omitempty"`
-	RootfsPath  string    `json:"rootfsPath"`
-	CreatedAt   time.Time `json:"createdAt"`
+	CacheImage string    `json:"cacheImage,omitempty"`
+	RootfsPath string    `json:"rootfsPath"`
+	CreatedAt  time.Time `json:"createdAt"`
 }
 
 func (p ProviderFC) vmDir(name string) string {
