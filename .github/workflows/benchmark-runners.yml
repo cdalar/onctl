@@ -55,6 +55,7 @@ jobs:
 
   lint:
     name: Lint (${{ matrix.runner }})
+    needs: build
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 10
     strategy:
