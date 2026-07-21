@@ -739,7 +739,10 @@ func (p ProviderFC) Pause(server Vm, hot bool) error {
 	vm.PID = 0
 	vm.SnapshotStatePath = statePath
 	vm.SnapshotMemFilePath = memPath
-	return saveFCMetadata(p.metadataPath(server.Name), vm)
+	if err := saveFCMetadata(p.metadataPath(server.Name), vm); err != nil {
+		return fmt.Errorf("microVM %q snapshotted and stopped but failed to save metadata (snapshot files at %s are still usable): %w", server.Name, p.vmDir(server.Name), err)
+	}
+	return nil
 }
 
 // Resume restarts a paused microVM from the snapshot Pause wrote: it starts
@@ -809,7 +812,12 @@ func (p ProviderFC) Resume(server Vm) (Vm, error) {
 	vm.TapDevice = tapDevice
 	vm.Status = fcStatusRunning
 	if err := saveFCMetadata(p.metadataPath(server.Name), vm); err != nil {
-		return Vm{}, err
+		// Don't leave an unrecorded VMM running: a retried Resume would
+		// start a second process from the same snapshot and fight it for
+		// the API socket and TAP device.
+		_ = p.Process.Stop(pid)
+		_ = p.Net.DeleteTap(tapDevice)
+		return Vm{}, fmt.Errorf("microVM %q resumed but failed to save metadata: %w", server.Name, err)
 	}
 	return mapFCVM(vm), nil
 }
