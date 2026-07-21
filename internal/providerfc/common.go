@@ -104,15 +104,28 @@ func GetConfig() cloud.FCConfig {
 // unixHTTPClient returns an HTTP client that talks to the Firecracker API
 // over its Unix domain socket.
 func unixHTTPClient(socketPath string) *http.Client {
+	return unixHTTPClientWithTimeout(socketPath, 5*time.Second)
+}
+
+// unixHTTPClientWithTimeout is unixHTTPClient with a caller-chosen timeout.
+// Snapshot create/load dump or map the entire guest memory to/from disk, so
+// they need far more than the 5s default other API calls use — how much
+// more scales with mem_size_mib, which onctl has no fixed bound on.
+func unixHTTPClientWithTimeout(socketPath string, timeout time.Duration) *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 				return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
 			},
 		},
-		Timeout: 5 * time.Second,
+		Timeout: timeout,
 	}
 }
+
+// snapshotAPITimeout bounds Firecracker's /snapshot/create and
+// /snapshot/load calls, which are disk-I/O-bound on guest memory size
+// rather than the sub-second config calls the 5s default is sized for.
+const snapshotAPITimeout = 5 * time.Minute
 
 func fcRequest(client *http.Client, method, path string, body any) error {
 	data, err := json.Marshal(body)
@@ -220,6 +233,26 @@ func NewProcessManager(binPath string) cloud.FCProcess {
 }
 
 func (m ProcessManager) Start(socketPath string, cfg cloud.FCVMConfig, logFile string) (int, error) {
+	pid, err := m.spawn(socketPath, logFile)
+	if err != nil {
+		return 0, err
+	}
+	if err := configureAndBoot(socketPath, cfg); err != nil {
+		_ = m.Stop(pid)
+		return 0, err
+	}
+	return pid, nil
+}
+
+func (m ProcessManager) StartBare(socketPath, logFile string) (int, error) {
+	return m.spawn(socketPath, logFile)
+}
+
+// spawn launches the firecracker binary bound to socketPath and waits for
+// its API socket to come up, without configuring or booting it — the
+// shared first half of both Start (config comes from an FCVMConfig) and
+// StartBare (config comes from a snapshot loaded separately).
+func (m ProcessManager) spawn(socketPath, logFile string) (int, error) {
 	_ = os.Remove(socketPath)
 
 	logFd, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
@@ -242,11 +275,6 @@ func (m ProcessManager) Start(socketPath string, cfg cloud.FCVMConfig, logFile s
 	}
 
 	if err := waitForSocket(socketPath, 5*time.Second); err != nil {
-		_ = m.Stop(pid)
-		return 0, err
-	}
-
-	if err := configureAndBoot(socketPath, cfg); err != nil {
 		_ = m.Stop(pid)
 		return 0, err
 	}
@@ -321,6 +349,32 @@ func NewAPIClient() cloud.FCAPI {
 func (APIClient) SetState(socketPath, state string) error {
 	client := unixHTTPClient(socketPath)
 	return fcRequest(client, http.MethodPatch, "/vm", map[string]string{"state": state})
+}
+
+func (APIClient) CreateSnapshot(socketPath, snapshotPath, memFilePath string) error {
+	client := unixHTTPClientWithTimeout(socketPath, snapshotAPITimeout)
+	return fcRequest(client, http.MethodPut, "/snapshot/create", map[string]string{
+		"snapshot_type": "Full",
+		"snapshot_path": snapshotPath,
+		"mem_file_path": memFilePath,
+	})
+}
+
+func (APIClient) LoadSnapshot(socketPath, snapshotPath, memFilePath string, resume bool, overrides []cloud.FCNetworkOverride) error {
+	client := unixHTTPClientWithTimeout(socketPath, snapshotAPITimeout)
+	body := map[string]any{
+		"snapshot_path": snapshotPath,
+		"mem_file_path": memFilePath,
+		"resume_vm":     resume,
+	}
+	if len(overrides) > 0 {
+		netOverrides := make([]map[string]string, len(overrides))
+		for i, o := range overrides {
+			netOverrides[i] = map[string]string{"iface_id": o.IfaceID, "host_dev_name": o.TapDevice}
+		}
+		body["network_overrides"] = netOverrides
+	}
+	return fcRequest(client, http.MethodPut, "/snapshot/load", body)
 }
 
 // LinuxNetworkManager is the real cloud.NetworkManager implementation,

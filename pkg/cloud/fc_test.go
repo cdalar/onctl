@@ -18,18 +18,32 @@ import (
 
 // fakeFCProcess is a test double for FCProcess.
 type fakeFCProcess struct {
-	pid        int
-	startCalls int
-	startErr   error
-	stopCalls  []int
-	running    map[int]bool
-	notOwned   map[int]bool
+	pid            int
+	startCalls     int
+	startErr       error
+	startBareCalls int
+	startBareErr   error
+	stopCalls      []int
+	running        map[int]bool
+	notOwned       map[int]bool
 }
 
 func (f *fakeFCProcess) Start(_ string, _ FCVMConfig, _ string) (int, error) {
 	f.startCalls++
 	if f.startErr != nil {
 		return 0, f.startErr
+	}
+	if f.running == nil {
+		f.running = map[int]bool{}
+	}
+	f.running[f.pid] = true
+	return f.pid, nil
+}
+
+func (f *fakeFCProcess) StartBare(_ string, _ string) (int, error) {
+	f.startBareCalls++
+	if f.startBareErr != nil {
+		return 0, f.startBareErr
 	}
 	if f.running == nil {
 		f.running = map[int]bool{}
@@ -54,12 +68,32 @@ func (f *fakeFCProcess) Owns(pid int, _ string) bool {
 
 // fakeFCAPI is a test double for FCAPI.
 type fakeFCAPI struct {
-	states []string
+	states            []string
+	snapshotCalls     []string // "snapshotPath|memFilePath"
+	createSnapshotErr error
+	loadCalls         []string // "snapshotPath|memFilePath"
+	loadSnapshotErr   error
 }
 
 func (f *fakeFCAPI) SetState(_ string, state string) error {
 	f.states = append(f.states, state)
 	return nil
+}
+
+func (f *fakeFCAPI) CreateSnapshot(_ string, snapshotPath, memFilePath string) error {
+	f.snapshotCalls = append(f.snapshotCalls, snapshotPath+"|"+memFilePath)
+	if f.createSnapshotErr != nil {
+		return f.createSnapshotErr
+	}
+	if err := os.WriteFile(snapshotPath, []byte("state"), 0600); err != nil {
+		return err
+	}
+	return os.WriteFile(memFilePath, []byte("mem"), 0600)
+}
+
+func (f *fakeFCAPI) LoadSnapshot(_ string, snapshotPath, memFilePath string, _ bool, _ []FCNetworkOverride) error {
+	f.loadCalls = append(f.loadCalls, snapshotPath+"|"+memFilePath)
+	return f.loadSnapshotErr
 }
 
 // fakeNetworkManager is a test double for NetworkManager.
@@ -498,12 +532,18 @@ func TestProviderFC_Destroy_CacheMergeBackFailureDoesNotBlockDestroy(t *testing.
 }
 
 func TestProviderFC_PauseResume(t *testing.T) {
-	p, _, api, _, _ := newTestFCProvider(t)
+	p, proc, api, net, _ := newTestFCProvider(t)
 	_, err := p.Deploy(Vm{Name: "test-vm"})
 	require.NoError(t, err)
 
 	require.NoError(t, p.Pause(Vm{Name: "test-vm"}, true))
 	assert.Equal(t, []string{"Paused"}, api.states)
+	assert.Len(t, api.snapshotCalls, 1)
+	// Pause stops the process and tears down the tap device — no compute
+	// cost while paused, matching the other providers' delete-the-server
+	// pause semantics.
+	assert.Equal(t, []int{proc.pid}, proc.stopCalls)
+	assert.Contains(t, net.deleted, fcTapName("test-vm"))
 
 	paused, err := p.ListPaused()
 	require.NoError(t, err)
@@ -514,14 +554,58 @@ func TestProviderFC_PauseResume(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, running.List)
 
+	// A paused VM's process is legitimately gone — GetByName must not
+	// reconcile it to "dead".
+	byName, err := p.GetByName("test-vm")
+	require.NoError(t, err)
+	assert.Equal(t, "paused", byName.Status)
+
 	vm, err := p.Resume(Vm{Name: "test-vm"})
 	require.NoError(t, err)
 	assert.Equal(t, "running", vm.Status)
-	assert.Equal(t, []string{"Paused", "Resumed"}, api.states)
+	assert.Len(t, api.loadCalls, 1)
+	assert.Equal(t, 1, proc.startBareCalls)
 
 	running, err = p.List()
 	require.NoError(t, err)
 	require.Len(t, running.List, 1)
+}
+
+func TestProviderFC_Pause_NotAlive(t *testing.T) {
+	p, proc, _, _, _ := newTestFCProvider(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	proc.running[proc.pid] = false
+
+	err = p.Pause(Vm{Name: "test-vm"}, true)
+	assert.Error(t, err)
+}
+
+func TestProviderFC_Pause_SnapshotFailureResumesInstead(t *testing.T) {
+	p, _, api, _, _ := newTestFCProvider(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	api.createSnapshotErr = errors.New("disk full")
+
+	err = p.Pause(Vm{Name: "test-vm"}, true)
+	assert.Error(t, err)
+	assert.Equal(t, []string{"Paused", "Resumed"}, api.states)
+
+	vm, err := p.GetByName("test-vm")
+	require.NoError(t, err)
+	assert.Equal(t, "running", vm.Status)
+}
+
+func TestProviderFC_Resume_MissingSnapshotFiles(t *testing.T) {
+	p, _, _, _, _ := newTestFCProvider(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	require.NoError(t, p.Pause(Vm{Name: "test-vm"}, true))
+
+	require.NoError(t, os.Remove(p.snapshotStatePath("test-vm")))
+
+	_, err = p.Resume(Vm{Name: "test-vm"})
+	assert.Error(t, err)
 }
 
 func TestProviderFC_Pause_NotFound(t *testing.T) {

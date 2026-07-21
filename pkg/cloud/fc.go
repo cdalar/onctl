@@ -110,6 +110,12 @@ type FCProcess interface {
 	// VMM bound to socketPath, guarding against a persisted PID having been
 	// reused by an unrelated process after a VMM exit or host reboot.
 	Owns(pid int, socketPath string) bool
+	// StartBare launches a firecracker process bound to socketPath without
+	// configuring or booting it — used for snapshot restore, where the full
+	// device configuration comes from the snapshot itself via
+	// FCAPI.LoadSnapshot rather than from an FCVMConfig. Returns the PID of
+	// the running process.
+	StartBare(socketPath, logFile string) (pid int, err error)
 }
 
 // FCAPI issues runtime control requests to a running firecracker
@@ -117,6 +123,26 @@ type FCProcess interface {
 type FCAPI interface {
 	// SetState transitions the microVM's state (e.g. "Paused" or "Resumed").
 	SetState(socketPath, state string) error
+	// CreateSnapshot writes a full snapshot of the VM's device state
+	// (snapshotPath) and guest memory (memFilePath). The VM must already be
+	// Paused via SetState. Together with the VM's rootfs image, these two
+	// files fully describe the microVM and can be copied to another host
+	// for LoadSnapshot there.
+	CreateSnapshot(socketPath, snapshotPath, memFilePath string) error
+	// LoadSnapshot restores a microVM from a snapshot previously written by
+	// CreateSnapshot into the freshly started (but unconfigured) process at
+	// socketPath. overrides re-maps snapshotted network interfaces to
+	// host-local TAP devices, which never survive a snapshot/restore since
+	// they're host-side only. If resume is true the VM's vCPUs are resumed
+	// immediately after load.
+	LoadSnapshot(socketPath, snapshotPath, memFilePath string, resume bool, overrides []FCNetworkOverride) error
+}
+
+// FCNetworkOverride re-maps a snapshotted network interface to a host-local
+// TAP device at LoadSnapshot time.
+type FCNetworkOverride struct {
+	IfaceID   string
+	TapDevice string
 }
 
 // NetworkManager creates/destroys the host-side networking for microVMs.
@@ -188,6 +214,14 @@ type fcVM struct {
 	CacheImage string    `json:"cacheImage,omitempty"`
 	RootfsPath string    `json:"rootfsPath"`
 	CreatedAt  time.Time `json:"createdAt"`
+	// SnapshotStatePath and SnapshotMemFilePath are the Firecracker
+	// snapshot files written by Pause, and consumed by Resume to restart
+	// the microVM. Empty unless Status is "paused". Both live under this
+	// VM's vmDir alongside its rootfs image, so copying that whole
+	// directory to another host's identically-configured StateDir (same
+	// VM name) is all "resume elsewhere" needs.
+	SnapshotStatePath   string `json:"snapshotStatePath,omitempty"`
+	SnapshotMemFilePath string `json:"snapshotMemFilePath,omitempty"`
 }
 
 func (p ProviderFC) vmDir(name string) string {
@@ -196,6 +230,14 @@ func (p ProviderFC) vmDir(name string) string {
 
 func (p ProviderFC) metadataPath(name string) string {
 	return filepath.Join(p.vmDir(name), "metadata.json")
+}
+
+func (p ProviderFC) snapshotStatePath(name string) string {
+	return filepath.Join(p.vmDir(name), "snapshot.snap")
+}
+
+func (p ProviderFC) snapshotMemFilePath(name string) string {
+	return filepath.Join(p.vmDir(name), "snapshot.mem")
 }
 
 func loadFCMetadata(path string) (fcVM, error) {
@@ -227,18 +269,20 @@ func (p ProviderFC) isAlive(vm fcVM) bool {
 }
 
 // loadAndReconcile loads a microVM's on-disk metadata and, if its status
-// claims the process is running or paused but the firecracker process is no
-// longer alive, rewrites the persisted status to "dead". Without this,
-// status read straight off disk (written once at Deploy/Pause/Resume time)
-// keeps reporting a microVM as live indefinitely after the process dies
-// out-of-band, e.g. a host reboot, which every running firecracker process
-// dies to.
+// claims the process is running but the firecracker process is no longer
+// alive, rewrites the persisted status to "dead". Without this, status read
+// straight off disk (written once at Deploy/Resume time) keeps reporting a
+// microVM as live indefinitely after the process dies out-of-band, e.g. a
+// host reboot, which every running firecracker process dies to. Paused VMs
+// are deliberately excluded: Pause stops the firecracker process on
+// purpose (that's the whole point — no compute cost while paused), so
+// !isAlive is expected there, not evidence of an unexpected death.
 func (p ProviderFC) loadAndReconcile(path string) (fcVM, error) {
 	vm, err := loadFCMetadata(path)
 	if err != nil {
 		return fcVM{}, err
 	}
-	if vm.Status != fcStatusDead && !p.isAlive(vm) {
+	if vm.Status != fcStatusDead && vm.Status != fcStatusPaused && !p.isAlive(vm) {
 		vm.Status = fcStatusDead
 		if err := saveFCMetadata(path, vm); err != nil {
 			log.Println("[DEBUG] failed to persist reconciled status for " + vm.Name + ": " + err.Error())
@@ -589,7 +633,7 @@ func (p ProviderFC) Destroy(server Vm) error {
 		// slightly staler cache state, still strictly better than
 		// discarding this job's compiled output entirely.
 		if p.isAlive(vm) {
-			p.flushCacheDiskGuest(vm)
+			p.flushGuestFilesystem(vm)
 		}
 		if err := p.Cache.MergeBack(vm.CachePath, vm.CacheImage); err != nil {
 			log.Println("[DEBUG] failed to merge cache disk back into " + vm.CacheImage + " for " + server.Name + ": " + err.Error())
@@ -610,20 +654,22 @@ func (p ProviderFC) Destroy(server Vm) error {
 	return os.RemoveAll(p.vmDir(server.Name))
 }
 
-// flushCacheDiskGuest asks vm's guest to flush all filesystem write
-// buffers (a global sync, not scoped to any particular mountpoint —
-// onctl has no visibility into where the cache drive was mounted, that's
-// an internal convention of whatever apply script attached it) before its
-// cache-disk changes are merged back into the golden image. Best-effort:
-// errors are only logged, never returned, so an unreachable guest can't
-// block Destroy.
-func (p ProviderFC) flushCacheDiskGuest(vm fcVM) {
+// flushGuestFilesystem asks vm's guest to flush all filesystem write
+// buffers (a global sync, not scoped to any particular mountpoint — onctl
+// has no visibility into where any given drive was mounted, that's an
+// internal convention of whatever apply script attached it). Used before
+// Destroy merges cache-disk changes back into the golden image, and before
+// a cold (non-hot) Pause snapshot, so the snapshot picks up a consistent
+// on-disk state rather than whatever was last flushed by the guest kernel's
+// own timers. Best-effort: errors are only logged, never returned, so an
+// unreachable guest can't block either caller.
+func (p ProviderFC) flushGuestFilesystem(vm fcVM) {
 	if p.Config.PrivateKey == "" || vm.IPAddress == "" {
 		return
 	}
 	key, err := os.ReadFile(p.Config.PrivateKey)
 	if err != nil {
-		log.Println("[DEBUG] failed to read SSH private key for cache-disk sync: " + err.Error())
+		log.Println("[DEBUG] failed to read SSH private key for guest filesystem sync: " + err.Error())
 		return
 	}
 	username := p.Config.Username
@@ -638,13 +684,20 @@ func (p ProviderFC) flushCacheDiskGuest(vm fcVM) {
 		DialTimeout: 5 * time.Second,
 	}
 	if _, err := r.RemoteRun(&tools.RemoteRunConfig{Command: "sync"}); err != nil {
-		log.Println("[DEBUG] cache-disk sync over SSH failed for " + vm.Name + " (proceeding with merge-back anyway): " + err.Error())
+		log.Println("[DEBUG] guest filesystem sync over SSH failed for " + vm.Name + " (proceeding anyway): " + err.Error())
 	}
 }
 
-// Pause freezes the microVM's vCPUs via the Firecracker API. The hot flag is
-// accepted for interface symmetry: a Firecracker pause is always a live,
-// in-memory vCPU freeze (no snapshot-to-disk), so there is no "cold" variant.
+// Pause freezes the microVM's vCPUs, writes a full Firecracker snapshot
+// (device state + guest memory) to disk under its vmDir, then stops the
+// firecracker process and tears down its TAP device — mirroring the other
+// providers' Pause (snapshot, then delete the compute so it stops costing
+// anything). The VM's rootfs image is left in place; together with the
+// snapshot files it fully describes the microVM, so copying the whole
+// vmDir to another host's identically-configured StateDir (same VM name)
+// and running Resume there restores it — the point of the exercise. hot
+// skips a best-effort guest filesystem sync first; the default (cold)
+// syncs so the snapshot picks up a consistent on-disk state.
 func (p ProviderFC) Pause(server Vm, hot bool) error {
 	vm, err := loadFCMetadata(p.metadataPath(server.Name))
 	if err != nil {
@@ -656,14 +709,49 @@ func (p ProviderFC) Pause(server Vm, hot bool) error {
 	if vm.Status == fcStatusPaused {
 		return nil
 	}
+	if !p.isAlive(vm) {
+		return fmt.Errorf("microVM %q is not running", server.Name)
+	}
+	if !hot {
+		p.flushGuestFilesystem(vm)
+	}
 	if err := p.API.SetState(vm.SocketPath, "Paused"); err != nil {
 		return fmt.Errorf("failed to pause microVM: %w", err)
 	}
+	statePath := p.snapshotStatePath(server.Name)
+	memPath := p.snapshotMemFilePath(server.Name)
+	if err := p.API.CreateSnapshot(vm.SocketPath, statePath, memPath); err != nil {
+		// Don't leave the microVM stuck frozen with nothing to show for it.
+		if resumeErr := p.API.SetState(vm.SocketPath, "Resumed"); resumeErr != nil {
+			log.Println("[DEBUG] failed to resume " + server.Name + " after a failed snapshot attempt: " + resumeErr.Error())
+		}
+		return fmt.Errorf("failed to snapshot microVM: %w", err)
+	}
+	if err := p.Process.Stop(vm.PID); err != nil {
+		return fmt.Errorf("microVM %q snapshotted but failed to stop its process (snapshot files at %s are still usable): %w", server.Name, p.vmDir(server.Name), err)
+	}
+	if vm.TapDevice != "" {
+		if err := p.Net.DeleteTap(vm.TapDevice); err != nil {
+			log.Println("[DEBUG] failed to delete tap device " + vm.TapDevice + " during pause: " + err.Error())
+		}
+	}
 	vm.Status = fcStatusPaused
-	return saveFCMetadata(p.metadataPath(server.Name), vm)
+	vm.PID = 0
+	vm.SnapshotStatePath = statePath
+	vm.SnapshotMemFilePath = memPath
+	if err := saveFCMetadata(p.metadataPath(server.Name), vm); err != nil {
+		return fmt.Errorf("microVM %q snapshotted and stopped but failed to save metadata (snapshot files at %s are still usable): %w", server.Name, p.vmDir(server.Name), err)
+	}
+	return nil
 }
 
-// Resume unfreezes a paused microVM's vCPUs via the Firecracker API.
+// Resume restarts a paused microVM from the snapshot Pause wrote: it starts
+// a fresh (unconfigured) firecracker process, recreates the TAP device (TAP
+// devices are host-local and never survive a snapshot/restore), and loads
+// the snapshot into the new process with that TAP device network-overridden
+// in. Works unmodified against a vmDir copied in from another host, which
+// is the whole point — the snapshot + rootfs image is a fully portable
+// microVM.
 func (p ProviderFC) Resume(server Vm) (Vm, error) {
 	vm, err := loadFCMetadata(p.metadataPath(server.Name))
 	if err != nil {
@@ -675,12 +763,61 @@ func (p ProviderFC) Resume(server Vm) (Vm, error) {
 	if vm.Status != fcStatusPaused {
 		return mapFCVM(vm), nil
 	}
-	if err := p.API.SetState(vm.SocketPath, "Resumed"); err != nil {
-		return Vm{}, fmt.Errorf("failed to resume microVM: %w", err)
+	if vm.SnapshotStatePath == "" || vm.SnapshotMemFilePath == "" {
+		return Vm{}, fmt.Errorf("microVM %q has no snapshot to resume from", server.Name)
 	}
+	if _, err := os.Stat(vm.SnapshotStatePath); err != nil {
+		return Vm{}, fmt.Errorf("snapshot state file for %q: %w", server.Name, err)
+	}
+	if _, err := os.Stat(vm.SnapshotMemFilePath); err != nil {
+		return Vm{}, fmt.Errorf("snapshot memory file for %q: %w", server.Name, err)
+	}
+
+	bridge := p.Config.Bridge
+	if bridge == "" {
+		bridge = "fcbr0"
+	}
+	cidr := p.Config.CIDR
+	if cidr == "" {
+		cidr = "172.16.0.1/24"
+	}
+	if err := p.Net.EnsureBridge(bridge, cidr); err != nil {
+		return Vm{}, fmt.Errorf("failed to set up bridge %q: %w", bridge, err)
+	}
+
+	tapDevice := vm.TapDevice
+	if tapDevice == "" {
+		tapDevice = fcTapName(server.Name)
+	}
+	if err := p.Net.CreateTap(tapDevice, bridge); err != nil {
+		return Vm{}, fmt.Errorf("failed to create tap device: %w", err)
+	}
+
+	logFile := filepath.Join(p.vmDir(server.Name), "fc.log")
+	pid, err := p.Process.StartBare(vm.SocketPath, logFile)
+	if err != nil {
+		_ = p.Net.DeleteTap(tapDevice)
+		return Vm{}, fmt.Errorf("failed to start microVM process: %w", err)
+	}
+
+	if err := p.API.LoadSnapshot(vm.SocketPath, vm.SnapshotStatePath, vm.SnapshotMemFilePath, true, []FCNetworkOverride{
+		{IfaceID: "eth0", TapDevice: tapDevice},
+	}); err != nil {
+		_ = p.Process.Stop(pid)
+		_ = p.Net.DeleteTap(tapDevice)
+		return Vm{}, fmt.Errorf("failed to load microVM snapshot: %w", err)
+	}
+
+	vm.PID = pid
+	vm.TapDevice = tapDevice
 	vm.Status = fcStatusRunning
 	if err := saveFCMetadata(p.metadataPath(server.Name), vm); err != nil {
-		return Vm{}, err
+		// Don't leave an unrecorded VMM running: a retried Resume would
+		// start a second process from the same snapshot and fight it for
+		// the API socket and TAP device.
+		_ = p.Process.Stop(pid)
+		_ = p.Net.DeleteTap(tapDevice)
+		return Vm{}, fmt.Errorf("microVM %q resumed but failed to save metadata: %w", server.Name, err)
 	}
 	return mapFCVM(vm), nil
 }
