@@ -34,6 +34,14 @@ func parseRemoteCmd(osArgs []string) []string {
 	return nil
 }
 
+// shouldSSHInto reports whether provider.SSHInto should run: either an
+// explicit trailing `-- command` was given (regardless of -u/-d/-a/-f), or
+// this is a bare `ssh VM_NAME` invocation that should open an interactive
+// session.
+func shouldSSHInto(isDirectSSH bool, remoteCmd []string) bool {
+	return len(remoteCmd) > 0 || isDirectSSH
+}
+
 func parseSSHConfigFile(configFile string) (*cmdSSHOptions, error) {
 	file, err := os.Open(configFile)
 	if err != nil {
@@ -217,7 +225,11 @@ var sshCmd = &cobra.Command{
 		if len(sshOpt.DownloadFiles) > 0 {
 			ProcessDownloadSlice(sshOpt.DownloadFiles, remote)
 		}
-		if isDirectSSH {
+		remoteCmd := parseRemoteCmd(os.Args)
+		// Run the trailing `-- command` whenever one is given, even alongside
+		// -u/-d/-a/-f; previously it only ran on a bare `ssh VM` invocation, so
+		// it was silently dropped whenever those flags were also present.
+		if shouldSSHInto(isDirectSSH, remoteCmd) {
 			sshKey := privateKeyFile
 			sshPort := sshOpt.Port
 			if cloudProvider == "static" {
@@ -229,7 +241,7 @@ var sshCmd = &cobra.Command{
 					sshPort = 0
 				}
 			}
-			provider.SSHInto(args[0], sshPort, sshKey, parseRemoteCmd(os.Args))
+			provider.SSHInto(args[0], sshPort, sshKey, remoteCmd)
 		}
 	},
 }

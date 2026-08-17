@@ -189,6 +189,45 @@ func TestParseRemoteCmd(t *testing.T) {
 	}
 }
 
+func TestShouldSSHInto(t *testing.T) {
+	tests := []struct {
+		name        string
+		isDirectSSH bool
+		remoteCmd   []string
+		expected    bool
+	}{
+		{
+			name:        "bare ssh with no other flags opens interactive session",
+			isDirectSSH: true,
+			remoteCmd:   nil,
+			expected:    true,
+		},
+		{
+			name:        "trailing command with no other flags runs it",
+			isDirectSSH: true,
+			remoteCmd:   []string{"uptime"},
+			expected:    true,
+		},
+		{
+			name:        "upload flag alone (isDirectSSH false) with no trailing command skips SSHInto",
+			isDirectSSH: false,
+			remoteCmd:   nil,
+			expected:    false,
+		},
+		{
+			name:        "upload flag combined with trailing command still runs the command",
+			isDirectSSH: false,
+			remoteCmd:   []string{"bash", "apply.sh"},
+			expected:    true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, shouldSSHInto(tt.isDirectSSH, tt.remoteCmd))
+		})
+	}
+}
+
 func TestCmdSSHOptions_ZeroValues(t *testing.T) {
 	// Test zero value cmdSSHOptions
 	var opts cmdSSHOptions
