@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/gofrs/uuid/v5"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/util/duration"
 )
@@ -298,6 +299,36 @@ func TestGetSSHKeyFilePaths(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGetSSHKeyFilePaths_FallsBackWhenConfiguredKeyMissing covers the
+// scenario where onctl.yaml's default ssh.publicKey/ssh.privateKey (id_rsa)
+// doesn't exist because the user only generated an id_ed25519 key pair.
+func TestGetSSHKeyFilePaths_FallsBackWhenConfiguredKeyMissing(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "ssh-fallback-test-")
+	assert.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Only an ed25519 key pair exists on disk.
+	edPublic := filepath.Join(tmpDir, "id_ed25519.pub")
+	edPrivate := filepath.Join(tmpDir, "id_ed25519")
+	assert.NoError(t, os.WriteFile(edPublic, []byte("ssh-ed25519 AAAA..."), 0o600))
+	assert.NoError(t, os.WriteFile(edPrivate, []byte("fake-private-key"), 0o600))
+
+	// Config still points at the (nonexistent) id_rsa default.
+	origPublic := viper.GetString("ssh.publicKey")
+	origPrivate := viper.GetString("ssh.privateKey")
+	viper.Set("ssh.publicKey", filepath.Join(tmpDir, "id_rsa.pub"))
+	viper.Set("ssh.privateKey", filepath.Join(tmpDir, "id_rsa"))
+	defer func() {
+		viper.Set("ssh.publicKey", origPublic)
+		viper.Set("ssh.privateKey", origPrivate)
+	}()
+
+	publicKey, privateKey := getSSHKeyFilePaths("")
+
+	assert.Equal(t, edPublic, publicKey)
+	assert.Equal(t, edPrivate, privateKey)
 }
 
 func TestDirSize(t *testing.T) {

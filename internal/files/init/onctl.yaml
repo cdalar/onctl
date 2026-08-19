@@ -12,6 +12,8 @@ vm:
   cloud-init:
     timeout: 3m                  # max wait for cloud-init to finish (e.g. 3m, 180s)
 ssh:
+  # If the key below doesn't exist, onctl falls back to another common
+  # type in the same directory (id_ed25519, id_ecdsa, id_rsa, in that order).
   publicKey: ~/.ssh/id_rsa.pub
   privateKey: ~/.ssh/id_rsa
 actions:
