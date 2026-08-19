@@ -60,7 +60,7 @@ type FCConfig struct {
 	// BinPath is the path to the firecracker binary.
 	BinPath string
 	// StateDir is the directory onctl stores microVM state under
-	// (default ~/.onctl/firecracker).
+	// (default /opt/fc).
 	StateDir string
 	// CacheImage is the path to a persistent, host-owned cache disk image
 	// (ext4) attached as a second drive to every microVM, alongside the
@@ -257,7 +257,10 @@ func saveFCMetadata(path string, vm fcVM) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0600)
+	// 0644: metadata holds no secrets (paths, PID, IP/MAC, status) and must
+	// stay readable by other local accounts so `onctl ls` sees VMs deployed
+	// by root under the shared StateDir.
+	return os.WriteFile(path, data, 0644)
 }
 
 // isAlive reports whether vm's firecracker process is actually running and
