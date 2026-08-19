@@ -80,4 +80,4 @@ fc:
     cidr: 172.16.0.1/24            # bridge address/subnet; address is the microVM gateway
   vm:
     username: root                 # ssh user configured in the rootfs image
-  # stateDir: ~/.onctl/firecracker  # default: ~/.onctl/firecracker
+  # stateDir: /opt/fc              # default: /opt/fc

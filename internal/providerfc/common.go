@@ -40,14 +40,19 @@ func expandHome(path string) string {
 	return path
 }
 
+// defaultFCStateDir is used when fc.stateDir isn't configured. Firecracker
+// microVM state is host-local, not per-user (Deploy needs CAP_NET_ADMIN to
+// set up the bridge/TAP devices anyway, so it's only ever usable as root or
+// a similarly privileged account) — a fixed system path avoids every user
+// account ending up with its own, inconsistent view of the same host's VMs.
+const defaultFCStateDir = "/opt/fc"
+
 // GetConfig reads fc.* settings from viper, applying defaults for
 // anything that isn't set.
 func GetConfig() cloud.FCConfig {
 	stateDir := viper.GetString("fc.stateDir")
 	if stateDir == "" {
-		if home, err := os.UserHomeDir(); err == nil {
-			stateDir = filepath.Join(home, ".onctl", "firecracker")
-		}
+		stateDir = defaultFCStateDir
 	} else {
 		stateDir = expandHome(stateDir)
 	}
@@ -255,7 +260,9 @@ func (m ProcessManager) StartBare(socketPath, logFile string) (int, error) {
 func (m ProcessManager) spawn(socketPath, logFile string) (int, error) {
 	_ = os.Remove(socketPath)
 
-	logFd, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	// 0600: guest serial console output can contain sensitive boot/runtime
+	// data, and now lives under the world-traversable shared StateDir.
+	logFd, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return 0, fmt.Errorf("failed to open log file %q: %w", logFile, err)
 	}
