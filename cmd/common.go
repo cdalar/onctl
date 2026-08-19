@@ -244,12 +244,19 @@ func findSingleFile(filename string) (filePath string) {
 	return ""
 }
 
+// sshKeyTypeFallbackOrder lists the key basenames tried, in order, when the
+// configured default SSH key (ssh.publicKey/ssh.privateKey in onctl.yaml)
+// does not exist on disk. Newer, more secure key types are preferred first.
+var sshKeyTypeFallbackOrder = []string{"id_ed25519", "id_ecdsa", "id_rsa"}
+
 func getSSHKeyFilePaths(filename string) (publicKeyFile, privateKeyFile string) {
 
 	home, err := os.UserHomeDir()
 	if err != nil {
 		log.Println(err)
 	}
+
+	usingConfigDefault := filename == ""
 
 	if filename == "" {
 		publicKeyFile = viper.GetString("ssh.publicKey")
@@ -268,6 +275,30 @@ func getSSHKeyFilePaths(filename string) (publicKeyFile, privateKeyFile string) 
 	// change ~ char with home directory
 	publicKeyFile = strings.Replace(publicKeyFile, "~", home, 1)
 	privateKeyFile = strings.Replace(privateKeyFile, "~", home, 1)
+
+	// The configured default (ssh.publicKey/ssh.privateKey) may point to a
+	// key type the user never generated (e.g. onctl.yaml defaults to
+	// id_rsa, but the machine only has an id_ed25519 key). Rather than
+	// failing outright, fall back to another common key type that actually
+	// exists in the same directory. Explicit -k/--publicKey/--key values are
+	// never overridden this way.
+	if usingConfigDefault {
+		if _, statErr := os.Stat(publicKeyFile); statErr != nil {
+			keyDir := filepath.Dir(publicKeyFile)
+			for _, candidate := range sshKeyTypeFallbackOrder {
+				candidatePublic := filepath.Join(keyDir, candidate+".pub")
+				candidatePrivate := filepath.Join(keyDir, candidate)
+				if _, err := os.Stat(candidatePublic); err == nil {
+					if _, err := os.Stat(candidatePrivate); err == nil {
+						log.Println("[DEBUG] configured SSH key", publicKeyFile, "not found, falling back to", candidatePublic)
+						publicKeyFile = candidatePublic
+						privateKeyFile = candidatePrivate
+						break
+					}
+				}
+			}
+		}
+	}
 
 	log.Println("[DEBUG] publicKeyFile:", publicKeyFile)
 	log.Println("[DEBUG] privateKeyFile:", privateKeyFile)
