@@ -283,7 +283,9 @@ func getSSHKeyFilePaths(filename string) (publicKeyFile, privateKeyFile string) 
 	// exists in the same directory. Explicit -k/--publicKey/--key values are
 	// never overridden this way.
 	if usingConfigDefault {
-		if _, statErr := os.Stat(publicKeyFile); statErr != nil {
+		_, publicStatErr := os.Stat(publicKeyFile)
+		_, privateStatErr := os.Stat(privateKeyFile)
+		if publicStatErr != nil || privateStatErr != nil {
 			keyDir := filepath.Dir(publicKeyFile)
 			for _, candidate := range sshKeyTypeFallbackOrder {
 				candidatePublic := filepath.Join(keyDir, candidate+".pub")
