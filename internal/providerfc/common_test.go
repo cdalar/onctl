@@ -96,11 +96,8 @@ func TestGetConfig_Defaults(t *testing.T) {
 	viper.Reset()
 	t.Cleanup(viper.Reset)
 
-	home, err := os.UserHomeDir()
-	require.NoError(t, err)
-
 	cfg := GetConfig()
-	assert.Equal(t, filepath.Join(home, ".onctl", "firecracker"), cfg.StateDir)
+	assert.Equal(t, defaultFCStateDir, cfg.StateDir)
 	assert.Equal(t, int64(1), cfg.VCPUCount)
 	assert.Equal(t, int64(2048), cfg.MemSizeMib)
 	assert.Equal(t, "fcbr0", cfg.Bridge)
