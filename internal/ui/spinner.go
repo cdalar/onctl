@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"golang.org/x/term"
 )
 
 // Spinner wraps the Bubble Tea spinner to provide a simple API similar to briandowns/spinner
@@ -80,6 +81,16 @@ func (s *Spinner) Start() {
 
 	// Sync the suffix
 	s.model.suffix = s.Suffix
+
+	// Check if we are in a terminal
+	if !term.IsTerminal(int(os.Stderr.Fd())) {
+		s.isRunning = true
+		s.done = make(chan struct{})
+		go func() {
+			close(s.done)
+		}()
+		return
+	}
 
 	s.program = tea.NewProgram(s.model, tea.WithOutput(os.Stderr))
 	s.done = make(chan struct{})
