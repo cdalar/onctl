@@ -85,10 +85,9 @@ func (s *Spinner) Start() {
 	// Check if we are in a terminal
 	if !term.IsTerminal(int(os.Stderr.Fd())) {
 		s.isRunning = true
+		s.program = nil
 		s.done = make(chan struct{})
-		go func() {
-			close(s.done)
-		}()
+		close(s.done)
 		return
 	}
 
