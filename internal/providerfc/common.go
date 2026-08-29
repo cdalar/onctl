@@ -65,14 +65,25 @@ func GetConfig() cloud.FCConfig {
 	if mem == 0 {
 		mem = 2048
 	}
+
 	bridge := viper.GetString("fc.network.bridge")
+	cidr := viper.GetString("fc.network.cidr")
+
+	if bridge != "" && strings.Contains(bridge, "/") {
+		parts := strings.SplitN(bridge, "/", 2)
+		bridge = parts[0]
+		if parts[1] != "" {
+			cidr = parts[1]
+		}
+	}
+
 	if bridge == "" {
 		bridge = "fcbr0"
 	}
-	cidr := viper.GetString("fc.network.cidr")
 	if cidr == "" {
 		cidr = "172.16.0.1/24"
 	}
+
 	username := viper.GetString("fc.vm.username")
 	if username == "" {
 		username = "root"
