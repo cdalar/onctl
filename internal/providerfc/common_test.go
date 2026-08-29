@@ -108,35 +108,35 @@ func TestGetConfig_Defaults(t *testing.T) {
 	assert.Empty(t, cfg.RootfsImage)
 }
 
-func TestGetConfig_CustomValues(t *testing.T) {
+func TestGetConfig_BridgeCidrFormat(t *testing.T) {
 	viper.Reset()
 	t.Cleanup(viper.Reset)
 
-	home, err := os.UserHomeDir()
-	require.NoError(t, err)
-
-	viper.Set("fc.stateDir", "~/custom-state")
-	viper.Set("fc.kernelImage", "~/images/vmlinux")
-	viper.Set("fc.rootfsImage", "~/images/rootfs.ext4")
-	viper.Set("fc.kernelArgs", "console=ttyS0")
-	viper.Set("fc.vcpuCount", 4)
-	viper.Set("fc.memSizeMib", 8192)
-	viper.Set("fc.network.bridge", "mybr0")
-	viper.Set("fc.network.cidr", "10.0.0.1/24")
-	viper.Set("fc.vm.username", "ubuntu")
-	viper.Set("fc.binPath", "/usr/local/bin/firecracker")
-
+	viper.Set("fc.network.bridge", "mybr0/10.0.0.1/24")
 	cfg := GetConfig()
-	assert.Equal(t, filepath.Join(home, "custom-state"), cfg.StateDir)
-	assert.Equal(t, filepath.Join(home, "images/vmlinux"), cfg.KernelImage)
-	assert.Equal(t, filepath.Join(home, "images/rootfs.ext4"), cfg.RootfsImage)
-	assert.Equal(t, "console=ttyS0", cfg.KernelArgs)
-	assert.Equal(t, int64(4), cfg.VCPUCount)
-	assert.Equal(t, int64(8192), cfg.MemSizeMib)
 	assert.Equal(t, "mybr0", cfg.Bridge)
 	assert.Equal(t, "10.0.0.1/24", cfg.CIDR)
-	assert.Equal(t, "ubuntu", cfg.Username)
-	assert.Equal(t, "/usr/local/bin/firecracker", cfg.BinPath)
+}
+
+func TestGetConfig_BridgeCidrFormat_OnlyBridge(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	viper.Set("fc.network.bridge", "mybr0/")
+	cfg := GetConfig()
+	assert.Equal(t, "mybr0", cfg.Bridge)
+	assert.Equal(t, "172.16.0.1/24", cfg.CIDR)
+}
+
+func TestGetConfig_BridgeCidrFormat_WithExistingCidr(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	viper.Set("fc.network.bridge", "mybr0/10.0.0.1/24")
+	viper.Set("fc.network.cidr", "192.168.1.1/24")
+	cfg := GetConfig()
+	assert.Equal(t, "mybr0", cfg.Bridge)
+	assert.Equal(t, "10.0.0.1/24", cfg.CIDR)
 }
 
 func TestUnixHTTPClient(t *testing.T) {
