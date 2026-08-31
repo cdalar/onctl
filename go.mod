@@ -3,7 +3,7 @@ module github.com/cdalar/onctl
 go 1.26.0
 
 require (
-	cloud.google.com/go/compute v1.66.0
+	cloud.google.com/go/compute v1.67.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.2.0
 	github.com/aws/aws-sdk-go-v2 v1.43.7
 	github.com/aws/aws-sdk-go-v2/config v1.32.38
