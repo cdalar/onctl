@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"crypto/ed25519"
+	"crypto/md5"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -642,6 +643,10 @@ func TestProviderFC_CreateSSHKey_Invalid(t *testing.T) {
 }
 
 func TestSanitizeGuestHostname(t *testing.T) {
+	longName := strings.Repeat("a", 100)
+	longNameSum := md5.Sum([]byte(longName))
+	longNameSuffix := fmt.Sprintf("%x", longNameSum)[:8]
+
 	tests := []struct {
 		name string
 		want string
@@ -652,9 +657,24 @@ func TestSanitizeGuestHostname(t *testing.T) {
 		{"  leading-trailing-space  ", "leading-trailing-space"},
 		{"---", ""},
 		{"", ""},
-		{strings.Repeat("a", 100), strings.Repeat("a", 63)},
+		{longName, strings.Repeat("a", 54) + "-" + longNameSuffix},
 	}
 	for _, tt := range tests {
-		assert.Equal(t, tt.want, sanitizeGuestHostname(tt.name), "input %q", tt.name)
+		got := sanitizeGuestHostname(tt.name)
+		assert.Equal(t, tt.want, got, "input %q", tt.name)
+		assert.LessOrEqual(t, len(got), 63, "input %q", tt.name)
 	}
+}
+
+func TestSanitizeGuestHostname_TruncationPreservesUniqueness(t *testing.T) {
+	prefix := strings.Repeat("gh-runner-", 6) // 60 bytes, shared by both names
+	nameA := prefix + "run-aaaaaaaa"
+	nameB := prefix + "run-bbbbbbbb"
+
+	hostnameA := sanitizeGuestHostname(nameA)
+	hostnameB := sanitizeGuestHostname(nameB)
+
+	assert.NotEqual(t, hostnameA, hostnameB, "distinct VM names sharing a long common prefix must not collide after truncation")
+	assert.LessOrEqual(t, len(hostnameA), 63)
+	assert.LessOrEqual(t, len(hostnameB), 63)
 }

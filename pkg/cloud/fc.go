@@ -348,8 +348,13 @@ func fcMAC(vmName string) string {
 // for the same reason), and this value is written into a debugfs script
 // verbatim — rejecting anything but a fixed safe charset avoids a stray
 // space or newline in the name being interpreted as a second debugfs
-// command. Returns "" if nothing usable survives, telling the caller to
-// leave the guest's baked-in placeholder hostname alone.
+// command. When the sanitized name overflows 63 bytes, the excess is
+// replaced with a hash suffix of the full name (rather than a plain
+// truncation) so that two names sharing a long common prefix — e.g. a
+// controller-generated run ID appended after a long, identical prefix —
+// still get distinct guest hostnames. Returns "" if nothing usable
+// survives, telling the caller to leave the guest's baked-in placeholder
+// hostname alone.
 func sanitizeGuestHostname(vmName string) string {
 	var b strings.Builder
 	for _, r := range strings.ToLower(vmName) {
@@ -361,10 +366,13 @@ func sanitizeGuestHostname(vmName string) string {
 		}
 	}
 	s := strings.Trim(b.String(), "-")
-	if len(s) > 63 {
-		s = strings.Trim(s[:63], "-")
+	if len(s) <= 63 {
+		return s
 	}
-	return s
+	sum := md5.Sum([]byte(vmName))
+	suffix := fmt.Sprintf("%x", sum)[:8]
+	prefix := strings.Trim(s[:63-len(suffix)-1], "-")
+	return prefix + "-" + suffix
 }
 
 // bridgeGatewayAndMask returns the gateway IP and dotted-decimal netmask for
