@@ -460,12 +460,17 @@ func NewRootfsPreparer() cloud.RootfsPreparer {
 	return DebugfsRootfsPreparer{}
 }
 
-func (DebugfsRootfsPreparer) Prepare(baseImage, destPath, sshPublicKey, username string) error {
+func (DebugfsRootfsPreparer) Prepare(baseImage, destPath, hostname, sshPublicKey, username string) error {
 	if baseImage == "" {
 		return errors.New("fc.rootfsImage is not configured")
 	}
 	if err := copyFile(baseImage, destPath); err != nil {
 		return fmt.Errorf("failed to copy base rootfs %q: %w", baseImage, err)
+	}
+	if hostname != "" {
+		if err := injectHostname(destPath, hostname); err != nil {
+			return err
+		}
 	}
 	if sshPublicKey == "" {
 		return nil
@@ -638,6 +643,39 @@ func injectSSHKey(rootfsPath, publicKey, username string) error {
 		"mkdir %s\nrm %s/authorized_keys\nwrite %s %s/authorized_keys\nsif %s/authorized_keys mode 0100600\nsif %s mode 040700\n",
 		sshDir, sshDir, keyFile.Name(), sshDir, sshDir, sshDir,
 	)
+	return runDebugfsScript(rootfsPath, script)
+}
+
+// injectHostname writes hostname to /etc/hostname inside the ext-family
+// image at rootfsPath using debugfs, without mounting the image. The baked
+// base image always carries the same placeholder hostname (bake-fc-image.sh
+// runs debootstrap in a chroot, which can't isolate the UTS namespace, so it
+// bakes in a fixed value) — this gives each VM's per-VM rootfs copy its own,
+// matching the name onctl created it with.
+func injectHostname(rootfsPath, hostname string) error {
+	hostnameFile, err := os.CreateTemp("", "onctl-hostname-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(hostnameFile.Name()) }()
+	if _, err := hostnameFile.WriteString(hostname + "\n"); err != nil {
+		_ = hostnameFile.Close()
+		return err
+	}
+	if err := hostnameFile.Close(); err != nil {
+		return err
+	}
+
+	script := fmt.Sprintf(
+		"rm /etc/hostname\nwrite %s /etc/hostname\nsif /etc/hostname mode 0100644\n",
+		hostnameFile.Name(),
+	)
+	return runDebugfsScript(rootfsPath, script)
+}
+
+// runDebugfsScript writes script to a temp file and runs `debugfs -w` with
+// it against rootfsPath, shared by injectSSHKey and injectHostname.
+func runDebugfsScript(rootfsPath, script string) error {
 	scriptFile, err := os.CreateTemp("", "onctl-debugfs-*.script")
 	if err != nil {
 		return err
