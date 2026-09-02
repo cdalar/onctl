@@ -604,7 +604,11 @@ func reflinkCopy(src, dst string) error {
 // base rootfs image into a near-zero-cost metadata operation.
 func copyRootfs(src, dst string) error {
 	if err := reflinkCopy(src, dst); err == nil {
-		return nil
+		// `cp --reflink` preserves src's mode (typically a world/group-readable
+		// base image), but dst is a per-VM writable rootfs holding guest
+		// secrets under the shared, world-traversable StateDir — lock it down
+		// to match copyFile's fallback below, which os.OpenFile's it 0600.
+		return os.Chmod(dst, 0600)
 	}
 	return copyFile(src, dst)
 }
