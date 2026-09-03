@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
@@ -145,10 +147,15 @@ func TestFindSingleFile_EmbeddedFiles(t *testing.T) {
 }
 
 func TestActionCmd_DownloadFile_404(t *testing.T) {
-	// Test downloadFile with a 404 response
-	// We can use a local temp file path
+	// Test downloadFile with a 404 response, served locally so the test
+	// doesn't depend on an external service's availability.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
 	tempFile := "/tmp/onctl-test-action-binary"
-	err := downloadFile("https://httpstat.us/404", tempFile)
+	err := downloadFile(srv.URL, tempFile)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "404")
 }
