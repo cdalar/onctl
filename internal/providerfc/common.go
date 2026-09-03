@@ -464,7 +464,7 @@ func (DebugfsRootfsPreparer) Prepare(baseImage, destPath, sshPublicKey, username
 	if baseImage == "" {
 		return errors.New("fc.rootfsImage is not configured")
 	}
-	if err := copyFile(baseImage, destPath); err != nil {
+	if err := copyRootfs(baseImage, destPath); err != nil {
 		return fmt.Errorf("failed to copy base rootfs %q: %w", baseImage, err)
 	}
 	if sshPublicKey == "" {
@@ -593,6 +593,24 @@ func reflinkCopy(src, dst string) error {
 		return fmt.Errorf("cp --reflink=always %s %s failed (requires a CoW filesystem like btrfs): %w: %s", src, dst, err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// copyRootfs creates dst as a copy of src, preferring a copy-on-write
+// reflink (near-instant and disk-space-free regardless of image size) and
+// falling back to a full byte-for-byte copy when the host filesystem
+// doesn't support reflinks (e.g. plain ext4, or non-Linux). Every Deploy
+// calls this once per microVM, so on a CoW filesystem (btrfs, or XFS with
+// reflink=1) it turns what was previously a multi-second copy of the whole
+// base rootfs image into a near-zero-cost metadata operation.
+func copyRootfs(src, dst string) error {
+	if err := reflinkCopy(src, dst); err == nil {
+		// `cp --reflink` preserves src's mode (typically a world/group-readable
+		// base image), but dst is a per-VM writable rootfs holding guest
+		// secrets under the shared, world-traversable StateDir — lock it down
+		// to match copyFile's fallback below, which os.OpenFile's it 0600.
+		return os.Chmod(dst, 0600)
+	}
+	return copyFile(src, dst)
 }
 
 func copyFile(src, dst string) error {
