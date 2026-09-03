@@ -3,14 +3,14 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/spf13/cobra"
 )
-
-const importedHostsFile = "imported.yaml"
 
 type cmdImportOptions struct {
 	IP       string
@@ -30,15 +30,57 @@ func init() {
 	rootCmd.AddCommand(importCmd)
 }
 
-// staticProvider builds a ProviderStatic backed by the inventory file in the
-// resolved .onctl config dir, without going through initProvider/initState
-// (import needs no cloud credentials).
+// onctlSSHConfigPath is the fixed location of onctl's own ssh_config-format
+// inventory of imported hosts. It lives under ~/.ssh (not the .onctl config
+// dir) so it can be `Include`d from ~/.ssh/config and imported hosts stay
+// reachable with plain `ssh <name>`, independent of --config/-c.
+func onctlSSHConfigPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return filepath.Join(home, ".ssh", "onctl_config"), nil
+}
+
+// staticProvider builds a ProviderStatic backed by onctl's own ssh_config
+// file, without going through initProvider/initState (import needs no cloud
+// credentials).
 func staticProvider() (cloud.ProviderStatic, error) {
-	configDir, err := resolveConfigDir()
+	path, err := onctlSSHConfigPath()
 	if err != nil {
 		return cloud.ProviderStatic{}, err
 	}
-	return cloud.ProviderStatic{InventoryPath: filepath.Join(configDir, importedHostsFile)}, nil
+	return cloud.ProviderStatic{InventoryPath: path}, nil
+}
+
+// ensureSSHConfigInclude makes sure ~/.ssh/config includes onctlConfigPath,
+// so imported hosts are reachable with plain `ssh <name>` too, not just
+// through onctl. It's idempotent: a no-op once the Include line is present.
+// The Include is inserted first so imported hosts aren't shadowed by a
+// later catch-all "Host *" block.
+func ensureSSHConfigInclude(onctlConfigPath string) error {
+	sshDir := filepath.Dir(onctlConfigPath)
+	if err := os.MkdirAll(sshDir, 0700); err != nil {
+		return fmt.Errorf("failed to create %s: %w", sshDir, err)
+	}
+
+	configPath := filepath.Join(sshDir, "config")
+	includeLine := "Include " + onctlConfigPath
+
+	data, err := os.ReadFile(configPath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to read %s: %w", configPath, err)
+	}
+	if strings.Contains(string(data), includeLine) {
+		return nil
+	}
+
+	newContent := includeLine + "\n\n" + string(data)
+	if err := os.WriteFile(configPath, []byte(newContent), 0600); err != nil {
+		return fmt.Errorf("failed to update %s: %w", configPath, err)
+	}
+	log.Printf("[DEBUG] added %q to %s", includeLine, configPath)
+	return nil
 }
 
 var importCmd = &cobra.Command{
@@ -47,6 +89,9 @@ var importCmd = &cobra.Command{
 	Long: `Import registers a server onctl did not create (e.g. a Hetzner auction/dedicated
 box, or any other reachable host) so it shows up in 'onctl --provider static ls'
 and can be reached with 'onctl --provider static ssh NAME'.
+
+The host is written to ~/.ssh/onctl_config, which is Included from
+~/.ssh/config, so it's also reachable with plain 'ssh NAME'.
 
 Imported hosts cannot be created/destroyed/paused through a cloud API since
 onctl doesn't manage their lifecycle; 'destroy' on an imported host only
@@ -86,6 +131,9 @@ removes it from onctl's local record, it does not affect the real machine.`,
 		}
 
 		if err := p.SaveInventory(inv); err != nil {
+			return err
+		}
+		if err := ensureSSHConfigInclude(p.InventoryPath); err != nil {
 			return err
 		}
 
