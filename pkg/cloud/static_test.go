@@ -1,6 +1,7 @@
 package cloud
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -41,6 +42,30 @@ func TestProviderStatic_SaveAndLoadInventory_RoundTrip(t *testing.T) {
 	assert.Len(t, list.List, 2)
 	assert.Equal(t, "imported", list.List[0].Status)
 	assert.Equal(t, "static", list.List[0].Provider)
+}
+
+// TestProviderStatic_SaveAndLoadInventory_QuotesValuesWithSpaces guards
+// against writing an unquoted value containing whitespace (e.g. a key path
+// under "My Drive"): since this file is Included from ~/.ssh/config, an
+// unquoted multi-word value would produce an invalid ssh_config line and
+// break ssh for the whole machine, not just onctl.
+func TestProviderStatic_SaveAndLoadInventory_QuotesValuesWithSpaces(t *testing.T) {
+	p := newTestStaticProvider(t)
+	inv := StaticInventory{Hosts: []StaticHost{
+		{Name: "box1", IP: "1.2.3.4", Username: "ubuntu user", PrivateKey: "/Users/me/My Drive/id_ed25519"},
+	}}
+	assert.NoError(t, p.SaveInventory(inv))
+
+	data, err := os.ReadFile(p.InventoryPath)
+	assert.NoError(t, err)
+	assert.Contains(t, string(data), `IdentityFile "/Users/me/My Drive/id_ed25519"`)
+	assert.Contains(t, string(data), `User "ubuntu user"`)
+
+	loaded, err := p.LoadInventory()
+	assert.NoError(t, err)
+	assert.Len(t, loaded.Hosts, 1)
+	assert.Equal(t, "/Users/me/My Drive/id_ed25519", loaded.Hosts[0].PrivateKey)
+	assert.Equal(t, "ubuntu user", loaded.Hosts[0].Username)
 }
 
 func TestProviderStatic_GetByName_Found(t *testing.T) {

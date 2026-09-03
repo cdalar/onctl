@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -10,7 +11,12 @@ import (
 
 	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
+
+// legacyImportedHostsFile is where `onctl import` wrote its inventory before
+// this file moved to ~/.ssh/onctl_config (see migrateLegacyImportedYAML).
+const legacyImportedHostsFile = "imported.yaml"
 
 type cmdImportOptions struct {
 	IP       string
@@ -39,7 +45,76 @@ func onctlSSHConfigPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
-	return filepath.Join(home, ".ssh", "onctl_config"), nil
+	path := filepath.Join(home, ".ssh", "onctl_config")
+	if err := migrateLegacyImportedYAML(path); err != nil {
+		fmt.Printf("Warning: failed to migrate legacy imported-hosts inventory: %v\n", err)
+	}
+	return path, nil
+}
+
+// migrateLegacyImportedYAML copies hosts from the pre-ssh_config
+// .onctl/imported.yaml inventory into newPath once, so upgrading onctl
+// doesn't silently drop hosts registered with `onctl import` before this
+// file moved under ~/.ssh. No-op once newPath exists, or if there is no
+// .onctl dir (nothing to migrate) or no legacy file in it.
+func migrateLegacyImportedYAML(newPath string) error {
+	if _, err := os.Stat(newPath); err == nil {
+		return nil
+	}
+	configDir, err := resolveConfigDir()
+	if err != nil {
+		return nil
+	}
+	legacyPath := filepath.Join(configDir, legacyImportedHostsFile)
+	data, err := os.ReadFile(legacyPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to read %s: %w", legacyPath, err)
+	}
+
+	// Matches the pre-ssh_config StaticHost yaml tags exactly (see git
+	// history of pkg/cloud/static.go); cloud.StaticHost itself no longer
+	// carries yaml tags now that it's serialized as ssh_config instead.
+	var legacy struct {
+		Hosts []struct {
+			Name       string    `yaml:"name"`
+			IP         string    `yaml:"ip"`
+			Username   string    `yaml:"username"`
+			SSHPort    int       `yaml:"sshPort"`
+			PrivateKey string    `yaml:"privateKey"`
+			ImportedAt time.Time `yaml:"importedAt"`
+		} `yaml:"hosts"`
+	}
+	if err := yaml.Unmarshal(data, &legacy); err != nil {
+		return fmt.Errorf("failed to parse %s: %w", legacyPath, err)
+	}
+	if len(legacy.Hosts) == 0 {
+		return nil
+	}
+
+	inv := cloud.StaticInventory{}
+	for _, h := range legacy.Hosts {
+		inv.Hosts = append(inv.Hosts, cloud.StaticHost{
+			Name:       h.Name,
+			IP:         h.IP,
+			Username:   h.Username,
+			SSHPort:    h.SSHPort,
+			PrivateKey: h.PrivateKey,
+			ImportedAt: h.ImportedAt,
+		})
+	}
+
+	p := cloud.ProviderStatic{InventoryPath: newPath}
+	if err := p.SaveInventory(inv); err != nil {
+		return err
+	}
+	if err := ensureSSHConfigInclude(newPath); err != nil {
+		return err
+	}
+	fmt.Printf("Migrated %d imported host(s) from %s to %s\n", len(legacy.Hosts), legacyPath, newPath)
+	return nil
 }
 
 // staticProvider builds a ProviderStatic backed by onctl's own ssh_config
@@ -51,6 +126,29 @@ func staticProvider() (cloud.ProviderStatic, error) {
 		return cloud.ProviderStatic{}, err
 	}
 	return cloud.ProviderStatic{InventoryPath: path}, nil
+}
+
+// hasActiveInclude reports whether data already has an active (uncommented)
+// "Include <target>" directive pointing at target, so a commented-out line
+// or an unrelated Include whose path merely starts with target doesn't
+// produce a false "already included" positive.
+func hasActiveInclude(data []byte, target string) bool {
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		fields := cloud.SplitSSHConfigFields(trimmed)
+		if len(fields) < 2 || !strings.EqualFold(fields[0], "include") {
+			continue
+		}
+		for _, f := range fields[1:] {
+			if f == target {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // ensureSSHConfigInclude makes sure ~/.ssh/config includes onctlConfigPath,
@@ -65,16 +163,16 @@ func ensureSSHConfigInclude(onctlConfigPath string) error {
 	}
 
 	configPath := filepath.Join(sshDir, "config")
-	includeLine := "Include " + onctlConfigPath
 
 	data, err := os.ReadFile(configPath)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to read %s: %w", configPath, err)
 	}
-	if strings.Contains(string(data), includeLine) {
+	if hasActiveInclude(data, onctlConfigPath) {
 		return nil
 	}
 
+	includeLine := "Include " + cloud.QuoteSSHConfigValue(onctlConfigPath)
 	newContent := includeLine + "\n\n" + string(data)
 	if err := os.WriteFile(configPath, []byte(newContent), 0600); err != nil {
 		return fmt.Errorf("failed to update %s: %w", configPath, err)

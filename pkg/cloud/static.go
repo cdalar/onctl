@@ -35,6 +35,44 @@ type StaticInventory struct {
 // it are reachable with plain `ssh <name>` once ~/.ssh/config includes it.
 const onctlImportedAtDirective = "# onctl-imported-at"
 
+// SplitSSHConfigFields tokenizes one ssh_config line into whitespace-separated
+// fields, treating a double-quoted field as one token even if it contains
+// whitespace (e.g. `IdentityFile "/path with spaces/key"`). Needed because a
+// plain strings.Fields split would break IdentityFile/HostName values (paths,
+// usernames) that contain spaces, both here and when writing them back out.
+func SplitSSHConfigFields(line string) []string {
+	var fields []string
+	var cur strings.Builder
+	inQuotes := false
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		switch {
+		case c == '"':
+			inQuotes = !inQuotes
+		case (c == ' ' || c == '\t') && !inQuotes:
+			if cur.Len() > 0 {
+				fields = append(fields, cur.String())
+				cur.Reset()
+			}
+		default:
+			cur.WriteByte(c)
+		}
+	}
+	if cur.Len() > 0 {
+		fields = append(fields, cur.String())
+	}
+	return fields
+}
+
+// QuoteSSHConfigValue wraps v in double quotes if it contains whitespace, so it
+// round-trips through SplitSSHConfigFields as a single field.
+func QuoteSSHConfigValue(v string) string {
+	if strings.ContainsAny(v, " \t") {
+		return `"` + v + `"`
+	}
+	return v
+}
+
 // ProviderStatic implements CloudProviderInterface over a local inventory
 // file instead of a cloud API, for servers imported with `onctl import`
 // (e.g. Hetzner auction/dedicated boxes, or any other unmanaged host).
@@ -72,7 +110,7 @@ func (p ProviderStatic) LoadInventory() (StaticInventory, error) {
 		}
 	}
 	for _, line := range strings.Split(string(data), "\n") {
-		fields := strings.Fields(line)
+		fields := SplitSSHConfigFields(line)
 		if len(fields) == 0 {
 			continue
 		}
@@ -116,16 +154,16 @@ func (p ProviderStatic) SaveInventory(inv StaticInventory) error {
 	b.WriteString("# Managed by onctl (`onctl import` / `onctl destroy`). Hand edits outside\n")
 	b.WriteString("# the Host/HostName/User/Port/IdentityFile shape are lost on the next write.\n")
 	for _, h := range inv.Hosts {
-		fmt.Fprintf(&b, "\nHost %s\n", h.Name)
-		fmt.Fprintf(&b, "    HostName %s\n", h.IP)
+		fmt.Fprintf(&b, "\nHost %s\n", QuoteSSHConfigValue(h.Name))
+		fmt.Fprintf(&b, "    HostName %s\n", QuoteSSHConfigValue(h.IP))
 		if h.Username != "" {
-			fmt.Fprintf(&b, "    User %s\n", h.Username)
+			fmt.Fprintf(&b, "    User %s\n", QuoteSSHConfigValue(h.Username))
 		}
 		if h.SSHPort != 0 {
 			fmt.Fprintf(&b, "    Port %d\n", h.SSHPort)
 		}
 		if h.PrivateKey != "" {
-			fmt.Fprintf(&b, "    IdentityFile %s\n", h.PrivateKey)
+			fmt.Fprintf(&b, "    IdentityFile %s\n", QuoteSSHConfigValue(h.PrivateKey))
 		}
 		if !h.ImportedAt.IsZero() {
 			fmt.Fprintf(&b, "    %s %s\n", onctlImportedAtDirective, h.ImportedAt.Format(time.RFC3339))
