@@ -135,7 +135,13 @@ func (r *Remote) WaitForSSH(timeout string) {
 			if err := r.NewSSHConnection(); err == nil {
 				return
 			}
-			time.Sleep(500 * time.Millisecond)
+			// 100ms: measured against a real firecracker microVM, a failed
+			// dial while the guest is still booting fails in well under a
+			// millisecond once the OS gives up on it (see PR #1076's
+			// investigation) — the wait here is pure polling granularity,
+			// not load. A slower/higher-latency SSH target would just see
+			// extra harmless retries, not a correctness risk.
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 }
