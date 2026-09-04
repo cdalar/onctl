@@ -331,7 +331,17 @@ func (m ProcessManager) IsRunning(pid int) bool {
 	if err != nil {
 		return false
 	}
-	return process.Signal(syscall.Signal(0)) == nil
+	// Signaling with 0 delivers nothing but still probes existence. If the
+	// process is owned by a different user (e.g. onctl invoked as a
+	// non-root user querying a firecracker process started by root), the
+	// kernel returns EPERM rather than ESRCH -- that's proof the process
+	// exists, just that we can't signal it. Only treat "no such process"
+	// as evidence of death; any other error (permission denied included)
+	// must not be read as "not running", since Deploy() reclaims a "dead"
+	// microVM's on-disk state via os.RemoveAll, which would race a live
+	// firecracker process still holding that rootfs open.
+	err = process.Signal(syscall.Signal(0))
+	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
 // Owns reports whether pid is a firecracker process bound to socketPath, by
