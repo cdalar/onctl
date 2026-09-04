@@ -426,7 +426,7 @@ func TestCopyFile_MissingSource(t *testing.T) {
 
 func TestDebugfsRootfsPreparer_Prepare_NoBaseImage(t *testing.T) {
 	p := NewRootfsPreparer()
-	err := p.Prepare("", filepath.Join(t.TempDir(), "rootfs.ext4"), "ssh-key", "root")
+	err := p.Prepare("", filepath.Join(t.TempDir(), "rootfs.ext4"), "", "ssh-key", "root")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "rootfsImage is not configured")
 }
@@ -434,7 +434,7 @@ func TestDebugfsRootfsPreparer_Prepare_NoBaseImage(t *testing.T) {
 func TestDebugfsRootfsPreparer_Prepare_CopyError(t *testing.T) {
 	dir := t.TempDir()
 	p := NewRootfsPreparer()
-	err := p.Prepare(filepath.Join(dir, "no-such-base.ext4"), filepath.Join(dir, "rootfs.ext4"), "", "root")
+	err := p.Prepare(filepath.Join(dir, "no-such-base.ext4"), filepath.Join(dir, "rootfs.ext4"), "", "", "root")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to copy base rootfs")
 }
@@ -446,7 +446,7 @@ func TestDebugfsRootfsPreparer_Prepare_NoSSHKey(t *testing.T) {
 	require.NoError(t, os.WriteFile(src, []byte("image-data"), 0644))
 
 	p := NewRootfsPreparer()
-	require.NoError(t, p.Prepare(src, dst, "", "root"))
+	require.NoError(t, p.Prepare(src, dst, "", "", "root"))
 
 	data, err := os.ReadFile(dst)
 	require.NoError(t, err)
@@ -463,7 +463,7 @@ func TestDebugfsRootfsPreparer_Prepare_InjectsKey(t *testing.T) {
 	installFakeDebugfs(t, calls, 0)
 
 	p := NewRootfsPreparer()
-	require.NoError(t, p.Prepare(src, dst, "ssh-ed25519 AAAA... user@host", "root"))
+	require.NoError(t, p.Prepare(src, dst, "", "ssh-ed25519 AAAA... user@host", "root"))
 
 	script, err := os.ReadFile(calls)
 	require.NoError(t, err)
@@ -484,7 +484,7 @@ func TestDebugfsRootfsPreparer_Prepare_NonRootUser(t *testing.T) {
 	installFakeDebugfs(t, calls, 0)
 
 	p := NewRootfsPreparer()
-	require.NoError(t, p.Prepare(src, dst, "ssh-ed25519 AAAA... user@host", "ubuntu"))
+	require.NoError(t, p.Prepare(src, dst, "", "ssh-ed25519 AAAA... user@host", "ubuntu"))
 
 	script, err := os.ReadFile(calls)
 	require.NoError(t, err)
@@ -500,7 +500,55 @@ func TestDebugfsRootfsPreparer_Prepare_DebugfsFails(t *testing.T) {
 	installFakeDebugfs(t, filepath.Join(dir, "calls.txt"), 1)
 
 	p := NewRootfsPreparer()
-	err := p.Prepare(src, dst, "ssh-ed25519 AAAA... user@host", "root")
+	err := p.Prepare(src, dst, "", "ssh-ed25519 AAAA... user@host", "root")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "debugfs failed")
+}
+
+func TestDebugfsRootfsPreparer_Prepare_NoHostname(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "base.ext4")
+	dst := filepath.Join(dir, "rootfs.ext4")
+	require.NoError(t, os.WriteFile(src, []byte("image-data"), 0644))
+
+	p := NewRootfsPreparer()
+	require.NoError(t, p.Prepare(src, dst, "", "", "root"))
+
+	data, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	assert.Equal(t, "image-data", string(data))
+}
+
+func TestDebugfsRootfsPreparer_Prepare_InjectsHostname(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "base.ext4")
+	dst := filepath.Join(dir, "rootfs.ext4")
+	require.NoError(t, os.WriteFile(src, []byte("image-data"), 0644))
+
+	calls := filepath.Join(dir, "debugfs-calls.txt")
+	installFakeDebugfs(t, calls, 0)
+
+	p := NewRootfsPreparer()
+	require.NoError(t, p.Prepare(src, dst, "gh-runner-12345", "", "root"))
+
+	script, err := os.ReadFile(calls)
+	require.NoError(t, err)
+	assert.Contains(t, string(script), "rm /etc/hostname\n")
+	assert.Contains(t, string(script), "write ")
+	assert.Contains(t, string(script), " /etc/hostname\n")
+	assert.Contains(t, string(script), "sif /etc/hostname mode 0100644\n")
+}
+
+func TestDebugfsRootfsPreparer_Prepare_HostnameDebugfsFails(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "base.ext4")
+	dst := filepath.Join(dir, "rootfs.ext4")
+	require.NoError(t, os.WriteFile(src, []byte("image-data"), 0644))
+
+	installFakeDebugfs(t, filepath.Join(dir, "calls.txt"), 1)
+
+	p := NewRootfsPreparer()
+	err := p.Prepare(src, dst, "gh-runner-12345", "", "root")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "debugfs failed")
 }

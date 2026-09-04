@@ -156,11 +156,16 @@ type NetworkManager interface {
 }
 
 // RootfsPreparer creates a per-VM writable rootfs image from the configured
-// base image and injects the SSH public key for the configured user.
+// base image, gives it its own hostname, and injects the SSH public key for
+// the configured user.
 type RootfsPreparer interface {
-	// Prepare creates destPath as a writable copy of baseImage. If
-	// sshPublicKey is non-empty it is added to username's authorized_keys.
-	Prepare(baseImage, destPath, sshPublicKey, username string) error
+	// Prepare creates destPath as a writable copy of baseImage. If hostname
+	// is non-empty, /etc/hostname is rewritten to it — the baked base image
+	// otherwise carries a single shared placeholder hostname baked in at
+	// image-build time (see bake-fc-image.sh), so every VM would report the
+	// same guest hostname without this. If sshPublicKey is non-empty it is
+	// added to username's authorized_keys.
+	Prepare(baseImage, destPath, hostname, sshPublicKey, username string) error
 }
 
 // CacheDiskPreparer manages a persistent, host-owned disk image shared
@@ -332,6 +337,41 @@ func fcTapName(vmName string) string {
 func fcMAC(vmName string) string {
 	sum := md5.Sum([]byte(vmName))
 	return fmt.Sprintf("02:FC:%02x:%02x:%02x:%02x", sum[0], sum[1], sum[2], sum[3])
+}
+
+// sanitizeGuestHostname converts an onctl VM name into a Linux-hostname-safe
+// string for injection into the guest's /etc/hostname: lowercase
+// letters/digits/hyphens only, capped at 63 bytes (the RFC 1123 label
+// limit, also under Linux's HOST_NAME_MAX). vmName isn't otherwise
+// constrained to hostname-safe characters (see fcTapName/fcMAC hashing it
+// for the same reason), and this value is written into a debugfs script
+// verbatim — rejecting anything but a fixed safe charset avoids a stray
+// space or newline in the name being interpreted as a second debugfs
+// command. When the sanitized name overflows 63 bytes, the excess is
+// replaced with a hash suffix of the full name (rather than a plain
+// truncation) so that two names sharing a long common prefix — e.g. a
+// controller-generated run ID appended after a long, identical prefix —
+// still get distinct guest hostnames. Returns "" if nothing usable
+// survives, telling the caller to leave the guest's baked-in placeholder
+// hostname alone.
+func sanitizeGuestHostname(vmName string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(vmName) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('-')
+		}
+	}
+	s := strings.Trim(b.String(), "-")
+	if len(s) <= 63 {
+		return s
+	}
+	sum := md5.Sum([]byte(vmName))
+	suffix := fmt.Sprintf("%x", sum)[:8]
+	prefix := strings.Trim(s[:63-len(suffix)-1], "-")
+	return prefix + "-" + suffix
 }
 
 // bridgeGatewayAndMask returns the gateway IP and dotted-decimal netmask for
@@ -520,7 +560,7 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 	}
 
 	rootfsPath := filepath.Join(dir, "rootfs.ext4")
-	if err := p.Rootfs.Prepare(rootfsImage, rootfsPath, sshPublicKey, username); err != nil {
+	if err := p.Rootfs.Prepare(rootfsImage, rootfsPath, sanitizeGuestHostname(server.Name), sshPublicKey, username); err != nil {
 		_ = os.RemoveAll(dir)
 		return Vm{}, fmt.Errorf("failed to prepare rootfs: %w", err)
 	}

@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"crypto/ed25519"
+	"crypto/md5"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -120,11 +121,13 @@ func (f *fakeNetworkManager) DeleteTap(tapName string) error {
 
 // fakeRootfsPreparer is a test double for RootfsPreparer.
 type fakeRootfsPreparer struct {
-	calls []string
+	calls     []string
+	hostnames []string
 }
 
-func (f *fakeRootfsPreparer) Prepare(_, destPath, _, _ string) error {
+func (f *fakeRootfsPreparer) Prepare(_, destPath, hostname, _, _ string) error {
 	f.calls = append(f.calls, destPath)
+	f.hostnames = append(f.hostnames, hostname)
 	return os.WriteFile(destPath, []byte("rootfs"), 0600)
 }
 
@@ -311,6 +314,7 @@ func TestProviderFC_Deploy(t *testing.T) {
 	assert.Equal(t, []string{"fcbr0"}, netMgr.bridges)
 	assert.Equal(t, []string{fcTapName("test-vm")}, netMgr.taps)
 	assert.Len(t, rootfs.calls, 1)
+	assert.Equal(t, []string{"test-vm"}, rootfs.hostnames)
 
 	meta, err := loadFCMetadata(p.metadataPath("test-vm"))
 	require.NoError(t, err)
@@ -636,4 +640,41 @@ func TestProviderFC_CreateSSHKey_Invalid(t *testing.T) {
 
 	_, err := p.CreateSSHKey(keyFile)
 	assert.Error(t, err)
+}
+
+func TestSanitizeGuestHostname(t *testing.T) {
+	longName := strings.Repeat("a", 100)
+	longNameSum := md5.Sum([]byte(longName))
+	longNameSuffix := fmt.Sprintf("%x", longNameSum)[:8]
+
+	tests := []struct {
+		name string
+		want string
+	}{
+		{"gh-runner-12345", "gh-runner-12345"},
+		{"Gh-Runner-12345", "gh-runner-12345"},
+		{"my_vm.example.com", "my-vm-example-com"},
+		{"  leading-trailing-space  ", "leading-trailing-space"},
+		{"---", ""},
+		{"", ""},
+		{longName, strings.Repeat("a", 54) + "-" + longNameSuffix},
+	}
+	for _, tt := range tests {
+		got := sanitizeGuestHostname(tt.name)
+		assert.Equal(t, tt.want, got, "input %q", tt.name)
+		assert.LessOrEqual(t, len(got), 63, "input %q", tt.name)
+	}
+}
+
+func TestSanitizeGuestHostname_TruncationPreservesUniqueness(t *testing.T) {
+	prefix := strings.Repeat("gh-runner-", 6) // 60 bytes, shared by both names
+	nameA := prefix + "run-aaaaaaaa"
+	nameB := prefix + "run-bbbbbbbb"
+
+	hostnameA := sanitizeGuestHostname(nameA)
+	hostnameB := sanitizeGuestHostname(nameB)
+
+	assert.NotEqual(t, hostnameA, hostnameB, "distinct VM names sharing a long common prefix must not collide after truncation")
+	assert.LessOrEqual(t, len(hostnameA), 63)
+	assert.LessOrEqual(t, len(hostnameB), 63)
 }
