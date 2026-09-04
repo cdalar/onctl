@@ -4,27 +4,73 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/cdalar/onctl/internal/tools"
-	"gopkg.in/yaml.v3"
 )
 
 // StaticHost is one entry in the imported-hosts inventory: a server onctl
 // did not create and has no lifecycle API for, registered via `onctl import`
 // so ssh/ls can reach it.
 type StaticHost struct {
-	Name       string    `yaml:"name"`
-	IP         string    `yaml:"ip"`
-	Username   string    `yaml:"username"`
-	SSHPort    int       `yaml:"sshPort"`
-	PrivateKey string    `yaml:"privateKey,omitempty"`
-	ImportedAt time.Time `yaml:"importedAt"`
+	Name       string
+	IP         string
+	Username   string
+	SSHPort    int
+	PrivateKey string
+	ImportedAt time.Time
 }
 
 type StaticInventory struct {
-	Hosts []StaticHost `yaml:"hosts"`
+	Hosts []StaticHost
+}
+
+// onctlImportedAtDirective is the comment onctl writes below each Host block
+// to remember when it was imported, since ssh_config has no native field for
+// it. It is a plain comment, so the file stays valid ssh_config and hosts in
+// it are reachable with plain `ssh <name>` once ~/.ssh/config includes it.
+const onctlImportedAtDirective = "# onctl-imported-at"
+
+// SplitSSHConfigFields tokenizes one ssh_config line into whitespace-separated
+// fields, treating a double-quoted field as one token even if it contains
+// whitespace (e.g. `IdentityFile "/path with spaces/key"`). Needed because a
+// plain strings.Fields split would break IdentityFile/HostName values (paths,
+// usernames) that contain spaces, both here and when writing them back out.
+func SplitSSHConfigFields(line string) []string {
+	var fields []string
+	var cur strings.Builder
+	inQuotes := false
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		switch {
+		case c == '"':
+			inQuotes = !inQuotes
+		case (c == ' ' || c == '\t') && !inQuotes:
+			if cur.Len() > 0 {
+				fields = append(fields, cur.String())
+				cur.Reset()
+			}
+		default:
+			cur.WriteByte(c)
+		}
+	}
+	if cur.Len() > 0 {
+		fields = append(fields, cur.String())
+	}
+	return fields
+}
+
+// QuoteSSHConfigValue wraps v in double quotes if it contains whitespace, so it
+// round-trips through SplitSSHConfigFields as a single field.
+func QuoteSSHConfigValue(v string) string {
+	if strings.ContainsAny(v, " \t") {
+		return `"` + v + `"`
+	}
+	return v
 }
 
 // ProviderStatic implements CloudProviderInterface over a local inventory
@@ -41,6 +87,11 @@ var errStaticUnsupported = errors.New("not supported for imported hosts; use 'on
 // don't race and clobber each other's writes.
 var staticInventoryMu sync.Mutex
 
+// LoadInventory parses p.InventoryPath as an ssh_config file: one Host block
+// per imported host (HostName/User/Port/IdentityFile), so the same file can
+// be `Include`d from ~/.ssh/config and used with plain `ssh <name>` too.
+// Directives onctl doesn't recognize are ignored, so hand-added ones don't
+// break parsing but are also dropped on the next SaveInventory rewrite.
 func (p ProviderStatic) LoadInventory() (StaticInventory, error) {
 	var inv StaticInventory
 	data, err := os.ReadFile(p.InventoryPath)
@@ -50,18 +101,78 @@ func (p ProviderStatic) LoadInventory() (StaticInventory, error) {
 	if err != nil {
 		return inv, fmt.Errorf("failed to read %s: %w", p.InventoryPath, err)
 	}
-	if err := yaml.Unmarshal(data, &inv); err != nil {
-		return inv, fmt.Errorf("failed to parse %s: %w", p.InventoryPath, err)
+
+	var current *StaticHost
+	flush := func() {
+		if current != nil {
+			inv.Hosts = append(inv.Hosts, *current)
+			current = nil
+		}
 	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := SplitSSHConfigFields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		switch strings.ToLower(fields[0]) {
+		case "host":
+			flush()
+			current = &StaticHost{Name: strings.Join(fields[1:], " ")}
+		case "hostname":
+			if current != nil && len(fields) > 1 {
+				current.IP = fields[1]
+			}
+		case "user":
+			if current != nil && len(fields) > 1 {
+				current.Username = fields[1]
+			}
+		case "port":
+			if current != nil && len(fields) > 1 {
+				if port, err := strconv.Atoi(fields[1]); err == nil {
+					current.SSHPort = port
+				}
+			}
+		case "identityfile":
+			if current != nil && len(fields) > 1 {
+				current.PrivateKey = fields[1]
+			}
+		case "#":
+			if current != nil && len(fields) > 2 && fields[1] == onctlImportedAtDirective[2:] {
+				if t, err := time.Parse(time.RFC3339, fields[2]); err == nil {
+					current.ImportedAt = t
+				}
+			}
+		}
+	}
+	flush()
 	return inv, nil
 }
 
+// SaveInventory rewrites p.InventoryPath from scratch as an ssh_config file.
 func (p ProviderStatic) SaveInventory(inv StaticInventory) error {
-	data, err := yaml.Marshal(inv)
-	if err != nil {
-		return err
+	var b strings.Builder
+	b.WriteString("# Managed by onctl (`onctl import` / `onctl destroy`). Hand edits outside\n")
+	b.WriteString("# the Host/HostName/User/Port/IdentityFile shape are lost on the next write.\n")
+	for _, h := range inv.Hosts {
+		fmt.Fprintf(&b, "\nHost %s\n", QuoteSSHConfigValue(h.Name))
+		fmt.Fprintf(&b, "    HostName %s\n", QuoteSSHConfigValue(h.IP))
+		if h.Username != "" {
+			fmt.Fprintf(&b, "    User %s\n", QuoteSSHConfigValue(h.Username))
+		}
+		if h.SSHPort != 0 {
+			fmt.Fprintf(&b, "    Port %d\n", h.SSHPort)
+		}
+		if h.PrivateKey != "" {
+			fmt.Fprintf(&b, "    IdentityFile %s\n", QuoteSSHConfigValue(h.PrivateKey))
+		}
+		if !h.ImportedAt.IsZero() {
+			fmt.Fprintf(&b, "    %s %s\n", onctlImportedAtDirective, h.ImportedAt.Format(time.RFC3339))
+		}
 	}
-	return os.WriteFile(p.InventoryPath, data, 0644)
+	if err := os.MkdirAll(filepath.Dir(p.InventoryPath), 0700); err != nil {
+		return fmt.Errorf("failed to create %s: %w", filepath.Dir(p.InventoryPath), err)
+	}
+	return os.WriteFile(p.InventoryPath, []byte(b.String()), 0600)
 }
 
 func mapStaticHost(h StaticHost) Vm {

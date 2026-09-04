@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,19 +13,12 @@ func TestImportFlagsExist(t *testing.T) {
 }
 
 // TestImportCommand_WritesInventory runs the import command's RunE directly
-// against a temp .onctl dir and verifies the host lands in imported.yaml and
-// is then visible through the static provider's List/GetByName, matching
-// the only thing import.go's PersistentPreRunE skip-list lets it rely on:
-// resolveConfigDir, not a configured cloud provider.
+// against a temp $HOME and verifies the host lands in
+// ~/.ssh/onctl_config and is then visible through the static provider's
+// List/GetByName, matching the only thing import.go's PersistentPreRunE
+// skip-list lets it rely on: no configured cloud provider needed.
 func TestImportCommand_WritesInventory(t *testing.T) {
-	tempDir := t.TempDir()
-	onctlDir := filepath.Join(tempDir, ".onctl")
-	assert.NoError(t, os.Mkdir(onctlDir, 0755))
-
-	originalWd, err := os.Getwd()
-	assert.NoError(t, err)
-	defer func() { _ = os.Chdir(originalWd) }()
-	assert.NoError(t, os.Chdir(tempDir))
+	t.Setenv("HOME", t.TempDir())
 
 	importOpt = cmdImportOptions{
 		IP:       "10.0.0.5",

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/cdalar/onctl/internal/provideraws"
@@ -234,16 +233,17 @@ func initProvider(cloudProvider string) {
 			Cache:   providerfc.NewCacheDiskPreparer(),
 		}
 	case "static":
-		configDir, err := resolveConfigDir()
+		path, err := onctlSSHConfigPath()
 		if err != nil {
 			log.Fatalln(err)
 		}
-		provider = &cloud.ProviderStatic{InventoryPath: filepath.Join(configDir, importedHostsFile)}
+		provider = &cloud.ProviderStatic{InventoryPath: path}
 	}
 }
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&providerFlag, "provider", "p", "", "cloud provider: "+strings.Join(cloudProviderList, ", ")+" (overrides ONCTL_CLOUD)")
+	rootCmd.PersistentFlags().StringVarP(&flagConfigFile, "config", "c", "", "Path to onctl.yaml configuration file (overrides the .onctl directory lookup)")
 	// GCP project and Azure account-specific settings are needed for many
 	// commands (ls, ssh, destroy...), not just create. Register as persistent
 	// so resolve runs and flags are available everywhere.

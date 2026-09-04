@@ -46,9 +46,22 @@ func GenerateIDToken() uuid.UUID {
 	return u1
 }
 
-// resolveConfigDir finds the .onctl directory to use: the current working
-// directory's takes precedence over the one in the user's home directory.
+// flagConfigFile is the optional --config/-c override pointing at a specific
+// onctl.yaml (or similarly named) file, bypassing the .onctl directory
+// lookup in resolveConfigDir. Set by rootCmd's persistent flag in root.go.
+var flagConfigFile string
+
+// resolveConfigDir finds the .onctl directory to use: an explicit
+// --config/-c file's directory takes precedence, then the current working
+// directory's .onctl, then the one in the user's home directory.
 func resolveConfigDir() (string, error) {
+	if flagConfigFile != "" {
+		if _, err := os.Stat(flagConfigFile); err != nil {
+			return "", fmt.Errorf("config file %s: %w", flagConfigFile, err)
+		}
+		return filepath.Dir(flagConfigFile), nil
+	}
+
 	dir, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("failed to get working directory: %v", err)
@@ -75,6 +88,16 @@ func resolveConfigDir() (string, error) {
 }
 
 func ReadConfig() error {
+	if flagConfigFile != "" {
+		viper.SetConfigFile(flagConfigFile)
+		if err := viper.ReadInConfig(); err != nil {
+			return fmt.Errorf("failed to read config file %s: %w", flagConfigFile, err)
+		}
+		warnLegacyProviderConfigFiles(filepath.Dir(flagConfigFile))
+		log.Println("[DEBUG] Loaded Settings:", viper.AllSettings())
+		return nil
+	}
+
 	configDir, err := resolveConfigDir()
 	if err != nil {
 		return err
