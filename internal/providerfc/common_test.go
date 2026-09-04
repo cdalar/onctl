@@ -258,6 +258,19 @@ func TestProcessManager_IsRunning(t *testing.T) {
 	assert.True(t, pm.IsRunning(os.Getpid()))
 }
 
+// TestProcessManager_IsRunning_EPERM guards against regressing IsRunning to
+// treat "process exists but we can't signal it" (EPERM, e.g. it's owned by
+// another user) the same as "process doesn't exist" (ESRCH). PID 1 is
+// always alive and, when this test isn't running as root, always
+// unsignalable, giving a reliable EPERM without root privileges.
+func TestProcessManager_IsRunning_EPERM(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: PID 1 is signalable, can't force EPERM")
+	}
+	pm := ProcessManager{}
+	assert.True(t, pm.IsRunning(1), "EPERM on a live process must count as running, not dead")
+}
+
 func TestProcessManager_Stop_InvalidPID(t *testing.T) {
 	pm := ProcessManager{}
 	assert.NoError(t, pm.Stop(0))
