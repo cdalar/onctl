@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/cdalar/onctl/internal/tools"
@@ -419,10 +418,10 @@ func (p ProviderFC) allocateAndReserveIP(name, cidr string) (string, error) {
 		return "", fmt.Errorf("failed to open IP allocation lock %q: %w", lockPath, err)
 	}
 	defer func() { _ = lockFile.Close() }()
-	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+	if err := tools.Flock(lockFile); err != nil {
 		return "", fmt.Errorf("failed to lock %q: %w", lockPath, err)
 	}
-	defer func() { _ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN) }()
+	defer func() { _ = tools.Funlock(lockFile) }()
 
 	used, err := p.usedIPs()
 	if err != nil {

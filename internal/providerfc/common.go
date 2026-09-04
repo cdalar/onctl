@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cdalar/onctl/internal/tools"
 	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/spf13/viper"
 )
@@ -587,12 +588,12 @@ func lockCacheImage(goldenImage string) (unlock func(), err error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open lock file %q: %w", lockPath, err)
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := tools.Flock(f); err != nil {
 		_ = f.Close()
 		return nil, fmt.Errorf("failed to lock %q: %w", lockPath, err)
 	}
 	return func() {
-		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		_ = tools.Funlock(f)
 		_ = f.Close()
 	}, nil
 }
