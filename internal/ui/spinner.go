@@ -12,6 +12,27 @@ import (
 	"golang.org/x/term"
 )
 
+// pristineState is the terminal's cooked-mode state captured just before the
+// very first spinner ever puts stdin into raw mode. Stop() uses it to force a
+// real termios restore if bubbletea's own async cleanup doesn't finish in
+// time, which otherwise leaves the pty stuck in raw mode (no echo, no output
+// post-processing) for the rest of the shell session when a caller os.Exit()s
+// (e.g. log.Fatalln) right after Stop() returns.
+var (
+	pristineState      *term.State
+	capturePristineOne sync.Once
+)
+
+func capturePristineState() {
+	capturePristineOne.Do(func() {
+		if term.IsTerminal(int(os.Stdin.Fd())) {
+			if st, err := term.GetState(int(os.Stdin.Fd())); err == nil {
+				pristineState = st
+			}
+		}
+	})
+}
+
 // Spinner wraps the Bubble Tea spinner to provide a simple API similar to briandowns/spinner
 type Spinner struct {
 	model      model
@@ -82,6 +103,8 @@ func (s *Spinner) Start() {
 	// Sync the suffix
 	s.model.suffix = s.Suffix
 
+	capturePristineState()
+
 	// Check if we are in a terminal
 	if !term.IsTerminal(int(os.Stderr.Fd())) {
 		s.isRunning = true
@@ -129,6 +152,14 @@ func (s *Spinner) Stop() {
 		select {
 		case <-done:
 		case <-time.After(500 * time.Millisecond):
+			// bubbletea didn't finish its own terminal cleanup in time.
+			// Force the pty back to cooked mode so a caller that os.Exit()s
+			// right after Stop() (e.g. log.Fatalln) doesn't leave the shell
+			// stuck with no echo and no output post-processing.
+			if pristineState != nil {
+				_ = term.Restore(int(os.Stdin.Fd()), pristineState)
+			}
+			fmt.Fprint(os.Stderr, "\033[?25h") // show cursor
 		}
 	}
 }
