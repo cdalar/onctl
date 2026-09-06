@@ -23,6 +23,7 @@ func TestAllProvidersImplementPauseResume(t *testing.T) {
 		"azure":   ProviderAzure{},
 		"gcp":     ProviderGcp{},
 		"fc":      ProviderFC{},
+		"ch":      ProviderCH{},
 	}
 	for name, p := range providers {
 		if _, ok := p.(CloudProviderInterface); !ok {

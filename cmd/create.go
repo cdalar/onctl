@@ -49,6 +49,11 @@ var (
 	flagFCMemory       int64
 	flagFCCacheImage   string
 	flagFCCacheSizeMib int64
+	// Cloud Hypervisor-specific flags bound to ch.* viper keys (see init
+	// below). --vcpu/--memory/--username are shared with fc (see above).
+	flagCHKernelImage string
+	flagCHRootfsImage string
+	flagCHBinary      string
 	// GCP-specific flag bound to gcp.project (see init below). This replaces
 	// the placeholder in onctl.yaml's gcp.project (the one GCP setting with
 	// no static default; it's account-specific).
@@ -149,6 +154,21 @@ func init() {
 	_ = viper.BindPFlag("fc.cacheImage", createCmd.Flags().Lookup("cache-image"))
 	_ = viper.BindPFlag("fc.cacheSizeMib", createCmd.Flags().Lookup("cache-size"))
 
+	// Cloud Hypervisor, each bound to the ch.* key read by
+	// providerch.GetConfig. --kernel-image/--rootfs-image/--binary can't be
+	// shared with fc's flags of the same purpose above: their defaults point
+	// at different image directories, and a shared flag can only carry one
+	// default value.
+	createCmd.Flags().StringVar(&flagCHKernelImage, "ch-kernel-image", "~/.onctl/cloud-hypervisor/images/vmlinux", "Cloud Hypervisor: path to the uncompressed kernel (vmlinux)")
+	createCmd.Flags().StringVar(&flagCHRootfsImage, "ch-rootfs-image", "~/.onctl/cloud-hypervisor/images/rootfs.ext4", "Cloud Hypervisor: path to the base rootfs (ext4)")
+	createCmd.Flags().StringVar(&flagCHBinary, "ch-binary", "cloud-hypervisor", "Cloud Hypervisor: path to the cloud-hypervisor binary")
+	_ = viper.BindPFlag("ch.kernelImage", createCmd.Flags().Lookup("ch-kernel-image"))
+	_ = viper.BindPFlag("ch.rootfsImage", createCmd.Flags().Lookup("ch-rootfs-image"))
+	_ = viper.BindPFlag("ch.binPath", createCmd.Flags().Lookup("ch-binary"))
+	_ = viper.BindPFlag("ch.vcpuCount", createCmd.Flags().Lookup("vcpu"))
+	_ = viper.BindPFlag("ch.memSizeMib", createCmd.Flags().Lookup("memory"))
+	_ = viper.BindPFlag("ch.vm.username", createCmd.Flags().Lookup("username"))
+
 	// Register create command at root level for convenience
 	rootCmd.AddCommand(createCmd)
 	createCmd.SetUsageTemplate(createCmd.UsageTemplate() + `
@@ -198,10 +218,10 @@ var createCmd = &cobra.Command{
 		}
 
 		for _, vm := range list.List {
-			// A "dead" fc record means the microVM's firecracker process died
+			// A "dead" fc/ch record means the microVM's VMM process died
 			// out-of-band (e.g. host reboot) and cannot be restarted in place —
 			// Deploy() recreates it instead, so it isn't a live duplicate to abort on.
-			if vm.Provider == "fc" && vm.Status == "dead" {
+			if (vm.Provider == "fc" || vm.Provider == "ch") && vm.Status == "dead" {
 				continue
 			}
 			if vm.Name == opt.Vm.Name {
@@ -305,7 +325,7 @@ var createCmd = &cobra.Command{
 			}
 		}
 
-		if cloudProvider != "fc" {
+		if cloudProvider != "fc" && cloudProvider != "ch" {
 			s.Suffix = " Waiting for VM to be ready..."
 			s.Restart()
 			remote.WaitForCloudInit(viper.GetString("vm.cloud-init.timeout"))
