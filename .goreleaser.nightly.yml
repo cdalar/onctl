@@ -1,0 +1,50 @@
+version: 2
+project_name: onctl
+
+# Used only by .github/workflows/nightly.yml -- a lighter, unsigned config
+# for continuous builds off the tip of main, separate from .goreleaser.yml
+# (real tagged releases: GPG-signed checksums, Apple-notarized macOS
+# binaries, homebrew tap publish). None of that applies to a nightly build,
+# so it's a dedicated config rather than reusing goreleaser.yml with skip
+# flags -- no macOS build (no quill/notarization credentials needed, and
+# the hosts consuming nightlies today, e.g. aimax, are Linux anyway), no
+# signs section, no homebrew_casks.
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - binary: onctl
+    id: onctl
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -w -s -X 'github.com/cdalar/onctl/cmd.Version=v{{.Version}}-{{.ShortCommit}}'
+
+archives:
+  - id: repl
+    name_template: "{{ .ProjectName }}-{{.Os}}-{{.Arch}}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+
+# --snapshot (the OSS equivalent used here, see this workflow's own header
+# comment for why) skips all validation, so .Version comes purely from this
+# template rather than the latest git tag -- distinguishes a nightly's
+# `onctl version` output from a real release at a glance.
+snapshot:
+  version_template: "{{ incpatch .Version }}-nightly"

@@ -1,0 +1,70 @@
+name: nightly
+
+# Publishes an unsigned "nightly" build of onctl from the tip of main on
+# every push -- a Linux/Windows binary carrying whatever just landed (e.g.
+# #1074's per-VM guest hostname fix), for hosts like aimax to pick up
+# without waiting for a tagged, GPG-signed, Apple-notarized release
+# (goreleaser.yml's job, which this doesn't touch or replace).
+#
+# GoReleaser's own first-class "Nightlies" feature (--nightly flag +
+# nightly: config block) is Pro-only -- confirmed live: `goreleaser
+# release --help` on the installed 2.17.0 OSS CLI lists no --nightly flag,
+# and goreleaser.yml's own `distribution: goreleaser` (not
+# goreleaser-pro) + commented-out GORELEASER_KEY confirm this repo is on
+# the free tier. So this uses the OSS `--snapshot` flag instead (builds
+# unversioned artifacts, skips all publishing/validation) against a
+# dedicated .goreleaser.nightly.yml (Linux/Windows only -- no macOS build,
+# no quill signing, no homebrew tap publish, none of which apply here),
+# then this workflow publishes the result itself: deletes and recreates a
+# single rolling `nightly` prerelease/tag on every run, so there's always
+# exactly one, always-current release at a fixed URL
+# (github.com/cdalar/onctl/releases/tag/nightly) instead of a growing pile
+# of timestamped ones.
+#
+# Runs on a plain GH-hosted ubuntu-latest runner, not the self-hosted
+# macOS/ARM64 one goreleaser.yml uses -- that one exists specifically for
+# the macOS build's sign-and-notarize step, which this workflow never
+# builds at all.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Build snapshot artifacts
+        uses: goreleaser/goreleaser-action@v7.2.3
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean -f .goreleaser.nightly.yml --skip=publish
+
+      - name: Replace the rolling nightly release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release delete nightly --yes --cleanup-tag --repo cdalar/onctl 2>/dev/null || true
+          gh release create nightly dist/*.tar.gz dist/*.zip dist/checksums.txt \
+            --repo cdalar/onctl \
+            --target "${{ github.sha }}" \
+            --title "nightly ($(date -u +%Y-%m-%d))" \
+            --notes "Automated, unsigned build of main @ ${{ github.sha }}. Not a tagged release -- see the Releases page for stable, signed versions." \
+            --prerelease
