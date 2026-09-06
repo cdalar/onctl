@@ -34,6 +34,16 @@ on:
 permissions:
   contents: write
 
+# Only one publish at a time: two overlapping pushes would otherwise both
+# delete+recreate the same `nightly` release independently, and whichever
+# run happens to finish last wins -- if that's the older push, the rolling
+# release goes stale until the next one. Cancelling any in-progress run as
+# soon as a newer push starts means the one that actually publishes is
+# always for the newest commit.
+concurrency:
+  group: nightly-build
+  cancel-in-progress: true
+
 jobs:
   nightly:
     runs-on: ubuntu-latest
@@ -42,6 +52,18 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Remove local nightly tag ref
+        # actions/checkout's fetch-depth: 0 also fetches every tag,
+        # including the rolling `nightly` one this workflow itself
+        # publishes. Left in place, GoReleaser's version discovery can
+        # pick `nightly` as "the current tag" (it's newer than the last
+        # real vX.Y.Z tag) and then fail outright trying to `incpatch` a
+        # non-semver tag -- reproduced live locally before adding this
+        # step. Deleting the local ref (the remote tag is untouched) means
+        # GoReleaser only ever sees real semver tags for version
+        # discovery, every run, regardless of whether `nightly` exists.
+        run: git tag -d nightly 2>/dev/null || true
 
       - name: Set up Go
         uses: actions/setup-go@v7
