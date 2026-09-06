@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,8 +104,12 @@ func TestCHTapName(t *testing.T) {
 
 func TestCHMAC(t *testing.T) {
 	mac := chMAC("my-test-vm")
-	assert.Regexp(t, `^02:CH:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}$`, mac)
+	assert.Regexp(t, `^02:C4:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}$`, mac)
 	assert.Equal(t, mac, chMAC("my-test-vm"))
+	// Regression check for a bug caught in review: every octet must be
+	// valid hex, or Cloud Hypervisor rejects the vm.create payload outright.
+	_, err := net.ParseMAC(mac)
+	assert.NoError(t, err)
 }
 
 func TestProviderCH_Deploy(t *testing.T) {

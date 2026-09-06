@@ -212,10 +212,12 @@ func chTapName(vmName string) string {
 }
 
 // chMAC derives a deterministic, locally-administered MAC address from the
-// VM name.
+// VM name. Unlike fcMAC, the second octet can't spell out the provider name
+// in hex ("CH" isn't a valid hex byte — H isn't a hex digit), so it uses a
+// fixed placeholder octet instead.
 func chMAC(vmName string) string {
 	sum := md5.Sum([]byte(vmName))
-	return fmt.Sprintf("02:CH:%02x:%02x:%02x:%02x", sum[0], sum[1], sum[2], sum[3])
+	return fmt.Sprintf("02:C4:%02x:%02x:%02x:%02x", sum[0], sum[1], sum[2], sum[3])
 }
 
 // usedIPs returns the set of IP addresses already assigned to managed microVMs.

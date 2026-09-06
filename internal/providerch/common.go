@@ -162,8 +162,7 @@ func chRequest(client *http.Client, method, path string, body any) error {
 type chVMConfigPayload struct {
 	CPUs    chCPUsConfig    `json:"cpus"`
 	Memory  chMemoryConfig  `json:"memory"`
-	Kernel  chKernelConfig  `json:"kernel"`
-	Cmdline chCmdlineConfig `json:"cmdline"`
+	Payload chPayloadConfig `json:"payload"`
 	Disks   []chDiskConfig  `json:"disks"`
 	Net     []chNetConfig   `json:"net"`
 	Serial  chConsoleConfig `json:"serial"`
@@ -180,12 +179,12 @@ type chMemoryConfig struct {
 	Size int64 `json:"size"`
 }
 
-type chKernelConfig struct {
-	Path string `json:"path"`
-}
-
-type chCmdlineConfig struct {
-	Args string `json:"args"`
+// chPayloadConfig is Cloud Hypervisor's PayloadConfig: unlike Firecracker,
+// the kernel path and boot command line are plain string fields nested
+// under "payload", not top-level "kernel"/"cmdline" objects.
+type chPayloadConfig struct {
+	Kernel  string `json:"kernel"`
+	Cmdline string `json:"cmdline,omitempty"`
 }
 
 type chDiskConfig struct {
@@ -211,8 +210,7 @@ func configureAndBoot(socketPath string, cfg cloud.CHVMConfig) error {
 	payload := chVMConfigPayload{
 		CPUs:    chCPUsConfig{BootVCPUs: cfg.VCPUCount, MaxVCPUs: cfg.VCPUCount},
 		Memory:  chMemoryConfig{Size: cfg.MemSizeMib * 1024 * 1024},
-		Kernel:  chKernelConfig{Path: cfg.KernelImage},
-		Cmdline: chCmdlineConfig{Args: cfg.KernelArgs},
+		Payload: chPayloadConfig{Kernel: cfg.KernelImage, Cmdline: cfg.KernelArgs},
 		Disks:   []chDiskConfig{{Path: cfg.RootfsPath}},
 		Net:     []chNetConfig{{Tap: cfg.TapDevice, Mac: cfg.MacAddress}},
 		// Tty: guest serial console output is written to the VMM process's
