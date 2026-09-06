@@ -1,10 +1,14 @@
-name: nightly
+name: edge
 
-# Publishes an unsigned "nightly" build of onctl from the tip of main on
+# Publishes an unsigned "edge" build of onctl from the tip of main on
 # every push -- a Linux/Windows binary carrying whatever just landed (e.g.
 # #1074's per-VM guest hostname fix), for hosts like aimax to pick up
 # without waiting for a tagged, GPG-signed, Apple-notarized release
-# (goreleaser.yml's job, which this doesn't touch or replace).
+# (goreleaser.yml's job, which this doesn't touch or replace). Named
+# "edge" (Alpine Linux's term for its own continuously-updated rolling
+# branch, and Docker's :edge tag convention) rather than "nightly" --
+# this builds on every push, not on a schedule, so "nightly" would
+# misdescribe the actual cadence.
 #
 # GoReleaser's own first-class "Nightlies" feature (--nightly flag +
 # nightly: config block) is Pro-only -- confirmed live: `goreleaser
@@ -13,12 +17,12 @@ name: nightly
 # goreleaser-pro) + commented-out GORELEASER_KEY confirm this repo is on
 # the free tier. So this uses the OSS `--snapshot` flag instead (builds
 # unversioned artifacts, skips all publishing/validation) against a
-# dedicated .goreleaser.nightly.yml (Linux/Windows only -- no macOS build,
+# dedicated .goreleaser.edge.yml (Linux/Windows only -- no macOS build,
 # no quill signing, no homebrew tap publish, none of which apply here),
 # then this workflow publishes the result itself: deletes and recreates a
-# single rolling `nightly` prerelease/tag on every run, so there's always
+# single rolling `edge` prerelease/tag on every run, so there's always
 # exactly one, always-current release at a fixed URL
-# (github.com/cdalar/onctl/releases/tag/nightly) instead of a growing pile
+# (github.com/cdalar/onctl/releases/tag/edge) instead of a growing pile
 # of timestamped ones.
 #
 # Runs on a plain GH-hosted ubuntu-latest runner, not the self-hosted
@@ -35,17 +39,17 @@ permissions:
   contents: write
 
 # Only one publish at a time: two overlapping pushes would otherwise both
-# delete+recreate the same `nightly` release independently, and whichever
+# delete+recreate the same `edge` release independently, and whichever
 # run happens to finish last wins -- if that's the older push, the rolling
 # release goes stale until the next one. Cancelling any in-progress run as
 # soon as a newer push starts means the one that actually publishes is
 # always for the newest commit.
 concurrency:
-  group: nightly-build
+  group: edge-build
   cancel-in-progress: true
 
 jobs:
-  nightly:
+  edge:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -53,17 +57,29 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Remove local nightly tag ref
+      - name: Remove local non-semver tag refs
         # actions/checkout's fetch-depth: 0 also fetches every tag,
-        # including the rolling `nightly` one this workflow itself
-        # publishes. Left in place, GoReleaser's version discovery can
-        # pick `nightly` as "the current tag" (it's newer than the last
-        # real vX.Y.Z tag) and then fail outright trying to `incpatch` a
-        # non-semver tag -- reproduced live locally before adding this
-        # step. Deleting the local ref (the remote tag is untouched) means
-        # GoReleaser only ever sees real semver tags for version
-        # discovery, every run, regardless of whether `nightly` exists.
-        run: git tag -d nightly 2>/dev/null || true
+        # including the rolling `edge` one this workflow itself publishes
+        # -- and, found live while testing this, a stray leftover `nightly`
+        # tag from this pipeline's own earlier name (plus a few unrelated
+        # ones already in this repo's history: `dev`, `legacy-cloud-engine`,
+        # `spike/gh-runner-phase2`). A rolling tag always points at
+        # whatever commit last published it, i.e. very close to HEAD --
+        # which is exactly what makes GoReleaser's git-describe-style
+        # version discovery prefer it as "the current tag" over the real,
+        # further-back vX.Y.Z tags, then fail outright trying to `incpatch`
+        # a non-semver tag. Reproduced live locally (first with `edge`
+        # alone -- still failed, because the old `nightly` tag was still
+        # present and even closer to HEAD; only deleting both together
+        # fixed it). Deleting every tag that isn't `vX.Y.Z`-shaped (the
+        # remote tags are untouched) is the general fix: it doesn't matter
+        # which non-semver tag is nearest, or whether this pipeline gets
+        # renamed again later -- GoReleaser only ever sees real semver
+        # tags for version discovery, every run.
+        run: |
+          for t in $(git tag -l); do
+            [[ "$t" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || git tag -d "$t"
+          done
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -76,17 +92,17 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --snapshot --clean -f .goreleaser.nightly.yml --skip=publish
+          args: release --snapshot --clean -f .goreleaser.edge.yml --skip=publish
 
-      - name: Replace the rolling nightly release
+      - name: Replace the rolling edge release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          gh release delete nightly --yes --cleanup-tag --repo cdalar/onctl 2>/dev/null || true
-          gh release create nightly dist/*.tar.gz dist/*.zip dist/checksums.txt \
+          gh release delete edge --yes --cleanup-tag --repo cdalar/onctl 2>/dev/null || true
+          gh release create edge dist/*.tar.gz dist/*.zip dist/checksums.txt \
             --repo cdalar/onctl \
             --target "${{ github.sha }}" \
-            --title "nightly ($(date -u +%Y-%m-%d))" \
+            --title "edge ($(date -u +%Y-%m-%d))" \
             --notes "Automated, unsigned build of main @ ${{ github.sha }}. Not a tagged release -- see the Releases page for stable, signed versions." \
             --prerelease
