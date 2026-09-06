@@ -1,13 +1,13 @@
 version: 2
 project_name: onctl
 
-# Used only by .github/workflows/nightly.yml -- a lighter, unsigned config
+# Used only by .github/workflows/edge.yml -- a lighter, unsigned config
 # for continuous builds off the tip of main, separate from .goreleaser.yml
 # (real tagged releases: GPG-signed checksums, Apple-notarized macOS
-# binaries, homebrew tap publish). None of that applies to a nightly build,
+# binaries, homebrew tap publish). None of that applies to an edge build,
 # so it's a dedicated config rather than reusing goreleaser.yml with skip
 # flags -- no macOS build (no quill/notarization credentials needed, and
-# the hosts consuming nightlies today, e.g. aimax, are Linux anyway), no
+# the hosts consuming edge builds today, e.g. aimax, are Linux anyway), no
 # signs section, no homebrew_casks.
 
 before:
@@ -44,7 +44,7 @@ checksum:
 
 # --snapshot (the OSS equivalent used here, see this workflow's own header
 # comment for why) skips all validation, so .Version comes purely from this
-# template rather than the latest git tag -- distinguishes a nightly's
+# template rather than the latest git tag -- distinguishes an edge build's
 # `onctl version` output from a real release at a glance.
 snapshot:
-  version_template: "{{ incpatch .Version }}-nightly"
+  version_template: "{{ incpatch .Version }}-edge"
