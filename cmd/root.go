@@ -8,6 +8,7 @@ import (
 
 	"github.com/cdalar/onctl/internal/provideraws"
 	"github.com/cdalar/onctl/internal/providerazure"
+	"github.com/cdalar/onctl/internal/providerch"
 	"github.com/cdalar/onctl/internal/providerfc"
 	"github.com/cdalar/onctl/internal/providergcp"
 	"github.com/cdalar/onctl/internal/providerhtz"
@@ -66,7 +67,7 @@ var (
 		},
 	}
 	cloudProvider     string
-	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "fc", "static"}
+	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "fc", "ch", "static"}
 	provider          cloud.CloudProviderInterface
 	providerFlag      string
 )
@@ -231,6 +232,14 @@ func initProvider(cloudProvider string) {
 			Net:     providerfc.NewNetworkManager(),
 			Rootfs:  providerfc.NewRootfsPreparer(),
 			Cache:   providerfc.NewCacheDiskPreparer(),
+		}
+	case "ch":
+		chConfig := providerch.GetConfig()
+		provider = &cloud.ProviderCH{
+			Config:  chConfig,
+			Process: providerch.NewProcessManager(chConfig.BinPath),
+			Net:     providerch.NewNetworkManager(),
+			Rootfs:  providerch.NewRootfsPreparer(),
 		}
 	case "static":
 		path, err := onctlSSHConfigPath()
