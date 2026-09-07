@@ -565,6 +565,47 @@ func TestDebugfsRootfsPreparer_Prepare_InjectsHostname(t *testing.T) {
 	assert.Contains(t, string(script), "sif /etc/hosts mode 0100644\n")
 }
 
+// installFakeDebugfsNoHosts puts a fake `debugfs` binary on PATH whose
+// `-R "stat <path>"` always reports the path missing, for
+// TestDebugfsRootfsPreparer_Prepare_CreatesHostsWhenMissing -- a minimal
+// rootfs with no /etc/hosts at all, which must not abort Prepare.
+func installFakeDebugfsNoHosts(t *testing.T, recordPath string) {
+	t.Helper()
+	binDir := t.TempDir()
+	script := fmt.Sprintf(
+		"#!/bin/sh\n"+
+			"if [ \"$1\" = \"-R\" ]; then\n"+
+			"  case \"$2\" in\n"+
+			"    \"stat \"*) printf '%%s: File not found by ext2_lookup\\n' \"$2\"; exit 0 ;;\n"+
+			"  esac\n"+
+			"fi\n"+
+			"cat \"$3\" > %q\n"+
+			"exit 0\n",
+		recordPath,
+	)
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "debugfs"), []byte(script), 0755))
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestDebugfsRootfsPreparer_Prepare_CreatesHostsWhenMissing(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "base.ext4")
+	dst := filepath.Join(dir, "rootfs.ext4")
+	require.NoError(t, os.WriteFile(src, []byte("image-data"), 0644))
+
+	calls := filepath.Join(dir, "debugfs-calls.txt")
+	installFakeDebugfsNoHosts(t, calls)
+
+	p := NewRootfsPreparer()
+	require.NoError(t, p.Prepare(src, dst, "gh-runner-12345", "", "root"))
+
+	script, err := os.ReadFile(calls)
+	require.NoError(t, err)
+	assert.Contains(t, string(script), "rm /etc/hosts\n")
+	assert.Contains(t, string(script), " /etc/hosts\n")
+	assert.Contains(t, string(script), "sif /etc/hosts mode 0100644\n")
+}
+
 func TestRewriteEtcHosts(t *testing.T) {
 	t.Run("replaces the 127.0.1.1 line, keeping everything else", func(t *testing.T) {
 		in := "127.0.0.1\tlocalhost\n" +
@@ -621,11 +662,15 @@ func TestReadDebugfsFile(t *testing.T) {
 		assert.Empty(t, content)
 	})
 
-	t.Run("rejects a path debugfs reports missing", func(t *testing.T) {
+	t.Run("treats a confirmed-missing path as empty, not an error", func(t *testing.T) {
+		// A minimal/custom rootfs with no /etc/hosts at all worked fine
+		// before injectHostname ever touched this file -- unlike a
+		// symlink, there's nothing here to accidentally clobber, so this
+		// must let the caller create it fresh rather than aborting Prepare.
 		installFakeDebugfsDump(t, "/etc/hosts: File not found by ext2_lookup\n", []byte{})
-		_, err := readDebugfsFile("irrelevant-rootfs-path", "/etc/hosts")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "refusing to read/rewrite")
+		content, err := readDebugfsFile("irrelevant-rootfs-path", "/etc/hosts")
+		require.NoError(t, err)
+		assert.Empty(t, content)
 	})
 
 	t.Run("rejects a symlink rather than silently truncating it", func(t *testing.T) {

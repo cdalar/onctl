@@ -753,24 +753,32 @@ func rewriteEtcHosts(hosts []byte, hostname string) []byte {
 // requests runDebugfsScript issues, this never modifies the image, so it
 // doesn't need -w.
 //
-// It first confirms path is a plain regular file via a "stat" request,
-// rather than trying to infer that from how "dump" itself behaves:
-// dump doesn't fail (nonzero exit) on a missing path, it just leaves the
-// output empty; and on a symlink, debugfs 1.47 doesn't follow it either,
-// silently leaving a short/empty read instead of erroring. Both look
-// identical to a legitimately empty regular file after the fact, so
-// there's no reliable way to tell them apart from dump's own output --
-// but a caller like injectHostname, which uses this to read-then-rewrite,
-// absolutely needs to: rewriting a symlinked /etc/hosts as if it read
-// empty would silently replace the symlink with a plain file, discarding
-// whatever it pointed to. Checking the type up front with "stat" avoids
-// ever reaching that rewrite for anything but a real regular file.
+// It first checks path's type via a "stat" request, rather than trying to
+// infer that from how "dump" itself behaves: dump doesn't fail (nonzero
+// exit) on a missing path, it just leaves the output empty; and on a
+// symlink, debugfs 1.47 doesn't follow it either, silently leaving a
+// short/empty read instead of erroring. Both look identical to a
+// legitimately empty regular file after the fact, so there's no reliable
+// way to tell them apart from dump's own output -- but a caller like
+// injectHostname, which uses this to read-then-rewrite, needs to for the
+// symlink case: rewriting a symlinked /etc/hosts as if it read empty
+// would silently replace the symlink with a plain file, discarding
+// whatever it pointed to. A confirmed-missing path is different: unlike a
+// symlink, there's nothing there to accidentally clobber, and a minimal
+// rootfs with no /etc/hosts at all worked fine before injectHostname ever
+// touched this file, so that case returns (nil, nil) -- empty content,
+// not an error -- letting the caller's write/sif commands create it fresh
+// exactly as they've always created /etc/hostname.
 func readDebugfsFile(rootfsPath, path string) ([]byte, error) {
 	statOut, err := exec.Command("debugfs", "-R", "stat "+path, rootfsPath).CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("debugfs failed (stat): %w: %s", err, strings.TrimSpace(string(statOut)))
 	}
-	if !strings.Contains(strings.ToLower(string(statOut)), "type: regular") {
+	lowerStat := strings.ToLower(string(statOut))
+	if strings.Contains(lowerStat, "not found") {
+		return nil, nil
+	}
+	if !strings.Contains(lowerStat, "type: regular") {
 		return nil, fmt.Errorf("%s is not a plain regular file in this image, refusing to read/rewrite it: %s", path, strings.TrimSpace(string(statOut)))
 	}
 
