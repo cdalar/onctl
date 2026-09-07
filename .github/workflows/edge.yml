@@ -92,7 +92,13 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --snapshot --clean -f .goreleaser.edge.yml --skip=publish
+          # --parallelism=1: this workflow moved from ubuntu-latest (7-16GB)
+          # to the self-hosted onctl-4 runner, which can't sustain
+          # GoReleaser's default of building all 3 targets at once --
+          # compiling aws-sdk-go-v2/service/ec2 three times in parallel OOM
+          # (SIGKILL) on that box. Serializing the builds keeps peak memory
+          # to one target's worth at a time.
+          args: release --snapshot --clean -f .goreleaser.edge.yml --skip=publish --parallelism=1
 
       - name: Replace the rolling edge release
         env:
