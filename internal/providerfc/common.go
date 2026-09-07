@@ -752,7 +752,28 @@ func rewriteEtcHosts(hosts []byte, hostname string) []byte {
 // rootfsPath via debugfs's "dump" request -- unlike the write/rm/sif
 // requests runDebugfsScript issues, this never modifies the image, so it
 // doesn't need -w.
+//
+// It first confirms path is a plain regular file via a "stat" request,
+// rather than trying to infer that from how "dump" itself behaves:
+// dump doesn't fail (nonzero exit) on a missing path, it just leaves the
+// output empty; and on a symlink, debugfs 1.47 doesn't follow it either,
+// silently leaving a short/empty read instead of erroring. Both look
+// identical to a legitimately empty regular file after the fact, so
+// there's no reliable way to tell them apart from dump's own output --
+// but a caller like injectHostname, which uses this to read-then-rewrite,
+// absolutely needs to: rewriting a symlinked /etc/hosts as if it read
+// empty would silently replace the symlink with a plain file, discarding
+// whatever it pointed to. Checking the type up front with "stat" avoids
+// ever reaching that rewrite for anything but a real regular file.
 func readDebugfsFile(rootfsPath, path string) ([]byte, error) {
+	statOut, err := exec.Command("debugfs", "-R", "stat "+path, rootfsPath).CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("debugfs failed (stat): %w: %s", err, strings.TrimSpace(string(statOut)))
+	}
+	if !strings.Contains(strings.ToLower(string(statOut)), "type: regular") {
+		return nil, fmt.Errorf("%s is not a plain regular file in this image, refusing to read/rewrite it: %s", path, strings.TrimSpace(string(statOut)))
+	}
+
 	dumpFile, err := os.CreateTemp("", "onctl-debugfs-dump-*")
 	if err != nil {
 		return nil, err
@@ -763,20 +784,8 @@ func readDebugfsFile(rootfsPath, path string) ([]byte, error) {
 	}
 
 	req := fmt.Sprintf("dump %s %s", path, dumpFile.Name())
-	out, err := exec.Command("debugfs", "-R", req, rootfsPath).CombinedOutput()
-	if err != nil {
+	if out, err := exec.Command("debugfs", "-R", req, rootfsPath).CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("debugfs failed (dump): %w: %s", err, strings.TrimSpace(string(out)))
-	}
-	// debugfs's "dump" request doesn't itself fail (nonzero exit) when the
-	// requested path doesn't exist in the image -- it just prints a
-	// diagnostic like "<path>: File not found by ext2_lookup" to stdout
-	// and leaves the output file empty. Catch that case by its message
-	// rather than by an empty result, since a *present* file can
-	// legitimately be zero bytes too (e.g. a minimal/custom rootfs with an
-	// empty /etc/hosts) -- treating "empty" as "missing" would wrongly
-	// abort Prepare for those.
-	if strings.Contains(strings.ToLower(string(out)), "not found") {
-		return nil, fmt.Errorf("debugfs dump of %s reported it doesn't exist in this image: %s", path, strings.TrimSpace(string(out)))
 	}
 	return os.ReadFile(dumpFile.Name())
 }

@@ -72,25 +72,30 @@ func startUnixServer(t *testing.T, sock string, mux *http.ServeMux) {
 
 // installFakeDebugfs puts a fake `debugfs` binary on PATH that copies the
 // script file it's given (its 3rd argument, from `-f <script>`) to
-// recordPath and exits with exitCode. A `-R "dump <path> <outfile>"`
-// invocation (readDebugfsFile's read-only request, e.g. injectHostname
-// reading /etc/hosts before rewriting it) is handled specially: rather
-// than being recorded, it's answered with a small stand-in /etc/hosts so
-// callers that both read and then write via this same fake (like
-// injectHostname) see realistic content to rewrite.
+// recordPath and exits with exitCode. readDebugfsFile's two read-only `-R`
+// requests (e.g. injectHostname reading /etc/hosts before rewriting it)
+// are handled specially, rather than being recorded: `stat <path>` is
+// answered as a plain regular file, and `dump <path> <outfile>` is
+// answered with a small stand-in /etc/hosts, so callers that both read and
+// then write via this same fake (like injectHostname) see realistic
+// content to rewrite.
 func installFakeDebugfs(t *testing.T, recordPath string, exitCode int) {
 	t.Helper()
 	binDir := t.TempDir()
 	script := fmt.Sprintf(
 		"#!/bin/sh\n"+
 			"if [ \"$1\" = \"-R\" ]; then\n"+
-			"  out=$(echo \"$2\" | awk '{print $3}')\n"+
-			"  printf '127.0.0.1\\tlocalhost\\n::1\\t\\tlocalhost ip6-localhost ip6-loopback\\n127.0.1.1\\tfc-base\\n' > \"$out\"\n"+
-			"  exit %d\n"+
+			"  case \"$2\" in\n"+
+			"    \"stat \"*) printf 'Type: regular    Mode:  0644\\n'; exit %d ;;\n"+
+			"    \"dump \"*)\n"+
+			"      out=$(echo \"$2\" | awk '{print $3}')\n"+
+			"      printf '127.0.0.1\\tlocalhost\\n::1\\t\\tlocalhost ip6-localhost ip6-loopback\\n127.0.1.1\\tfc-base\\n' > \"$out\"\n"+
+			"      exit %d ;;\n"+
+			"  esac\n"+
 			"fi\n"+
 			"cat \"$3\" > %q\n"+
 			"exit %d\n",
-		exitCode, recordPath, exitCode,
+		exitCode, exitCode, recordPath, exitCode,
 	)
 	require.NoError(t, os.WriteFile(filepath.Join(binDir, "debugfs"), []byte(script), 0755))
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -580,33 +585,37 @@ func TestRewriteEtcHosts(t *testing.T) {
 	})
 }
 
-// installFakeDebugfsDump puts a fake `debugfs` binary on PATH that only
-// answers a `-R "dump <path> <outfile>"` request: it writes fileContent to
-// <outfile> and prints stdout, always exiting 0 -- for exercising
-// readDebugfsFile's success-vs-"not found" distinction without a real
-// debugfs binary or ext4 image.
-func installFakeDebugfsDump(t *testing.T, stdout string, fileContent []byte) {
+// installFakeDebugfsDump puts a fake `debugfs` binary on PATH that answers
+// readDebugfsFile's two `-R` requests: `stat <path>` (replies with
+// statOutput, always exiting 0) and `dump <path> <outfile>` (writes
+// fileContent to <outfile>, always exiting 0) -- for exercising
+// readDebugfsFile's type-check-then-read flow without a real debugfs
+// binary or ext4 image.
+func installFakeDebugfsDump(t *testing.T, statOutput string, fileContent []byte) {
 	t.Helper()
 	binDir := t.TempDir()
 	contentFile := filepath.Join(binDir, "content")
 	require.NoError(t, os.WriteFile(contentFile, fileContent, 0644))
-	stdoutFile := filepath.Join(binDir, "stdout")
-	require.NoError(t, os.WriteFile(stdoutFile, []byte(stdout), 0644))
+	statFile := filepath.Join(binDir, "stat-output")
+	require.NoError(t, os.WriteFile(statFile, []byte(statOutput), 0644))
 	script := fmt.Sprintf(
 		"#!/bin/sh\n"+
-			"out=$(echo \"$2\" | awk '{print $3}')\n"+
-			"cp %q \"$out\"\n"+
-			"cat %q\n"+
-			"exit 0\n",
-		contentFile, stdoutFile,
+			"case \"$2\" in\n"+
+			"  \"stat \"*) cat %q; exit 0 ;;\n"+
+			"  \"dump \"*)\n"+
+			"    out=$(echo \"$2\" | awk '{print $3}')\n"+
+			"    cp %q \"$out\"\n"+
+			"    exit 0 ;;\n"+
+			"esac\n",
+		statFile, contentFile,
 	)
 	require.NoError(t, os.WriteFile(filepath.Join(binDir, "debugfs"), []byte(script), 0755))
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 func TestReadDebugfsFile(t *testing.T) {
-	t.Run("accepts a legitimately empty file", func(t *testing.T) {
-		installFakeDebugfsDump(t, "", []byte{})
+	t.Run("accepts a legitimately empty regular file", func(t *testing.T) {
+		installFakeDebugfsDump(t, "Type: regular    Mode:  0644\n", []byte{})
 		content, err := readDebugfsFile("irrelevant-rootfs-path", "/etc/hosts")
 		require.NoError(t, err)
 		assert.Empty(t, content)
@@ -616,11 +625,18 @@ func TestReadDebugfsFile(t *testing.T) {
 		installFakeDebugfsDump(t, "/etc/hosts: File not found by ext2_lookup\n", []byte{})
 		_, err := readDebugfsFile("irrelevant-rootfs-path", "/etc/hosts")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "doesn't exist in this image")
+		assert.Contains(t, err.Error(), "refusing to read/rewrite")
+	})
+
+	t.Run("rejects a symlink rather than silently truncating it", func(t *testing.T) {
+		installFakeDebugfsDump(t, "Type: symlink    Mode:  0777\n", []byte{})
+		_, err := readDebugfsFile("irrelevant-rootfs-path", "/etc/hosts")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "refusing to read/rewrite")
 	})
 
 	t.Run("returns real content on success", func(t *testing.T) {
-		installFakeDebugfsDump(t, "", []byte("127.0.0.1\tlocalhost\n"))
+		installFakeDebugfsDump(t, "Type: regular    Mode:  0644\n", []byte("127.0.0.1\tlocalhost\n"))
 		content, err := readDebugfsFile("irrelevant-rootfs-path", "/etc/hosts")
 		require.NoError(t, err)
 		assert.Equal(t, "127.0.0.1\tlocalhost\n", string(content))
