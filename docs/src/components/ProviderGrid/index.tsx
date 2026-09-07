@@ -1,20 +1,10 @@
 import type { ReactNode } from 'react';
-import clsx from 'clsx';
-import Link from '@docusaurus/Link';
 import Heading from '@theme/Heading';
+import CodeBlock from '@theme/CodeBlock';
 import styles from './styles.module.css';
 
 // Deliberately plain, monochrome glyphs (currentColor) rather than each
-// provider's own brand logo -- avoids any trademark/licensing question and
-// keeps every card visually equal instead of a wall of borrowed logos.
-function CloudIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-      <path d="M6.5 19a4.5 4.5 0 0 1-.4-8.98 5.5 5.5 0 0 1 10.7-2A4.5 4.5 0 0 1 17.5 19h-11Z" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
+// provider's own brand logo -- avoids any trademark/licensing question.
 function LocalIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
@@ -24,38 +14,22 @@ function LocalIcon() {
   );
 }
 
-type Provider = {
-  name: string;
-  flag: string;
-  kind: 'cloud' | 'local';
-  description: string;
-};
-
-// Mirrors README.md's own list of supported backends -- kept in sync by
-// hand since there's no shared source of truth to import from yet.
-const PROVIDERS: Provider[] = [
-  { name: 'AWS', flag: 'aws', kind: 'cloud', description: 'EC2 instances' },
-  { name: 'Azure', flag: 'azure', kind: 'cloud', description: 'Virtual Machines' },
-  { name: 'GCP', flag: 'gcp', kind: 'cloud', description: 'Compute Engine' },
-  { name: 'Hetzner', flag: 'hetzner', kind: 'cloud', description: 'Cloud servers' },
-  { name: 'Firecracker', flag: 'fc', kind: 'local', description: 'Local microVMs, no cloud account needed' },
-  { name: 'Cloud Hypervisor', flag: 'ch', kind: 'local', description: 'Local microVMs, KVM-based' },
+const CLOUD_PROVIDERS = [
+  { name: 'AWS', flag: 'aws' },
+  { name: 'Azure', flag: 'azure' },
+  { name: 'GCP', flag: 'gcp' },
+  { name: 'Hetzner', flag: 'hetzner' },
 ];
 
-function ProviderCard({ name, flag, kind, description }: Provider) {
-  return (
-    <div className={clsx('col col--4', styles.cardCol)}>
-      <Link to="/docs/deployments" className={styles.card}>
-        <span className={styles.icon}>{kind === 'cloud' ? <CloudIcon /> : <LocalIcon />}</span>
-        <Heading as="h3" className={styles.cardTitle}>
-          {name}
-        </Heading>
-        <p className={styles.cardDescription}>{description}</p>
-        <code className={styles.cardFlag}>-p {flag}</code>
-      </Link>
-    </div>
-  );
-}
+// Cloud Hypervisor (-p ch) is also supported, but left off the landing page
+// for now -- it's newer and less battle-tested than Firecracker, and the
+// docs (getting-started.md/deployments.md) are the more appropriate place
+// for an option still finding its feet.
+const FIRECRACKER = {
+  description:
+    "AWS's own microVM tech (it's what Lambda runs on) -- boots in milliseconds, on your own hardware, no cloud account needed.",
+  command: 'onctl create -n my-box -p fc',
+};
 
 export default function ProviderGrid(): ReactNode {
   return (
@@ -68,10 +42,31 @@ export default function ProviderGrid(): ReactNode {
             microVM on your own laptop.
           </p>
         </div>
-        <div className="row">
-          {PROVIDERS.map((provider) => (
-            <ProviderCard key={provider.flag} {...provider} />
-          ))}
+
+        <div className={styles.cloudRow}>
+          <span className={styles.cloudRowLabel}>Cloud providers</span>
+          <ul className={styles.pillList}>
+            {CLOUD_PROVIDERS.map((p) => (
+              <li key={p.flag} className={styles.pill}>
+                {p.name} <code className={styles.pillFlag}>-p {p.flag}</code>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className={styles.localCard}>
+          <div className={styles.localCardText}>
+            <span className={styles.localLabel}>
+              <LocalIcon /> Local microVM
+            </span>
+            <Heading as="h3" className={styles.localCardTitle}>
+              Firecracker
+            </Heading>
+            <p className={styles.localCardDescription}>{FIRECRACKER.description}</p>
+          </div>
+          <div className={styles.localCardCommand}>
+            <CodeBlock language="bash">{FIRECRACKER.command}</CodeBlock>
+          </div>
         </div>
       </div>
     </section>

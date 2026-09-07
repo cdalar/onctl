@@ -19,16 +19,16 @@ const EXAMPLES: Example[] = [
     command: 'onctl create -n my-box -p aws',
   },
   {
-    caption: 'Or a local Firecracker microVM -- no cloud account needed',
-    command: 'onctl create -n my-box -p fc',
-  },
-  {
     caption: 'SSH straight in',
     command: 'onctl ssh my-box',
   },
   {
     caption: 'See everything you have running, across every provider',
     command: 'onctl ls',
+  },
+  {
+    caption: 'Tear it back down when you\'re done',
+    command: 'onctl destroy my-box',
   },
 ];
 
@@ -37,10 +37,10 @@ export default function CommandExamples(): ReactNode {
     <section className={styles.section}>
       <div className="container">
         <div className="text--center margin-bottom--lg">
-          <Heading as="h2">Same commands, every provider</Heading>
+          <Heading as="h2">The whole lifecycle, four commands</Heading>
           <p className={styles.sectionSubtitle}>
-            Switch providers with a flag or the <code>ONCTL_CLOUD</code> env var --
-            everything else about the workflow stays the same.
+            Create, connect, list, and tear down -- the same four verbs regardless of
+            which provider you picked above.
           </p>
         </div>
         <div className={styles.grid}>
