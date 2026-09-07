@@ -675,12 +675,21 @@ func injectSSHKey(rootfsPath, publicKey, username string) error {
 	return runDebugfsScript(rootfsPath, script)
 }
 
-// injectHostname writes hostname to /etc/hostname inside the ext-family
-// image at rootfsPath using debugfs, without mounting the image. The baked
-// base image always carries the same placeholder hostname (bake-fc-image.sh
-// runs debootstrap in a chroot, which can't isolate the UTS namespace, so it
-// bakes in a fixed value) — this gives each VM's per-VM rootfs copy its own,
-// matching the name onctl created it with.
+// injectHostname writes hostname to /etc/hostname, and updates /etc/hosts'
+// 127.0.1.1 entry to match, inside the ext-family image at rootfsPath using
+// debugfs, without mounting the image. 127.0.1.1 (not 127.0.0.1, which
+// stays reserved for "localhost" itself) is the Debian/Ubuntu convention
+// for a machine's own hostname-to-loopback mapping. The baked base image
+// always carries the same placeholder hostname, in both files (
+// bake-fc-image.sh runs debootstrap in a chroot, which can't isolate the
+// UTS namespace, so it bakes in a fixed value) — this gives each VM's
+// per-VM rootfs copy its own of both, matching the name onctl created it
+// with. Leaving /etc/hosts stale (as a prior version of this function did,
+// touching only /etc/hostname) breaks anything that resolves its own FQDN
+// via getaddrinfo once the live hostname no longer matches any /etc/hosts
+// entry — e.g. the desktop image's TigerVNC vncserver script, which
+// refuses to start ("Could not acquire fully qualified host name of this
+// machine") in exactly that state.
 func injectHostname(rootfsPath, hostname string) error {
 	hostnameFile, err := os.CreateTemp("", "onctl-hostname-*")
 	if err != nil {
@@ -695,11 +704,98 @@ func injectHostname(rootfsPath, hostname string) error {
 		return err
 	}
 
+	hostsContent, err := readDebugfsFile(rootfsPath, "/etc/hosts")
+	if err != nil {
+		return fmt.Errorf("failed to read /etc/hosts: %w", err)
+	}
+
+	hostsFile, err := os.CreateTemp("", "onctl-hosts-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(hostsFile.Name()) }()
+	if _, err := hostsFile.Write(rewriteEtcHosts(hostsContent, hostname)); err != nil {
+		_ = hostsFile.Close()
+		return err
+	}
+	if err := hostsFile.Close(); err != nil {
+		return err
+	}
+
 	script := fmt.Sprintf(
-		"rm /etc/hostname\nwrite %s /etc/hostname\nsif /etc/hostname mode 0100644\n",
-		hostnameFile.Name(),
+		"rm /etc/hostname\nwrite %s /etc/hostname\nsif /etc/hostname mode 0100644\n"+
+			"rm /etc/hosts\nwrite %s /etc/hosts\nsif /etc/hosts mode 0100644\n",
+		hostnameFile.Name(), hostsFile.Name(),
 	)
 	return runDebugfsScript(rootfsPath, script)
+}
+
+// rewriteEtcHosts replaces hosts' 127.0.1.1 line (see injectHostname's doc
+// comment) with one pointing at hostname, or appends that line if none
+// exists (some base images may not carry one at all).
+func rewriteEtcHosts(hosts []byte, hostname string) []byte {
+	lines := strings.Split(strings.TrimRight(string(hosts), "\n"), "\n")
+	replaced := false
+	for i, line := range lines {
+		if fields := strings.Fields(line); len(fields) > 0 && fields[0] == "127.0.1.1" {
+			lines[i] = "127.0.1.1\t" + hostname
+			replaced = true
+		}
+	}
+	if !replaced {
+		lines = append(lines, "127.0.1.1\t"+hostname)
+	}
+	return []byte(strings.Join(lines, "\n") + "\n")
+}
+
+// readDebugfsFile reads path's content out of the ext-family image at
+// rootfsPath via debugfs's "dump" request -- unlike the write/rm/sif
+// requests runDebugfsScript issues, this never modifies the image, so it
+// doesn't need -w.
+//
+// It first checks path's type via a "stat" request, rather than trying to
+// infer that from how "dump" itself behaves: dump doesn't fail (nonzero
+// exit) on a missing path, it just leaves the output empty; and on a
+// symlink, debugfs 1.47 doesn't follow it either, silently leaving a
+// short/empty read instead of erroring. Both look identical to a
+// legitimately empty regular file after the fact, so there's no reliable
+// way to tell them apart from dump's own output -- but a caller like
+// injectHostname, which uses this to read-then-rewrite, needs to for the
+// symlink case: rewriting a symlinked /etc/hosts as if it read empty
+// would silently replace the symlink with a plain file, discarding
+// whatever it pointed to. A confirmed-missing path is different: unlike a
+// symlink, there's nothing there to accidentally clobber, and a minimal
+// rootfs with no /etc/hosts at all worked fine before injectHostname ever
+// touched this file, so that case returns (nil, nil) -- empty content,
+// not an error -- letting the caller's write/sif commands create it fresh
+// exactly as they've always created /etc/hostname.
+func readDebugfsFile(rootfsPath, path string) ([]byte, error) {
+	statOut, err := exec.Command("debugfs", "-R", "stat "+path, rootfsPath).CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("debugfs failed (stat): %w: %s", err, strings.TrimSpace(string(statOut)))
+	}
+	lowerStat := strings.ToLower(string(statOut))
+	if strings.Contains(lowerStat, "not found") {
+		return nil, nil
+	}
+	if !strings.Contains(lowerStat, "type: regular") {
+		return nil, fmt.Errorf("%s is not a plain regular file in this image, refusing to read/rewrite it: %s", path, strings.TrimSpace(string(statOut)))
+	}
+
+	dumpFile, err := os.CreateTemp("", "onctl-debugfs-dump-*")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = os.Remove(dumpFile.Name()) }()
+	if err := dumpFile.Close(); err != nil {
+		return nil, err
+	}
+
+	req := fmt.Sprintf("dump %s %s", path, dumpFile.Name())
+	if out, err := exec.Command("debugfs", "-R", req, rootfsPath).CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("debugfs failed (dump): %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return os.ReadFile(dumpFile.Name())
 }
 
 // runDebugfsScript writes script to a temp file and runs `debugfs -w` with
