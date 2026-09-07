@@ -50,7 +50,7 @@ concurrency:
 
 jobs:
   edge:
-    runs-on: ubuntu-latest
+    runs-on: onctl-4
     steps:
       - name: Check out code
         uses: actions/checkout@v7
