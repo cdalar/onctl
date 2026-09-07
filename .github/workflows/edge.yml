@@ -1,7 +1,7 @@
 name: edge
 
 # Publishes an unsigned "edge" build of onctl from the tip of main on
-# every push -- a Linux/Windows binary carrying whatever just landed (e.g.
+# every push -- a Linux binary carrying whatever just landed (e.g.
 # #1074's per-VM guest hostname fix), for hosts like aimax to pick up
 # without waiting for a tagged, GPG-signed, Apple-notarized release
 # (goreleaser.yml's job, which this doesn't touch or replace). Named
@@ -17,8 +17,8 @@ name: edge
 # goreleaser-pro) + commented-out GORELEASER_KEY confirm this repo is on
 # the free tier. So this uses the OSS `--snapshot` flag instead (builds
 # unversioned artifacts, skips all publishing/validation) against a
-# dedicated .goreleaser.edge.yml (Linux/Windows only -- no macOS build,
-# no quill signing, no homebrew tap publish, none of which apply here),
+# dedicated .goreleaser.edge.yml (Linux only -- no macOS or Windows
+# build, no quill signing, no homebrew tap publish, none of which apply here),
 # then this workflow publishes the result itself: deletes and recreates a
 # single rolling `edge` prerelease/tag on every run, so there's always
 # exactly one, always-current release at a fixed URL

@@ -45,9 +45,9 @@ curl -sLS https://docs.onctl.io/get.sh | bash
 sudo install onctl /usr/local/bin/
 ```
 
-#### Edge build (latest `main`, Linux/Windows)
+#### Edge build (latest `main`, Linux only)
 
-To install or update to the `edge` build, an unsigned binary rebuilt from the tip of `main` on every push (no macOS build):
+To install or update to the `edge` build, an unsigned binary rebuilt from the tip of `main` on every push (no macOS or Windows build):
 
 ```bash
 curl -sLS https://docs.onctl.io/get_edge.sh | bash
