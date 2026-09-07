@@ -1,30 +1,50 @@
 /**
- * Any CSS included here will be global. The classic template
- * bundles Infima by default. Infima is a CSS framework designed to
- * work well for content-centric websites.
+ * Design tokens for onctl.sh. See LANDING_PAGE_RESEARCH.md for the
+ * comparative research this is based on, and the design plan in the PR
+ * description for the reasoning behind these specific choices (ember
+ * accent grounded in "onctl" = turning compute *on*; JetBrains Mono for
+ * headlines because the terminal is this product's native environment).
  */
 
-/* You can override the default Infima variables here. */
 :root {
-  --ifm-color-primary: #2e8555;
-  --ifm-color-primary-dark: #29784c;
-  --ifm-color-primary-darker: #277148;
-  --ifm-color-primary-darkest: #205d3b;
-  --ifm-color-primary-light: #33925d;
-  --ifm-color-primary-lighter: #359962;
-  --ifm-color-primary-lightest: #3cad6e;
-  --ifm-code-font-size: 95%;
+  --font-display: 'JetBrains Mono', 'IBM Plex Mono', monospace;
+  --ifm-font-family-base: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --ifm-font-family-monospace: 'JetBrains Mono', 'IBM Plex Mono', monospace;
+  --ifm-heading-font-family: var(--font-display);
+  --ifm-heading-font-weight: 800;
+
+  /* Ember: onctl's identity color -- "on" as in powered-on, and a nod to
+     Firecracker's own ignition/speed framing. Deliberately a vivid,
+     saturated ignition-orange, not the muted dusty terracotta or the
+     generic teal/acid-green defaults. */
+  --ifm-color-primary: #d9531e;
+  --ifm-color-primary-dark: #c34a1b;
+  --ifm-color-primary-darker: #b8461a;
+  --ifm-color-primary-darkest: #983a15;
+  --ifm-color-primary-light: #ef5c21;
+  --ifm-color-primary-lighter: #f16631;
+  --ifm-color-primary-lightest: #f4835a;
+  --ifm-code-font-size: 92%;
+  --ifm-code-border-radius: 4px;
+  --ifm-button-border-radius: 4px;
+  --ifm-card-border-radius: 4px;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+
+  /* Paper: a cool grey-white, not a warm cream. */
+  --ifm-background-color: #eef0f1;
 }
 
-/* For readability concerns, you should choose a lighter palette in dark mode. */
 [data-theme='dark'] {
-  --ifm-color-primary: #25c2a0;
-  --ifm-color-primary-dark: #21af90;
-  --ifm-color-primary-darker: #1fa588;
-  --ifm-color-primary-darkest: #1a8870;
-  --ifm-color-primary-light: #29d5b0;
-  --ifm-color-primary-lighter: #32d8b4;
-  --ifm-color-primary-lightest: #4fddbf;
+  --ifm-color-primary: #ff7a45;
+  --ifm-color-primary-dark: #ff5f1f;
+  --ifm-color-primary-darker: #ff530d;
+  --ifm-color-primary-darkest: #d63f00;
+  --ifm-color-primary-light: #ff9569;
+  --ifm-color-primary-lighter: #ffa27c;
+  --ifm-color-primary-lightest: #ffc4a8;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+
+  /* Ink: a cool near-black, not a warm cream-adjacent charcoal. */
+  --ifm-background-color: #14161a;
+  --ifm-background-surface-color: #1b1e23;
 }

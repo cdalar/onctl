@@ -1,0 +1,45 @@
+.section {
+  padding: 4rem 0;
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr);
+  gap: 3rem;
+  align-items: center;
+}
+
+@media screen and (max-width: 996px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+}
+
+.text {
+  max-width: 30rem;
+}
+
+.text p {
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.6;
+}
+
+.text code {
+  font-size: 0.85em;
+}
+
+.note {
+  font-size: 0.85rem;
+  color: var(--ifm-color-emphasis-600);
+  margin-bottom: 0;
+}
+
+.code {
+  min-width: 0;
+}
+
+.code :global(.prism-code) {
+  margin: 0;
+}

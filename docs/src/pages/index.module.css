@@ -1,57 +1,88 @@
-/**
- * CSS files with the .module.css suffix will be treated as CSS modules
- * and scoped locally.
- */
+.hero {
+  padding: 5.5rem 0;
+}
 
-.heroBanner {
-  padding: 5rem 0 3rem;
-  text-align: center;
-  position: relative;
-  overflow: hidden;
+.hero .container {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 3.5rem;
+  align-items: center;
 }
 
 @media screen and (max-width: 996px) {
-  .heroBanner {
-    padding: 3rem 1.5rem 2rem;
+  .hero {
+    padding: 3rem 1.5rem;
+  }
+  .hero .container {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
   }
 }
 
+.heroText {
+  max-width: 34rem;
+}
+
 .heroTitle {
-  font-size: 3.5rem;
-  font-family: var(--ifm-font-family-monospace);
+  font-size: 2.75rem;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  margin-bottom: 1.25rem;
 }
 
 .heroSubtitle {
-  font-size: 1.25rem;
+  font-size: 1.1rem;
+  line-height: 1.6;
   color: var(--ifm-color-emphasis-700);
-  max-width: 34rem;
-  margin: 0 auto;
+  max-width: 32ch;
+  margin-bottom: 2rem;
 }
 
-.installBlock {
-  max-width: 30rem;
-  margin: 2rem auto 0;
-  text-align: left;
-}
-
-.buttons {
+.ctaRow {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  margin-top: 1.5rem;
+  gap: 1.75rem;
+  margin-bottom: 1.75rem;
+}
+
+.ctaPrimary {
+  display: inline-block;
+  padding: 0.65rem 1.35rem;
+  border-radius: 4px;
+  background: var(--ifm-color-primary);
+  color: #14161a;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ctaPrimary:hover {
+  background: var(--ifm-color-primary-light);
+  color: #14161a;
+  text-decoration: none;
+}
+
+.ctaSecondary {
+  font-weight: 600;
+  color: var(--ifm-font-color-base);
 }
 
 .trustBar {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 1.25rem;
-  margin-top: 1.75rem;
   font-size: 0.9rem;
 }
 
 .trustBar a {
   display: inline-flex;
   align-items: center;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.trustBar a:hover {
+  color: var(--ifm-color-primary);
+}
+
+.heroTerminal {
+  min-width: 0;
 }

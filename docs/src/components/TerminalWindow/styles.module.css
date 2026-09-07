@@ -1,0 +1,88 @@
+.window {
+  border-radius: 6px;
+  overflow: hidden;
+  background: #0e0f12;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.5);
+}
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  background: #1a1c20;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dots {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.body {
+  /* Infima sets its own theme-dependent background on bare `pre` elements
+     (light grey in light mode) that otherwise paints over this -- a
+     terminal window stays dark chrome regardless of site theme. */
+  background: #0e0f12;
+  margin: 0;
+  padding: 1.1rem 1.2rem 1.3rem;
+  font-family: var(--font-display);
+  font-size: 0.88rem;
+  line-height: 1.75;
+  color: #d7d9dc;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.line {
+  min-height: 1.75em;
+}
+
+.dim {
+  color: rgba(215, 217, 220, 0.55);
+}
+
+.prompt {
+  color: var(--ifm-color-primary-light);
+  font-weight: 700;
+}
+
+.cursor {
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  background: var(--ifm-color-primary-light);
+  vertical-align: text-bottom;
+  animation: blink 1s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cursor {
+    animation: none;
+  }
+}
+
+@keyframes blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}

@@ -5,9 +5,20 @@ import type * as Preset from '@docusaurus/preset-classic';
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  title: 'Deploy with Ease',
-  tagline: 'multi-cloud deployment made easy',
+  // Used as the browser-tab title suffix ("Getting Started | onctl") --
+  // keep this the product name, not marketing copy. The homepage writes
+  // its own headline directly in src/pages/index.tsx instead of reusing
+  // this.
+  title: 'onctl',
+  tagline: 'A CLI for VMs -- every cloud, or your own machine',
   favicon: 'img/favicon.ico',
+
+  stylesheets: [
+    {
+      href: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap',
+      type: 'text/css',
+    },
+  ],
 
   // Set the production url of your site here
   url: 'https://onctl.sh',
