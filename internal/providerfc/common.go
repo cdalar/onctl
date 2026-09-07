@@ -675,12 +675,21 @@ func injectSSHKey(rootfsPath, publicKey, username string) error {
 	return runDebugfsScript(rootfsPath, script)
 }
 
-// injectHostname writes hostname to /etc/hostname inside the ext-family
-// image at rootfsPath using debugfs, without mounting the image. The baked
-// base image always carries the same placeholder hostname (bake-fc-image.sh
-// runs debootstrap in a chroot, which can't isolate the UTS namespace, so it
-// bakes in a fixed value) — this gives each VM's per-VM rootfs copy its own,
-// matching the name onctl created it with.
+// injectHostname writes hostname to /etc/hostname, and updates /etc/hosts'
+// 127.0.1.1 entry to match, inside the ext-family image at rootfsPath using
+// debugfs, without mounting the image. 127.0.1.1 (not 127.0.0.1, which
+// stays reserved for "localhost" itself) is the Debian/Ubuntu convention
+// for a machine's own hostname-to-loopback mapping. The baked base image
+// always carries the same placeholder hostname, in both files (
+// bake-fc-image.sh runs debootstrap in a chroot, which can't isolate the
+// UTS namespace, so it bakes in a fixed value) — this gives each VM's
+// per-VM rootfs copy its own of both, matching the name onctl created it
+// with. Leaving /etc/hosts stale (as a prior version of this function did,
+// touching only /etc/hostname) breaks anything that resolves its own FQDN
+// via getaddrinfo once the live hostname no longer matches any /etc/hosts
+// entry — e.g. the desktop image's TigerVNC vncserver script, which
+// refuses to start ("Could not acquire fully qualified host name of this
+// machine") in exactly that state.
 func injectHostname(rootfsPath, hostname string) error {
 	hostnameFile, err := os.CreateTemp("", "onctl-hostname-*")
 	if err != nil {
@@ -695,11 +704,81 @@ func injectHostname(rootfsPath, hostname string) error {
 		return err
 	}
 
+	hostsContent, err := readDebugfsFile(rootfsPath, "/etc/hosts")
+	if err != nil {
+		return fmt.Errorf("failed to read /etc/hosts: %w", err)
+	}
+
+	hostsFile, err := os.CreateTemp("", "onctl-hosts-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(hostsFile.Name()) }()
+	if _, err := hostsFile.Write(rewriteEtcHosts(hostsContent, hostname)); err != nil {
+		_ = hostsFile.Close()
+		return err
+	}
+	if err := hostsFile.Close(); err != nil {
+		return err
+	}
+
 	script := fmt.Sprintf(
-		"rm /etc/hostname\nwrite %s /etc/hostname\nsif /etc/hostname mode 0100644\n",
-		hostnameFile.Name(),
+		"rm /etc/hostname\nwrite %s /etc/hostname\nsif /etc/hostname mode 0100644\n"+
+			"rm /etc/hosts\nwrite %s /etc/hosts\nsif /etc/hosts mode 0100644\n",
+		hostnameFile.Name(), hostsFile.Name(),
 	)
 	return runDebugfsScript(rootfsPath, script)
+}
+
+// rewriteEtcHosts replaces hosts' 127.0.1.1 line (see injectHostname's doc
+// comment) with one pointing at hostname, or appends that line if none
+// exists (some base images may not carry one at all).
+func rewriteEtcHosts(hosts []byte, hostname string) []byte {
+	lines := strings.Split(strings.TrimRight(string(hosts), "\n"), "\n")
+	replaced := false
+	for i, line := range lines {
+		if fields := strings.Fields(line); len(fields) > 0 && fields[0] == "127.0.1.1" {
+			lines[i] = "127.0.1.1\t" + hostname
+			replaced = true
+		}
+	}
+	if !replaced {
+		lines = append(lines, "127.0.1.1\t"+hostname)
+	}
+	return []byte(strings.Join(lines, "\n") + "\n")
+}
+
+// readDebugfsFile reads path's content out of the ext-family image at
+// rootfsPath via debugfs's "dump" request -- unlike the write/rm/sif
+// requests runDebugfsScript issues, this never modifies the image, so it
+// doesn't need -w.
+func readDebugfsFile(rootfsPath, path string) ([]byte, error) {
+	dumpFile, err := os.CreateTemp("", "onctl-debugfs-dump-*")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = os.Remove(dumpFile.Name()) }()
+	if err := dumpFile.Close(); err != nil {
+		return nil, err
+	}
+
+	req := fmt.Sprintf("dump %s %s", path, dumpFile.Name())
+	if out, err := exec.Command("debugfs", "-R", req, rootfsPath).CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("debugfs failed (dump): %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	content, err := os.ReadFile(dumpFile.Name())
+	if err != nil {
+		return nil, err
+	}
+	// debugfs's "dump" request doesn't itself fail (nonzero exit) when the
+	// requested path doesn't exist in the image -- it just prints a
+	// message and leaves the output file empty. Treat that as an error
+	// rather than silently handing back zero bytes: injectHostname's
+	// caller would otherwise happily write an (almost) empty /etc/hosts.
+	if len(content) == 0 {
+		return nil, fmt.Errorf("debugfs dump of %s produced no output -- does it exist in this image?", path)
+	}
+	return content, nil
 }
 
 // runDebugfsScript writes script to a temp file and runs `debugfs -w` with

@@ -72,11 +72,26 @@ func startUnixServer(t *testing.T, sock string, mux *http.ServeMux) {
 
 // installFakeDebugfs puts a fake `debugfs` binary on PATH that copies the
 // script file it's given (its 3rd argument, from `-f <script>`) to
-// recordPath and exits with exitCode.
+// recordPath and exits with exitCode. A `-R "dump <path> <outfile>"`
+// invocation (readDebugfsFile's read-only request, e.g. injectHostname
+// reading /etc/hosts before rewriting it) is handled specially: rather
+// than being recorded, it's answered with a small stand-in /etc/hosts so
+// callers that both read and then write via this same fake (like
+// injectHostname) see realistic content to rewrite.
 func installFakeDebugfs(t *testing.T, recordPath string, exitCode int) {
 	t.Helper()
 	binDir := t.TempDir()
-	script := fmt.Sprintf("#!/bin/sh\ncat \"$3\" > %q\nexit %d\n", recordPath, exitCode)
+	script := fmt.Sprintf(
+		"#!/bin/sh\n"+
+			"if [ \"$1\" = \"-R\" ]; then\n"+
+			"  out=$(echo \"$2\" | awk '{print $3}')\n"+
+			"  printf '127.0.0.1\\tlocalhost\\n::1\\t\\tlocalhost ip6-localhost ip6-loopback\\n127.0.1.1\\tfc-base\\n' > \"$out\"\n"+
+			"  exit %d\n"+
+			"fi\n"+
+			"cat \"$3\" > %q\n"+
+			"exit %d\n",
+		exitCode, recordPath, exitCode,
+	)
 	require.NoError(t, os.WriteFile(filepath.Join(binDir, "debugfs"), []byte(script), 0755))
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
@@ -537,6 +552,32 @@ func TestDebugfsRootfsPreparer_Prepare_InjectsHostname(t *testing.T) {
 	assert.Contains(t, string(script), "write ")
 	assert.Contains(t, string(script), " /etc/hostname\n")
 	assert.Contains(t, string(script), "sif /etc/hostname mode 0100644\n")
+	// The stale 127.0.1.1 entry needs rewriting too (see injectHostname's
+	// doc comment) -- not just /etc/hostname -- or the new hostname won't
+	// resolve its own FQDN via /etc/hosts at all.
+	assert.Contains(t, string(script), "rm /etc/hosts\n")
+	assert.Contains(t, string(script), " /etc/hosts\n")
+	assert.Contains(t, string(script), "sif /etc/hosts mode 0100644\n")
+}
+
+func TestRewriteEtcHosts(t *testing.T) {
+	t.Run("replaces the 127.0.1.1 line, keeping everything else", func(t *testing.T) {
+		in := "127.0.0.1\tlocalhost\n" +
+			"::1\t\tlocalhost ip6-localhost ip6-loopback\n" +
+			"127.0.1.1\tboxctl-desktop\n"
+		out := string(rewriteEtcHosts([]byte(in), "gh-runner-12345"))
+		assert.Contains(t, out, "127.0.0.1\tlocalhost\n")
+		assert.Contains(t, out, "::1\t\tlocalhost ip6-localhost ip6-loopback\n")
+		assert.Contains(t, out, "127.0.1.1\tgh-runner-12345\n")
+		assert.NotContains(t, out, "boxctl-desktop")
+	})
+
+	t.Run("appends a 127.0.1.1 line when none exists", func(t *testing.T) {
+		in := "127.0.0.1\tlocalhost\n"
+		out := string(rewriteEtcHosts([]byte(in), "gh-runner-12345"))
+		assert.Contains(t, out, "127.0.0.1\tlocalhost\n")
+		assert.Contains(t, out, "127.0.1.1\tgh-runner-12345\n")
+	})
 }
 
 func TestDebugfsRootfsPreparer_Prepare_HostnameDebugfsFails(t *testing.T) {
