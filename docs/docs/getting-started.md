@@ -1,22 +1,25 @@
 # Getting Started
 
 ## initialize
-1. `onctl init` is required before using onctl. It creates a `.onctl` directory with a single configuration file. The directory will look like this. 
+1. `onctl init` is required before using onctl. It always ensures a global `~/.onctl` directory exists, and -- if run interactively -- asks whether to also create a project-local `.onctl` in the current directory (its settings override the global ones). Either way you end up with a directory that looks like this:
 ```
 ❯ tree
-.
+.onctl
 └── onctl.yaml
 
 1 directory, 1 file
 ```
-    1. `onctl.yaml` is the single source of truth for every configurable parameter for every provider (global settings, hetzner, aws, gcp, azure, fc), each grouped under its own section, pre-filled with working defaults.
+    1. `onctl.yaml` is the single source of truth for every configurable parameter for every provider (global settings, hetzner, aws, gcp, azure, fc, ch), each grouped under its own section, pre-filled with working defaults.
     2. edit the values you want to change; CLI flags (`onctl create --help`) still override whatever is in this file. `gcp.project` and `azure.subscriptionId` ship as placeholders and must be set to use those providers.
 
 ## set cloud provider
-1. set `ONCTL_CLOUD` environment variables to the name of the cloud provider. Supported values; 
-    - azure
-    - hetzner
+1. set `ONCTL_CLOUD` environment variable (or pass `-p`/`--provider` on any command) to the name of the cloud provider. Supported values; 
     - aws
+    - azure
+    - gcp
+    - hetzner
+    - fc (local Firecracker microVM, no cloud account needed)
+    - ch (local Cloud Hypervisor microVM, no cloud account needed)
 1. 
 ```
 export ONCTL_CLOUD=hetzner

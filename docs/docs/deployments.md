@@ -1,44 +1,43 @@
 # Deployments
 
-The main component to deploy your app with ease. 
+Deploy a Docker image to a VM onctl already manages: `deploy` pulls the image
+**locally**, saves it with gzip compression, uploads it over SSH, and runs it on
+the remote host.
 
-```bash 
+```bash
 Usage:
-  onctl deploy [flags]
+  onctl deploy VM_NAME
 
 Flags:
-      --cnames strings   CNAMES link to this app
-  -c, --cpu string       CPU (m) limit of the app. (default "250")
-      --env string       Name of environment variable group
-  -h, --help             help for deploy
-  -i, --image string     ImageName and Tag ex. nginx:latest
-  -m, --memory string    Memory (Mi) limit of the app. (default "250")
-      --name string      Name of the app.
-  -p, --port int32       Port of the app. (default 80)
-      --public           makes deployment public and accessible from a onkube.app subdomain
-  -v, --volume string    Volume <name>:<mount_path> to mount.
-
+  -e, --env strings    Environment variables for the container
+  -h, --help           help for deploy
+  -i, --image string   Docker image to deploy (required)
+  -n, --name string    Name for the Docker container
 ```
 
-:::warning Public Deployments
-    Deployment are by default **not** exposed to internet. In order to get a public URL
-    You should use --public option
+:::warning Matching architectures
+The image is pulled on **your machine**, not the remote VM -- make sure its
+architecture matches the VM's (e.g. don't push an `arm64` image to an `amd64`
+VM). A mismatch fails when the container starts on the remote, not at upload
+time, with an `exec format error`.
 :::
 
-## Image
+## Prerequisites
 
-The url of the image to deploy. ex. `alpine:latest` / `nginx:alpine` etc.
+- **Docker installed locally** -- `deploy` runs `docker pull`/`docker save` on
+  your own machine to prepare the image.
+- **Docker installed on the target VM** -- `deploy` loads and runs the image
+  there, it doesn't install Docker for you. See [Templates](./templates) for
+  bootstrapping a VM with Docker via `-a docker/docker.sh` at create time.
 
-:::note To Deploy an image from a private repository
-    You should add your access credentials first
+## Private registries
 
-    * `onctl reg add <image_url> -u <user> -p <password>` - Add your container registry credentials 
-:::
+Since the image is pulled locally, private-registry access (e.g. `docker
+login`) only needs to be set up wherever you run `onctl deploy` from -- the
+remote VM never talks to the registry directly.
 
-## Environment Variables
+## Example
 
-1. Define your Environment Variables.
-2. Pass environment variable group name to deploy command 
 ```bash
-    onctl deploy -i nginx:alpine --env <name>
+onctl deploy my-box -i nginx:alpine -n web -e FOO=bar
 ```

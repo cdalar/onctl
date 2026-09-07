@@ -10,7 +10,7 @@
 1. use your own script. 
 
 ```bash
-onctl up -a scripts/init.sh 
+onctl create -a scripts/init.sh 
 ```
     to use the file `scripts/init.sh` in your current directory.
 
@@ -19,7 +19,7 @@ onctl up -a scripts/init.sh
     files on the `onctl-templates` repo can be access directly by using the relative path.
 
 ```bash
-onctl up -a wireguard/vpn.sh  # https://templates.onctl.com/wireguard/vpn.sh
+onctl create -a wireguard/vpn.sh  # https://templates.onctl.com/wireguard/vpn.sh
 ```
 
 1. use any external source as a HTTP URL.
@@ -27,7 +27,7 @@ onctl up -a wireguard/vpn.sh  # https://templates.onctl.com/wireguard/vpn.sh
     any file that is accessiable via URL can be used. 
 
     ```bash
-    onctl up -a https://gist.githubusercontent.com/cdalar/dabdc001059089f553879a7b535e9b21/raw/02f336857b04eb13bc7ceeec1e66395bd615824b/helloworld.sh
+    onctl create -a https://gist.githubusercontent.com/cdalar/dabdc001059089f553879a7b535e9b21/raw/02f336857b04eb13bc7ceeec1e66395bd615824b/helloworld.sh
     ```
     to use the embedded file. Embedded files can be found under `internal/files/` in the repository.
 
@@ -39,7 +39,7 @@ To set a cloud-init configuration to your virtual machine. Just add `--cloud-ini
 
 ex. this command will set the ssh port to 443.
 ```bash
-onctl up -a wireguard/vpn.sh --cloud-init cloud-init-ssh-443.config
+onctl create -a wireguard/vpn.sh --cloud-init cloud-init-ssh-443.config
 ```
 
 ## precedence on scripts
