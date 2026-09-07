@@ -106,7 +106,7 @@ jobs:
         run: |
           set -euo pipefail
           gh release delete edge --yes --cleanup-tag --repo cdalar/onctl 2>/dev/null || true
-          gh release create edge dist/*.tar.gz dist/*.zip dist/checksums.txt \
+          gh release create edge dist/*.tar.gz dist/checksums.txt \
             --repo cdalar/onctl \
             --target "${{ github.sha }}" \
             --title "edge ($(date -u +%Y-%m-%d))" \
