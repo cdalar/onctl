@@ -1,0 +1,36 @@
+.section {
+  padding: 1rem 0 4rem;
+}
+
+.sectionSubtitle {
+  max-width: 36rem;
+  margin: 0.5rem auto 0;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+  max-width: 50rem;
+  margin: 0 auto;
+}
+
+@media screen and (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.caption {
+  /* Fixed to 2 lines' worth of height so a wrapping caption doesn't push
+     its code block out of alignment with the card next to it. */
+  min-height: 2.7em;
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.exampleCard :global(.prism-code) {
+  margin: 0;
+}

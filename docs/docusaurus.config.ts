@@ -79,10 +79,17 @@ const config: Config = {
   themeConfig: {
     // Replace with your project's social card
     image: 'img/docusaurus-social-card.jpg',
+    // onctl's target audience (small-team OSS, technical, CLI-first) skews
+    // dark-default among comparable tools -- see LANDING_PAGE_RESEARCH.md.
+    // Still fully toggleable and respects the OS preference on first visit.
+    colorMode: {
+      defaultMode: 'dark',
+      respectPrefersColorScheme: true,
+    },
     navbar: {
       title: 'onctl',
       logo: {
-        alt: 'onkube Logo',
+        alt: 'onctl logo',
         src: 'img/onkube.svg',
       },
       items: [
