@@ -763,22 +763,22 @@ func readDebugfsFile(rootfsPath, path string) ([]byte, error) {
 	}
 
 	req := fmt.Sprintf("dump %s %s", path, dumpFile.Name())
-	if out, err := exec.Command("debugfs", "-R", req, rootfsPath).CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("debugfs failed (dump): %w: %s", err, strings.TrimSpace(string(out)))
-	}
-	content, err := os.ReadFile(dumpFile.Name())
+	out, err := exec.Command("debugfs", "-R", req, rootfsPath).CombinedOutput()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("debugfs failed (dump): %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	// debugfs's "dump" request doesn't itself fail (nonzero exit) when the
 	// requested path doesn't exist in the image -- it just prints a
-	// message and leaves the output file empty. Treat that as an error
-	// rather than silently handing back zero bytes: injectHostname's
-	// caller would otherwise happily write an (almost) empty /etc/hosts.
-	if len(content) == 0 {
-		return nil, fmt.Errorf("debugfs dump of %s produced no output -- does it exist in this image?", path)
+	// diagnostic like "<path>: File not found by ext2_lookup" to stdout
+	// and leaves the output file empty. Catch that case by its message
+	// rather than by an empty result, since a *present* file can
+	// legitimately be zero bytes too (e.g. a minimal/custom rootfs with an
+	// empty /etc/hosts) -- treating "empty" as "missing" would wrongly
+	// abort Prepare for those.
+	if strings.Contains(strings.ToLower(string(out)), "not found") {
+		return nil, fmt.Errorf("debugfs dump of %s reported it doesn't exist in this image: %s", path, strings.TrimSpace(string(out)))
 	}
-	return content, nil
+	return os.ReadFile(dumpFile.Name())
 }
 
 // runDebugfsScript writes script to a temp file and runs `debugfs -w` with

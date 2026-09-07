@@ -580,6 +580,53 @@ func TestRewriteEtcHosts(t *testing.T) {
 	})
 }
 
+// installFakeDebugfsDump puts a fake `debugfs` binary on PATH that only
+// answers a `-R "dump <path> <outfile>"` request: it writes fileContent to
+// <outfile> and prints stdout, always exiting 0 -- for exercising
+// readDebugfsFile's success-vs-"not found" distinction without a real
+// debugfs binary or ext4 image.
+func installFakeDebugfsDump(t *testing.T, stdout string, fileContent []byte) {
+	t.Helper()
+	binDir := t.TempDir()
+	contentFile := filepath.Join(binDir, "content")
+	require.NoError(t, os.WriteFile(contentFile, fileContent, 0644))
+	stdoutFile := filepath.Join(binDir, "stdout")
+	require.NoError(t, os.WriteFile(stdoutFile, []byte(stdout), 0644))
+	script := fmt.Sprintf(
+		"#!/bin/sh\n"+
+			"out=$(echo \"$2\" | awk '{print $3}')\n"+
+			"cp %q \"$out\"\n"+
+			"cat %q\n"+
+			"exit 0\n",
+		contentFile, stdoutFile,
+	)
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "debugfs"), []byte(script), 0755))
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestReadDebugfsFile(t *testing.T) {
+	t.Run("accepts a legitimately empty file", func(t *testing.T) {
+		installFakeDebugfsDump(t, "", []byte{})
+		content, err := readDebugfsFile("irrelevant-rootfs-path", "/etc/hosts")
+		require.NoError(t, err)
+		assert.Empty(t, content)
+	})
+
+	t.Run("rejects a path debugfs reports missing", func(t *testing.T) {
+		installFakeDebugfsDump(t, "/etc/hosts: File not found by ext2_lookup\n", []byte{})
+		_, err := readDebugfsFile("irrelevant-rootfs-path", "/etc/hosts")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "doesn't exist in this image")
+	})
+
+	t.Run("returns real content on success", func(t *testing.T) {
+		installFakeDebugfsDump(t, "", []byte("127.0.0.1\tlocalhost\n"))
+		content, err := readDebugfsFile("irrelevant-rootfs-path", "/etc/hosts")
+		require.NoError(t, err)
+		assert.Equal(t, "127.0.0.1\tlocalhost\n", string(content))
+	})
+}
+
 func TestDebugfsRootfsPreparer_Prepare_HostnameDebugfsFails(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "base.ext4")
