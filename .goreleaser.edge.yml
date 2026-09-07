@@ -6,9 +6,13 @@ project_name: onctl
 # (real tagged releases: GPG-signed checksums, Apple-notarized macOS
 # binaries, homebrew tap publish). None of that applies to an edge build,
 # so it's a dedicated config rather than reusing goreleaser.yml with skip
-# flags -- no macOS build (no quill/notarization credentials needed, and
-# the hosts consuming edge builds today, e.g. aimax, are Linux anyway), no
-# signs section, no homebrew_casks.
+# flags -- Linux only (no macOS build: no quill/notarization credentials
+# needed, and the hosts consuming edge builds today, e.g. aimax, are Linux
+# anyway; no Windows build either -- nothing currently consumes it, and
+# every target GoReleaser builds runs in parallel on the self-hosted
+# onctl-4 runner this workflow builds on, so dropping it also helps keep
+# peak memory down alongside --parallelism=1 in edge.yml), no signs
+# section, no homebrew_casks.
 
 before:
   hooks:
@@ -21,13 +25,9 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
-      - windows
     goarch:
       - amd64
       - arm64
-    ignore:
-      - goos: windows
-        goarch: arm64
     ldflags:
       - -w -s -X 'github.com/cdalar/onctl/cmd.Version=v{{.Version}}-{{.ShortCommit}}'
 
@@ -35,9 +35,6 @@ archives:
   - id: repl
     name_template: "{{ .ProjectName }}-{{.Os}}-{{.Arch}}"
     formats: [tar.gz]
-    format_overrides:
-      - goos: windows
-        formats: [zip]
 
 checksum:
   name_template: checksums.txt

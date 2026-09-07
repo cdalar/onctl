@@ -1,7 +1,7 @@
 name: edge
 
 # Publishes an unsigned "edge" build of onctl from the tip of main on
-# every push -- a Linux/Windows binary carrying whatever just landed (e.g.
+# every push -- a Linux binary carrying whatever just landed (e.g.
 # #1074's per-VM guest hostname fix), for hosts like aimax to pick up
 # without waiting for a tagged, GPG-signed, Apple-notarized release
 # (goreleaser.yml's job, which this doesn't touch or replace). Named
@@ -17,8 +17,8 @@ name: edge
 # goreleaser-pro) + commented-out GORELEASER_KEY confirm this repo is on
 # the free tier. So this uses the OSS `--snapshot` flag instead (builds
 # unversioned artifacts, skips all publishing/validation) against a
-# dedicated .goreleaser.edge.yml (Linux/Windows only -- no macOS build,
-# no quill signing, no homebrew tap publish, none of which apply here),
+# dedicated .goreleaser.edge.yml (Linux only -- no macOS or Windows
+# build, no quill signing, no homebrew tap publish, none of which apply here),
 # then this workflow publishes the result itself: deletes and recreates a
 # single rolling `edge` prerelease/tag on every run, so there's always
 # exactly one, always-current release at a fixed URL
@@ -92,7 +92,13 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --snapshot --clean -f .goreleaser.edge.yml --skip=publish
+          # --parallelism=1: this workflow moved from ubuntu-latest (7-16GB)
+          # to the self-hosted onctl-4 runner, which can't sustain
+          # GoReleaser's default of building all 3 targets at once --
+          # compiling aws-sdk-go-v2/service/ec2 three times in parallel OOM
+          # (SIGKILL) on that box. Serializing the builds keeps peak memory
+          # to one target's worth at a time.
+          args: release --snapshot --clean -f .goreleaser.edge.yml --skip=publish --parallelism=1
 
       - name: Replace the rolling edge release
         env:
@@ -100,7 +106,7 @@ jobs:
         run: |
           set -euo pipefail
           gh release delete edge --yes --cleanup-tag --repo cdalar/onctl 2>/dev/null || true
-          gh release create edge dist/*.tar.gz dist/*.zip dist/checksums.txt \
+          gh release create edge dist/*.tar.gz dist/checksums.txt \
             --repo cdalar/onctl \
             --target "${{ github.sha }}" \
             --title "edge ($(date -u +%Y-%m-%d))" \
