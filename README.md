@@ -2,7 +2,7 @@
 
 `onctl` is a tool to manage virtual machines in multi-cloud. 
 
-Check 🌍 https://docs.onctl.io for detailed documentation
+Check 🌍 https://onctl.sh for detailed documentation
 
 [![build](https://github.com/cdalar/onctl/actions/workflows/build.yml/badge.svg)](https://github.com/cdalar/onctl/actions/workflows/build.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/cdalar/onctl/badge)](https://scorecard.dev/viewer/?uri=github.com/cdalar/onctl)
@@ -105,7 +105,7 @@ brew install --HEAD --fetch-HEAD cdalar/tap/onctl-dev
 ### Linux
 
 ```bash
-curl -sLS https://docs.onctl.io/get.sh | bash
+curl -sLS https://onctl.sh/get.sh | bash
 sudo install onctl /usr/local/bin/
 ```
 
@@ -114,7 +114,7 @@ sudo install onctl /usr/local/bin/
 To install or update to the `edge` build, an unsigned binary rebuilt from the tip of `main` on every push (no macOS build):
 
 ```bash
-curl -sLS https://docs.onctl.io/get_edge.sh | bash
+curl -sLS https://onctl.sh/get_edge.sh | bash
 sudo install onctl /usr/local/bin/
 ```
 
