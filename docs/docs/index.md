@@ -18,7 +18,7 @@ Check 🌍 https://onctl.sh for detailed documentation
 ## What onctl brings 
 
 - 🌍 Simple intuitive CLI to run VMs in seconds.  
-- ⛅️ Supports multi cloud providers (aws, azure, hetzner, more coming soon...)
+- ⛅️ Supports multiple cloud providers (aws, azure, gcp, hetzner) plus local microVMs via Firecracker (`fc`) and Cloud Hypervisor (`ch`) -- no cloud account needed for those two
 - 🚀 Sets your public key and Gives you SSH access with `onctl ssh <vm-name>`
 - ✨ Cloud-init support. Set your own cloud-init file `onctl up -n qwe --cloud-init <cloud.init.file>`
 - 🤖 Use ready to use templates to configure your vm. Check [onctl-templates](https://github.com/cdalar/onctl-templates) `onctl up -n qwe -a k3s/k3s-server.sh`
@@ -68,18 +68,45 @@ onctl is a tool to manage cross platform resources in cloud
 Usage:
   onctl [command]
 
+Examples:
+  # List all VMs
+  onctl ls
+
+  # Create a VM with docker installed
+  onctl create -n test -a docker/docker.sh
+
+  # SSH into a VM
+  onctl ssh test
+
+  # Destroy a VM
+  onctl destroy test
+
 Available Commands:
+  action      Execute a custom action from GitHub
   completion  Generate the autocompletion script for the specified shell
   create      Create a VM
+  deploy      Deploy a Docker image to a remote VM
   destroy     Destroy VM(s)
+  env         Manage environments
   help        Help about any command
+  images      List available OS images for the current cloud provider
+  import      Import an existing server so it can be managed with ssh/ls
   init        init onctl environment
   ls          List VMs
+  pause       Snapshot and delete a VM to stop compute cost (keeps its IP)
+  resume      Recreate a paused VM from its snapshot
   ssh         Spawn an SSH connection to a VM
+  templates   Manage onctl templates
   version     Print the version number of onctl
+  vm          Manage virtual machines
 
 Flags:
-  -h, --help   help for onctl
+  -c, --config string                             Path to onctl.yaml configuration file (overrides the .onctl directory lookup)
+  -h, --help                                       help for onctl
+      --project gcloud config get-value project   GCP: project ID (falls back to gcloud config get-value project when the onctl.yaml placeholder is present)
+  -p, --provider string                           cloud provider: aws, hetzner, azure, gcp, fc, ch, static (overrides ONCTL_CLOUD)
+      --resource-group string                     Azure: resource group (required for the azure provider; falls back to the az CLI's configured default group, if any)
+      --subscription-id az account show           Azure: subscription ID (required for the azure provider; falls back to az account show)
 
 Use "onctl [command] --help" for more information about a command.
 ```

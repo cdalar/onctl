@@ -5,9 +5,20 @@ import type * as Preset from '@docusaurus/preset-classic';
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  title: 'Deploy with Ease',
-  tagline: 'multi-cloud deployment made easy',
+  // Used as the browser-tab title suffix ("Getting Started | onctl") --
+  // keep this the product name, not marketing copy. The homepage writes
+  // its own headline directly in src/pages/index.tsx instead of reusing
+  // this.
+  title: 'onctl',
+  tagline: 'A CLI for VMs -- every cloud, or your own machine',
   favicon: 'img/favicon.ico',
+
+  stylesheets: [
+    {
+      href: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap',
+      type: 'text/css',
+    },
+  ],
 
   // Set the production url of your site here
   url: 'https://onctl.sh',
@@ -21,7 +32,11 @@ const config: Config = {
   projectName: 'onctl', // Usually your repo name.
 
   onBrokenLinks: 'throw',
-  onBrokenMarkdownLinks: 'warn',
+  markdown: {
+    hooks: {
+      onBrokenMarkdownLinks: 'warn',
+    },
+  },
 
   // Even if you don't use internationalization, you can use this field to set
   // useful metadata like html lang. For example, if your site is Chinese, you
@@ -79,10 +94,17 @@ const config: Config = {
   themeConfig: {
     // Replace with your project's social card
     image: 'img/docusaurus-social-card.jpg',
+    // onctl's target audience (small-team OSS, technical, CLI-first) skews
+    // dark-default among comparable tools -- see LANDING_PAGE_RESEARCH.md.
+    // Still fully toggleable and respects the OS preference on first visit.
+    colorMode: {
+      defaultMode: 'dark',
+      respectPrefersColorScheme: true,
+    },
     navbar: {
       title: 'onctl',
       logo: {
-        alt: 'onkube Logo',
+        alt: 'onctl logo',
         src: 'img/onkube.svg',
       },
       items: [

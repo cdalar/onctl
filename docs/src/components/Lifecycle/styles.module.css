@@ -1,0 +1,31 @@
+.section {
+  padding: 4rem 0 5rem;
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.1fr);
+  gap: 3rem;
+  align-items: center;
+}
+
+@media screen and (max-width: 996px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+}
+
+.text {
+  max-width: 26rem;
+}
+
+.text p {
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.6;
+}
+
+.terminal {
+  min-width: 0;
+}
