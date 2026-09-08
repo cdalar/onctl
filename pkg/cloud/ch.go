@@ -168,17 +168,17 @@ type ProviderCH struct {
 
 // chVM is the on-disk metadata persisted for each managed microVM.
 type chVM struct {
-	Name        string    `json:"name"`
-	PID         int       `json:"pid"`
-	SocketPath  string    `json:"socketPath"`
-	TapDevice   string    `json:"tapDevice"`
-	IPAddress   string    `json:"ipAddress"`
-	MacAddress  string    `json:"macAddress"`
-	VCPUCount   int64     `json:"vcpuCount"`
-	MemSizeMib  int64     `json:"memSizeMib"`
-	Status      string    `json:"status"`
-	KernelImage string    `json:"kernelImage"`
-	RootfsPath  string    `json:"rootfsPath"`
+	Name        string `json:"name"`
+	PID         int    `json:"pid"`
+	SocketPath  string `json:"socketPath"`
+	TapDevice   string `json:"tapDevice"`
+	IPAddress   string `json:"ipAddress"`
+	MacAddress  string `json:"macAddress"`
+	VCPUCount   int64  `json:"vcpuCount"`
+	MemSizeMib  int64  `json:"memSizeMib"`
+	Status      string `json:"status"`
+	KernelImage string `json:"kernelImage"`
+	RootfsPath  string `json:"rootfsPath"`
 	// OS is chOSWindows for a Windows guest, empty/"linux" otherwise.
 	OS string `json:"os,omitempty"`
 	// SeedDiskPath is the NoCloud seed ISO path for a Windows guest (see
