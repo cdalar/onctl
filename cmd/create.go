@@ -54,6 +54,7 @@ var (
 	flagCHKernelImage string
 	flagCHRootfsImage string
 	flagCHBinary      string
+	flagCHOS          string
 	// GCP-specific flag bound to gcp.project (see init below). This replaces
 	// the placeholder in onctl.yaml's gcp.project (the one GCP setting with
 	// no static default; it's account-specific).
@@ -159,12 +160,14 @@ func init() {
 	// shared with fc's flags of the same purpose above: their defaults point
 	// at different image directories, and a shared flag can only carry one
 	// default value.
-	createCmd.Flags().StringVar(&flagCHKernelImage, "ch-kernel-image", "~/.onctl/cloud-hypervisor/images/vmlinux", "Cloud Hypervisor: path to the uncompressed kernel (vmlinux)")
-	createCmd.Flags().StringVar(&flagCHRootfsImage, "ch-rootfs-image", "~/.onctl/cloud-hypervisor/images/rootfs.ext4", "Cloud Hypervisor: path to the base rootfs (ext4)")
+	createCmd.Flags().StringVar(&flagCHKernelImage, "ch-kernel-image", "~/.onctl/cloud-hypervisor/images/vmlinux", "Cloud Hypervisor: path to the uncompressed kernel (vmlinux) for --ch-os linux, or the UEFI firmware (CLOUDHV.fd) for --ch-os windows")
+	createCmd.Flags().StringVar(&flagCHRootfsImage, "ch-rootfs-image", "~/.onctl/cloud-hypervisor/images/rootfs.ext4", "Cloud Hypervisor: path to the base rootfs (ext4) for --ch-os linux, or a UEFI-bootable Windows disk image for --ch-os windows")
 	createCmd.Flags().StringVar(&flagCHBinary, "ch-binary", "cloud-hypervisor", "Cloud Hypervisor: path to the cloud-hypervisor binary")
+	createCmd.Flags().StringVar(&flagCHOS, "ch-os", "linux", "Cloud Hypervisor: guest OS boot path, \"linux\" (direct kernel boot) or \"windows\" (UEFI firmware boot; requires a pre-built image with virtio drivers and cloudbase-init — see docs). UNVERIFIED: the windows path has not been run against real hardware yet")
 	_ = viper.BindPFlag("ch.kernelImage", createCmd.Flags().Lookup("ch-kernel-image"))
 	_ = viper.BindPFlag("ch.rootfsImage", createCmd.Flags().Lookup("ch-rootfs-image"))
 	_ = viper.BindPFlag("ch.binPath", createCmd.Flags().Lookup("ch-binary"))
+	_ = viper.BindPFlag("ch.os", createCmd.Flags().Lookup("ch-os"))
 	_ = viper.BindPFlag("ch.vcpuCount", createCmd.Flags().Lookup("vcpu"))
 	_ = viper.BindPFlag("ch.memSizeMib", createCmd.Flags().Lookup("memory"))
 	_ = viper.BindPFlag("ch.vm.username", createCmd.Flags().Lookup("username"))

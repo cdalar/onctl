@@ -62,17 +62,76 @@ type CHConfig struct {
 	// StateDir is the directory onctl stores microVM state under
 	// (default /opt/ch).
 	StateDir string
+	// OS selects the guest boot path: "linux" (default) boots KernelImage
+	// as a direct Linux kernel; "windows" boots it as UEFI firmware
+	// (CLOUDHV.fd) instead. See chOSWindows.
+	OS string
 }
+
+// chOSWindows is the CHConfig.OS / chVM.OS value selecting the Windows
+// (UEFI firmware, no kernel cmdline, NoCloud seed ISO) boot path over the
+// default direct-kernel-boot Linux one. This integration has not been
+// exercised against a real cloud-hypervisor binary or a real Windows guest
+// (see docs/windows-ch.md) — treat it as unverified until someone has.
+const chOSWindows = "windows"
 
 // CHVMConfig describes a microVM to be configured and booted by a CHProcess.
 type CHVMConfig struct {
+	// KernelImage is a direct Linux kernel path (Firmware false) or a UEFI
+	// firmware path such as CLOUDHV.fd (Firmware true) — see PayloadConfig
+	// in internal/providerch/common.go for how this maps onto the wire.
 	KernelImage string
 	KernelArgs  string
-	RootfsPath  string
-	VCPUCount   int64
-	MemSizeMib  int64
-	TapDevice   string
-	MacAddress  string
+	// Firmware selects payload.firmware over payload.kernel/cmdline for
+	// KernelImage/KernelArgs — required for Windows guests, which have no
+	// direct-kernel-boot path.
+	Firmware bool
+	// KvmHyperv enables Hyper-V enlightenments (cpus.kvm_hyperv), required
+	// for Windows guests.
+	KvmHyperv  bool
+	RootfsPath string
+	// SeedDiskPath, if set, is attached as a second, read-only disk — a
+	// NoCloud-format seed ISO for cloudbase-init to apply hostname/SSH-key
+	// configuration to a Windows guest that onctl cannot write into
+	// directly (see WindowsGuestPreparer).
+	SeedDiskPath string
+	VCPUCount    int64
+	MemSizeMib   int64
+	TapDevice    string
+	MacAddress   string
+}
+
+// WindowsGuestPreparer prepares a per-VM Windows disk and its accompanying
+// NoCloud seed ISO. Unlike RootfsPreparer (ext4/debugfs-based), it never
+// writes into the guest disk itself — Windows disks are NTFS, which onctl
+// has no in-process tooling to modify — so all guest customization (
+// hostname, SSH public key) is delivered via the seed ISO instead, for
+// cloudbase-init (which must be pre-installed in the base image) to apply
+// at boot.
+type WindowsGuestPreparer interface {
+	// PrepareDisk creates destPath as a plain copy of baseImage (no
+	// modification), mirroring RootfsPreparer.Prepare's copy-not-mutate
+	// contract for the base image.
+	PrepareDisk(baseImage, destPath string) error
+	// BuildSeedISO creates destPath as a NoCloud-format ISO9660 volume
+	// (label "cidata") containing meta-data/user-data set from hostname,
+	// sshPublicKey and username.
+	BuildSeedISO(destPath, hostname, sshPublicKey, username string) error
+}
+
+// DHCPManager hands out DHCP leases on a bridge for guests that can't be
+// configured via a Linux kernel cmdline (i.e. Windows). Only used on the
+// chOSWindows path — the default Linux path keeps using the existing
+// ip=... kernel cmdline and never touches this.
+type DHCPManager interface {
+	// EnsureDHCP starts (or confirms already running) a DHCP server scoped
+	// to bridge/cidr, idempotent like NetworkManager.EnsureBridge.
+	EnsureDHCP(bridge, cidr string) error
+	// AddReservation hands mac a fixed lease of ip, so a guest's address
+	// always matches what onctl's metadata says it is.
+	AddReservation(mac, ip string) error
+	// RemoveReservation removes a reservation added by AddReservation.
+	RemoveReservation(mac string) error
 }
 
 // CHProcess starts and stops cloud-hypervisor VMM processes.
@@ -101,22 +160,31 @@ type ProviderCH struct {
 	Process CHProcess
 	Net     NetworkManager
 	Rootfs  RootfsPreparer
+	// WindowsGuest and DHCP are only used on the chOSWindows path; nil is
+	// fine for an all-Linux setup (the zero value of CHConfig.OS).
+	WindowsGuest WindowsGuestPreparer
+	DHCP         DHCPManager
 }
 
 // chVM is the on-disk metadata persisted for each managed microVM.
 type chVM struct {
-	Name        string    `json:"name"`
-	PID         int       `json:"pid"`
-	SocketPath  string    `json:"socketPath"`
-	TapDevice   string    `json:"tapDevice"`
-	IPAddress   string    `json:"ipAddress"`
-	MacAddress  string    `json:"macAddress"`
-	VCPUCount   int64     `json:"vcpuCount"`
-	MemSizeMib  int64     `json:"memSizeMib"`
-	Status      string    `json:"status"`
-	KernelImage string    `json:"kernelImage"`
-	RootfsPath  string    `json:"rootfsPath"`
-	CreatedAt   time.Time `json:"createdAt"`
+	Name        string `json:"name"`
+	PID         int    `json:"pid"`
+	SocketPath  string `json:"socketPath"`
+	TapDevice   string `json:"tapDevice"`
+	IPAddress   string `json:"ipAddress"`
+	MacAddress  string `json:"macAddress"`
+	VCPUCount   int64  `json:"vcpuCount"`
+	MemSizeMib  int64  `json:"memSizeMib"`
+	Status      string `json:"status"`
+	KernelImage string `json:"kernelImage"`
+	RootfsPath  string `json:"rootfsPath"`
+	// OS is chOSWindows for a Windows guest, empty/"linux" otherwise.
+	OS string `json:"os,omitempty"`
+	// SeedDiskPath is the NoCloud seed ISO path for a Windows guest (see
+	// WindowsGuestPreparer), empty for a Linux guest.
+	SeedDiskPath string    `json:"seedDiskPath,omitempty"`
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 func (p ProviderCH) vmDir(name string) string {
@@ -214,10 +282,15 @@ func chTapName(vmName string) string {
 // chMAC derives a deterministic, locally-administered MAC address from the
 // VM name. Unlike fcMAC, the second octet can't spell out the provider name
 // in hex ("CH" isn't a valid hex byte — H isn't a hex digit), so it uses a
-// fixed placeholder octet instead.
+// fixed placeholder octet instead. Lowercase throughout (not just "c4"):
+// dnsmasq's --dhcp-hostsfile reservation matching (used on the Windows
+// path, see DHCPManager) is case-sensitive against the lowercase-normalized
+// MAC a DHCP client actually sends, so a mixed-case address here silently
+// never matches its own reservation and the guest gets a random pool
+// address instead of the one onctl's metadata says it has.
 func chMAC(vmName string) string {
 	sum := md5.Sum([]byte(vmName))
-	return fmt.Sprintf("02:C4:%02x:%02x:%02x:%02x", sum[0], sum[1], sum[2], sum[3])
+	return fmt.Sprintf("02:c4:%02x:%02x:%02x:%02x", sum[0], sum[1], sum[2], sum[3])
 }
 
 // usedIPs returns the set of IP addresses already assigned to managed microVMs.
@@ -350,10 +423,30 @@ func (p ProviderCH) Deploy(server Vm) (Vm, error) {
 		sshPublicKey = strings.TrimSpace(string(data))
 	}
 
-	rootfsPath := filepath.Join(dir, "rootfs.ext4")
-	if err := p.Rootfs.Prepare(rootfsImage, rootfsPath, sanitizeGuestHostname(server.Name), sshPublicKey, username); err != nil {
-		_ = os.RemoveAll(dir)
-		return Vm{}, fmt.Errorf("failed to prepare rootfs: %w", err)
+	isWindows := p.Config.OS == chOSWindows
+
+	var rootfsPath, seedDiskPath string
+	if isWindows {
+		if p.WindowsGuest == nil {
+			_ = os.RemoveAll(dir)
+			return Vm{}, errors.New("ch.os=windows requires a WindowsGuestPreparer to be configured (internal error)")
+		}
+		rootfsPath = filepath.Join(dir, "disk.raw")
+		if err := p.WindowsGuest.PrepareDisk(rootfsImage, rootfsPath); err != nil {
+			_ = os.RemoveAll(dir)
+			return Vm{}, fmt.Errorf("failed to prepare Windows disk: %w", err)
+		}
+		seedDiskPath = filepath.Join(dir, "seed.iso")
+		if err := p.WindowsGuest.BuildSeedISO(seedDiskPath, sanitizeGuestHostname(server.Name), sshPublicKey, username); err != nil {
+			_ = os.RemoveAll(dir)
+			return Vm{}, fmt.Errorf("failed to build seed ISO: %w", err)
+		}
+	} else {
+		rootfsPath = filepath.Join(dir, "rootfs.ext4")
+		if err := p.Rootfs.Prepare(rootfsImage, rootfsPath, sanitizeGuestHostname(server.Name), sshPublicKey, username); err != nil {
+			_ = os.RemoveAll(dir)
+			return Vm{}, fmt.Errorf("failed to prepare rootfs: %w", err)
+		}
 	}
 
 	bridge := p.Config.Bridge
@@ -381,51 +474,84 @@ func (p ProviderCH) Deploy(server Vm) (Vm, error) {
 		_ = os.RemoveAll(dir)
 		return Vm{}, err
 	}
-	gateway, mask, err := bridgeGatewayAndMask(cidr)
-	if err != nil {
-		_ = p.Net.DeleteTap(tapDevice)
-		_ = os.RemoveAll(dir)
-		return Vm{}, err
-	}
-
-	kernelArgs := strings.TrimSpace(p.Config.KernelArgs)
-	if kernelArgs == "" {
-		kernelArgs = defaultCHKernelArgs
-	}
-	kernelArgs = fmt.Sprintf("%s ip=%s::%s:%s::eth0:off", kernelArgs, ip, gateway, mask)
-
 	mac := chMAC(server.Name)
+
+	var kernelArgs string
+	if isWindows {
+		// Windows has no Linux kernel cmdline to parse networking from;
+		// the guest gets its address via DHCP instead (see DHCPManager).
+		// The seed ISO's meta-data still carries the hostname and SSH key
+		// for cloudbase-init to apply.
+		if p.DHCP == nil {
+			_ = p.Net.DeleteTap(tapDevice)
+			_ = os.RemoveAll(dir)
+			return Vm{}, errors.New("ch.os=windows requires a DHCPManager to be configured (internal error)")
+		}
+		if err := p.DHCP.EnsureDHCP(bridge, cidr); err != nil {
+			_ = p.Net.DeleteTap(tapDevice)
+			_ = os.RemoveAll(dir)
+			return Vm{}, fmt.Errorf("failed to set up DHCP on %q: %w", bridge, err)
+		}
+		if err := p.DHCP.AddReservation(mac, ip); err != nil {
+			_ = p.Net.DeleteTap(tapDevice)
+			_ = os.RemoveAll(dir)
+			return Vm{}, fmt.Errorf("failed to reserve DHCP lease for %s: %w", ip, err)
+		}
+	} else {
+		gateway, mask, err := bridgeGatewayAndMask(cidr)
+		if err != nil {
+			_ = p.Net.DeleteTap(tapDevice)
+			_ = os.RemoveAll(dir)
+			return Vm{}, err
+		}
+		kernelArgs = strings.TrimSpace(p.Config.KernelArgs)
+		if kernelArgs == "" {
+			kernelArgs = defaultCHKernelArgs
+		}
+		kernelArgs = fmt.Sprintf("%s ip=%s::%s:%s::eth0:off", kernelArgs, ip, gateway, mask)
+	}
+
 	socketPath := filepath.Join(dir, "ch.sock")
 	logFile := filepath.Join(dir, "ch.log")
 
 	pid, err := p.Process.Start(socketPath, CHVMConfig{
-		KernelImage: kernelImage,
-		KernelArgs:  kernelArgs,
-		RootfsPath:  rootfsPath,
-		VCPUCount:   vcpu,
-		MemSizeMib:  mem,
-		TapDevice:   tapDevice,
-		MacAddress:  mac,
+		KernelImage:  kernelImage,
+		KernelArgs:   kernelArgs,
+		Firmware:     isWindows,
+		KvmHyperv:    isWindows,
+		RootfsPath:   rootfsPath,
+		SeedDiskPath: seedDiskPath,
+		VCPUCount:    vcpu,
+		MemSizeMib:   mem,
+		TapDevice:    tapDevice,
+		MacAddress:   mac,
 	}, logFile)
 	if err != nil {
+		if isWindows {
+			if rmErr := p.DHCP.RemoveReservation(mac); rmErr != nil {
+				log.Println("[DEBUG] failed to remove DHCP reservation for " + mac + ": " + rmErr.Error())
+			}
+		}
 		_ = p.Net.DeleteTap(tapDevice)
 		_ = os.RemoveAll(dir)
 		return Vm{}, fmt.Errorf("failed to start microVM: %w", err)
 	}
 
 	vm := chVM{
-		Name:        server.Name,
-		PID:         pid,
-		SocketPath:  socketPath,
-		TapDevice:   tapDevice,
-		IPAddress:   ip,
-		MacAddress:  mac,
-		VCPUCount:   vcpu,
-		MemSizeMib:  mem,
-		Status:      chStatusRunning,
-		KernelImage: kernelImage,
-		RootfsPath:  rootfsPath,
-		CreatedAt:   time.Now(),
+		Name:         server.Name,
+		PID:          pid,
+		SocketPath:   socketPath,
+		TapDevice:    tapDevice,
+		IPAddress:    ip,
+		MacAddress:   mac,
+		VCPUCount:    vcpu,
+		MemSizeMib:   mem,
+		Status:       chStatusRunning,
+		KernelImage:  kernelImage,
+		RootfsPath:   rootfsPath,
+		OS:           p.Config.OS,
+		SeedDiskPath: seedDiskPath,
+		CreatedAt:    time.Now(),
 	}
 	if err := saveCHMetadata(p.metadataPath(server.Name), vm); err != nil {
 		return Vm{}, fmt.Errorf("microVM started but failed to persist metadata: %w", err)
@@ -458,6 +584,13 @@ func (p ProviderCH) Destroy(server Vm) error {
 			log.Println("[DEBUG] failed to delete tap device " + vm.TapDevice + ": " + err.Error())
 		}
 	}
+	if vm.OS == chOSWindows && vm.MacAddress != "" && p.DHCP != nil {
+		if err := p.DHCP.RemoveReservation(vm.MacAddress); err != nil {
+			log.Println("[DEBUG] failed to remove DHCP reservation for " + vm.MacAddress + ": " + err.Error())
+		}
+	}
+	// The seed ISO (if any) lives under vmDir alongside everything else
+	// removed below; no separate cleanup needed.
 	return os.RemoveAll(p.vmDir(server.Name))
 }
 

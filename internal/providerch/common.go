@@ -6,6 +6,7 @@ package providerch
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -94,6 +96,11 @@ func GetConfig() cloud.CHConfig {
 		binPath = "cloud-hypervisor"
 	}
 
+	guestOS := strings.ToLower(strings.TrimSpace(viper.GetString("ch.os")))
+	if guestOS == "" {
+		guestOS = "linux"
+	}
+
 	return cloud.CHConfig{
 		KernelImage: expandHome(viper.GetString("ch.kernelImage")),
 		RootfsImage: expandHome(viper.GetString("ch.rootfsImage")),
@@ -105,6 +112,7 @@ func GetConfig() cloud.CHConfig {
 		Username:    username,
 		BinPath:     binPath,
 		StateDir:    stateDir,
+		OS:          guestOS,
 	}
 }
 
@@ -172,6 +180,10 @@ type chVMConfigPayload struct {
 type chCPUsConfig struct {
 	BootVCPUs int64 `json:"boot_vcpus"`
 	MaxVCPUs  int64 `json:"max_vcpus"`
+	// KvmHyperv enables Hyper-V enlightenments, required for Windows
+	// guests (confirmed against cloud-hypervisor's CpusConfig OpenAPI
+	// schema; omitted entirely for Linux guests via omitempty).
+	KvmHyperv bool `json:"kvm_hyperv,omitempty"`
 }
 
 type chMemoryConfig struct {
@@ -181,14 +193,21 @@ type chMemoryConfig struct {
 
 // chPayloadConfig is Cloud Hypervisor's PayloadConfig: unlike Firecracker,
 // the kernel path and boot command line are plain string fields nested
-// under "payload", not top-level "kernel"/"cmdline" objects.
+// under "payload", not top-level "kernel"/"cmdline" objects. Firmware is
+// the UEFI boot path (mutually exclusive with Kernel/Cmdline, confirmed
+// against PayloadConfig's OpenAPI schema) used for Windows guests, which
+// have no direct-kernel-boot path.
 type chPayloadConfig struct {
-	Kernel  string `json:"kernel"`
-	Cmdline string `json:"cmdline,omitempty"`
+	Firmware string `json:"firmware,omitempty"`
+	Kernel   string `json:"kernel,omitempty"`
+	Cmdline  string `json:"cmdline,omitempty"`
 }
 
 type chDiskConfig struct {
 	Path string `json:"path"`
+	// Readonly marks a disk as read-only — used for the Windows NoCloud
+	// seed ISO, which must never be written to.
+	Readonly bool `json:"readonly,omitempty"`
 }
 
 type chNetConfig struct {
@@ -207,11 +226,21 @@ type chConsoleConfig struct {
 func configureAndBoot(socketPath string, cfg cloud.CHVMConfig) error {
 	client := unixHTTPClient(socketPath)
 
+	payloadCfg := chPayloadConfig{Kernel: cfg.KernelImage, Cmdline: cfg.KernelArgs}
+	if cfg.Firmware {
+		payloadCfg = chPayloadConfig{Firmware: cfg.KernelImage}
+	}
+
+	disks := []chDiskConfig{{Path: cfg.RootfsPath}}
+	if cfg.SeedDiskPath != "" {
+		disks = append(disks, chDiskConfig{Path: cfg.SeedDiskPath, Readonly: true})
+	}
+
 	payload := chVMConfigPayload{
-		CPUs:    chCPUsConfig{BootVCPUs: cfg.VCPUCount, MaxVCPUs: cfg.VCPUCount},
+		CPUs:    chCPUsConfig{BootVCPUs: cfg.VCPUCount, MaxVCPUs: cfg.VCPUCount, KvmHyperv: cfg.KvmHyperv},
 		Memory:  chMemoryConfig{Size: cfg.MemSizeMib * 1024 * 1024},
-		Payload: chPayloadConfig{Kernel: cfg.KernelImage, Cmdline: cfg.KernelArgs},
-		Disks:   []chDiskConfig{{Path: cfg.RootfsPath}},
+		Payload: payloadCfg,
+		Disks:   disks,
 		Net:     []chNetConfig{{Tap: cfg.TapDevice, Mac: cfg.MacAddress}},
 		// Tty: guest serial console output is written to the VMM process's
 		// own stdout, which spawn() redirects to logFile, mirroring how
@@ -555,4 +584,357 @@ func runDebugfsScript(rootfsPath, script string) error {
 		return fmt.Errorf("debugfs failed: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// ConfigDriveSeedPreparer is the real cloud.WindowsGuestPreparer
+// implementation: it copies the base Windows disk image unmodified (Windows
+// disks are NTFS, which onctl has no in-process tooling to modify — unlike
+// DebugfsRootfsPreparer's ext4 debugfs trick, so it never touches the guest
+// disk at all) and builds an OpenStack config-drive-format seed ISO for
+// cloudbase-init (which must be pre-installed in the base image, alongside
+// virtio-win drivers — see docs) to apply hostname/SSH-key configuration
+// from at boot.
+//
+// UNVERIFIED: this has not been exercised against a real cloudbase-init
+// installation. The config-drive layout and meta_data.json fields below
+// (openstack/latest/meta_data.json + public_keys) match OpenStack's and
+// cloudbase-init's own documented ConfigDrive datasource, but should be
+// confirmed by hand-booting one seed ISO against the actual cloudbase-init
+// version in use before relying on this (see the plan's Verification § 0).
+type ConfigDriveSeedPreparer struct{}
+
+// NewWindowsGuestPreparer returns a cloud.WindowsGuestPreparer backed by
+// ConfigDriveSeedPreparer.
+func NewWindowsGuestPreparer() cloud.WindowsGuestPreparer {
+	return ConfigDriveSeedPreparer{}
+}
+
+func (ConfigDriveSeedPreparer) PrepareDisk(baseImage, destPath string) error {
+	if baseImage == "" {
+		return errors.New("ch.rootfsImage is not configured")
+	}
+	return copyRootfs(baseImage, destPath)
+}
+
+// configDriveMetadata mirrors OpenStack's meta_data.json (the subset
+// cloudbase-init's ConfigDrive datasource reads).
+type configDriveMetadata struct {
+	UUID        string            `json:"uuid"`
+	Hostname    string            `json:"hostname"`
+	Name        string            `json:"name"`
+	PublicKeys  map[string]string `json:"public_keys,omitempty"`
+	LaunchIndex int               `json:"launch_index"`
+}
+
+func (ConfigDriveSeedPreparer) BuildSeedISO(destPath, hostname, sshPublicKey, username string) error {
+	seedDir, err := os.MkdirTemp("", "onctl-ch-seed-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(seedDir) }()
+
+	osDir := filepath.Join(seedDir, "openstack", "latest")
+	if err := os.MkdirAll(osDir, 0755); err != nil {
+		return err
+	}
+
+	meta := configDriveMetadata{
+		UUID:     configDriveUUID(hostname),
+		Hostname: hostname,
+		Name:     hostname,
+	}
+	if sshPublicKey != "" {
+		if username == "" {
+			username = "root"
+		}
+		meta.PublicKeys = map[string]string{username: sshPublicKey}
+	}
+	metaJSON, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(osDir, "meta_data.json"), metaJSON, 0644); err != nil {
+		return err
+	}
+	// user_data is optional per the config-drive spec; an empty file is
+	// enough for cloudbase-init to skip it rather than error out.
+	if err := os.WriteFile(filepath.Join(osDir, "user_data"), []byte{}, 0644); err != nil {
+		return err
+	}
+
+	return buildISO(seedDir, destPath, "config-2")
+}
+
+// configDriveUUID derives a deterministic, UUID-shaped instance id from
+// hostname. It only needs to be a stable, plausible-looking identifier —
+// cloudbase-init doesn't validate it against anything — so a random UUID
+// isn't necessary.
+func configDriveUUID(hostname string) string {
+	sum := md5.Sum([]byte(hostname))
+	return fmt.Sprintf("%x-%x-%x-%x-%x", sum[0:4], sum[4:6], sum[6:8], sum[8:10], sum[10:16])
+}
+
+// isoBuilders are candidate ISO9660-building tools, tried in order; the
+// first one found on PATH is used. All three accept the same genisoimage
+// -style flags (xorriso via its "-as genisoimage" emulation mode).
+var isoBuilders = []string{"genisoimage", "mkisofs", "xorriso"}
+
+// buildISO packages sourceDir as an ISO9660+Joliet+RockRidge volume at
+// destPath, labeled volLabel.
+func buildISO(sourceDir, destPath, volLabel string) error {
+	for _, bin := range isoBuilders {
+		if _, err := exec.LookPath(bin); err != nil {
+			continue
+		}
+		args := []string{"-o", destPath, "-V", volLabel, "-J", "-R", sourceDir}
+		if bin == "xorriso" {
+			args = append([]string{"-as", "genisoimage"}, args...)
+		}
+		out, err := exec.Command(bin, args...).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("%s failed: %w: %s", bin, err, strings.TrimSpace(string(out)))
+		}
+		return nil
+	}
+	return errors.New("no ISO-building tool found on PATH (tried genisoimage, mkisofs, xorriso) — install one to use ch.os=windows")
+}
+
+// DnsmasqDHCPManager is the real cloud.DHCPManager implementation: it runs
+// one dnsmasq instance per bridge, serving DHCP only (--port=0 disables its
+// built-in DNS server, since onctl has no use for it and it would otherwise
+// compete with the host's own resolver on port 53).
+//
+// UNVERIFIED: like ConfigDriveSeedPreparer, this has not been run against a
+// real dnsmasq/cloud-hypervisor/Windows-guest chain.
+type DnsmasqDHCPManager struct {
+	// StateDir is where per-bridge dnsmasq PID/lease/hosts files live
+	// (Config.StateDir from CHConfig).
+	StateDir string
+}
+
+// NewDHCPManager returns a cloud.DHCPManager backed by dnsmasq, storing its
+// per-bridge state files under stateDir.
+func NewDHCPManager(stateDir string) cloud.DHCPManager {
+	return DnsmasqDHCPManager{StateDir: stateDir}
+}
+
+func (m DnsmasqDHCPManager) dhcpDir(bridge string) string {
+	return filepath.Join(m.StateDir, "dhcp", bridge)
+}
+
+func (m DnsmasqDHCPManager) pidFile(bridge string) string {
+	return filepath.Join(m.dhcpDir(bridge), "dnsmasq.pid")
+}
+
+func (m DnsmasqDHCPManager) hostsFile(bridge string) string {
+	return filepath.Join(m.dhcpDir(bridge), "hosts")
+}
+
+func (m DnsmasqDHCPManager) leaseFile(bridge string) string {
+	return filepath.Join(m.dhcpDir(bridge), "leases")
+}
+
+// EnsureDHCP starts a dnsmasq instance bound to bridge if one isn't already
+// running, serving the whole of cidr's host range minus the gateway
+// address. Idempotent, like NetworkManager.EnsureBridge.
+func (m DnsmasqDHCPManager) EnsureDHCP(bridge, cidr string) error {
+	if m.isRunning(bridge) {
+		return nil
+	}
+	dir := m.dhcpDir(bridge)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	hostsFile := m.hostsFile(bridge)
+	if _, err := os.Stat(hostsFile); os.IsNotExist(err) {
+		if err := os.WriteFile(hostsFile, []byte{}, 0644); err != nil {
+			return err
+		}
+	}
+	rangeStart, rangeEnd, err := dhcpRange(cidr)
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command("dnsmasq",
+		"--port=0", // DHCP only; no DNS service.
+		"--interface="+bridge,
+		"--bind-interfaces",
+		"--dhcp-range="+rangeStart+","+rangeEnd+",12h",
+		"--dhcp-hostsfile="+hostsFile,
+		// Scoped under our own state dir rather than dnsmasq's system-wide
+		// default (/var/lib/misc/dnsmasq.leases): that default is shared
+		// with any other dnsmasq usage on the host (another bridge, a
+		// manual test, libvirt, ...), and a stale lease there for an
+		// address a --dhcp-hostsfile reservation now claims silently wins
+		// — dnsmasq won't hand out an address it still has recorded as
+		// leased to a different MAC, no error, it just allocates from the
+		// free pool instead. A private lease file per bridge avoids ever
+		// colliding with unrelated leases.
+		"--dhcp-leasefile="+m.leaseFile(bridge),
+		"--pid-file="+m.pidFile(bridge),
+		"--except-interface=lo",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to start dnsmasq for %q: %w: %s", bridge, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func (m DnsmasqDHCPManager) isRunning(bridge string) bool {
+	data, err := os.ReadFile(m.pidFile(bridge))
+	if err != nil {
+		return false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return false
+	}
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	return process.Signal(syscall.Signal(0)) == nil
+}
+
+// AddReservation appends a "mac,ip" line to the bridge's dnsmasq
+// --dhcp-hostsfile and asks dnsmasq to reread it. It relies on the caller
+// (ProviderCH.Deploy) having called EnsureDHCP first for the same bridge —
+// there is no bridge parameter here because CHVMConfig/DHCPManager's
+// Deploy-time call sites don't thread it through per-reservation; if that
+// turns out to be needed in practice (e.g. multiple ch.network.bridge
+// values in use), this will need a bridge parameter added.
+//
+// mac is lowercased before writing: dnsmasq's --dhcp-hostsfile matching is
+// case-sensitive against the lowercase-normalized MAC a DHCP client
+// actually sends, so any mixed-case address here would silently never
+// match its own reservation (caught via chMAC, which used to emit
+// "02:C4:..." — see its doc comment).
+func (m DnsmasqDHCPManager) AddReservation(mac, ip string) error {
+	mac = strings.ToLower(mac)
+	return m.withEachBridgeHostsFile(func(bridge, hostsFile string) error {
+		f, err := os.OpenFile(hostsFile, os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = f.Close() }()
+		if _, err := fmt.Fprintf(f, "%s,%s\n", mac, ip); err != nil {
+			return err
+		}
+		return m.reload(bridge)
+	})
+}
+
+// RemoveReservation removes a "mac,..." line previously added by
+// AddReservation and asks dnsmasq to reread the file.
+func (m DnsmasqDHCPManager) RemoveReservation(mac string) error {
+	mac = strings.ToLower(mac)
+	return m.withEachBridgeHostsFile(func(bridge, hostsFile string) error {
+		data, err := os.ReadFile(hostsFile)
+		if err != nil {
+			return err
+		}
+		lines := strings.Split(string(data), "\n")
+		kept := lines[:0]
+		found := false
+		for _, line := range lines {
+			if strings.HasPrefix(line, mac+",") {
+				found = true
+				continue
+			}
+			if line != "" {
+				kept = append(kept, line)
+			}
+		}
+		if !found {
+			return nil
+		}
+		content := strings.Join(kept, "\n")
+		if content != "" {
+			content += "\n"
+		}
+		if err := os.WriteFile(hostsFile, []byte(content), 0644); err != nil {
+			return err
+		}
+		return m.reload(bridge)
+	})
+}
+
+// withEachBridgeHostsFile applies fn to every bridge's hosts file under
+// m.StateDir/dhcp. AddReservation/RemoveReservation don't know which
+// bridge a VM used (see the comment on AddReservation) — in the common
+// case of a single ch.network.bridge this is exactly one file, and fn is a
+// no-op for any other bridge's file that doesn't contain mac.
+func (m DnsmasqDHCPManager) withEachBridgeHostsFile(fn func(bridge, hostsFile string) error) error {
+	root := filepath.Join(m.StateDir, "dhcp")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if err := fn(e.Name(), m.hostsFile(e.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// reload asks the bridge's dnsmasq process to reread its hosts file via
+// SIGHUP, dnsmasq's documented mechanism for picking up
+// --dhcp-hostsfile changes without a restart.
+func (m DnsmasqDHCPManager) reload(bridge string) error {
+	data, err := os.ReadFile(m.pidFile(bridge))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return nil
+	}
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return nil
+	}
+	if err := process.Signal(syscall.SIGHUP); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		return err
+	}
+	return nil
+}
+
+// dhcpRange returns a usable DHCP range covering cidr, excluding the
+// gateway address (bridgeGatewayAndMask's first usable address, which the
+// bridge itself owns).
+func dhcpRange(cidr string) (start, end string, err error) {
+	ip, ipnet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid CIDR %q: %w", cidr, err)
+	}
+	ip4 := ip.To4()
+	if ip4 == nil {
+		return "", "", fmt.Errorf("only IPv4 CIDRs are supported, got %q", cidr)
+	}
+	ones, bits := ipnet.Mask.Size()
+	if bits != 32 || ones >= 31 {
+		return "", "", fmt.Errorf("CIDR %q is too small for a DHCP range", cidr)
+	}
+	broadcast := make(net.IP, 4)
+	for i := range ip4 {
+		broadcast[i] = ip4[i] | ^ipnet.Mask[i]
+	}
+	startIP := make(net.IP, 4)
+	copy(startIP, ip4)
+	startIP[3]++ // first address after the gateway (ip4 itself)
+	endIP := make(net.IP, 4)
+	copy(endIP, broadcast)
+	endIP[3]--
+	return startIP.String(), endIP.String(), nil
 }

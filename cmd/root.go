@@ -236,10 +236,12 @@ func initProvider(cloudProvider string) {
 	case "ch":
 		chConfig := providerch.GetConfig()
 		provider = &cloud.ProviderCH{
-			Config:  chConfig,
-			Process: providerch.NewProcessManager(chConfig.BinPath),
-			Net:     providerch.NewNetworkManager(),
-			Rootfs:  providerch.NewRootfsPreparer(),
+			Config:       chConfig,
+			Process:      providerch.NewProcessManager(chConfig.BinPath),
+			Net:          providerch.NewNetworkManager(),
+			Rootfs:       providerch.NewRootfsPreparer(),
+			WindowsGuest: providerch.NewWindowsGuestPreparer(),
+			DHCP:         providerch.NewDHCPManager(chConfig.StateDir),
 		}
 	case "static":
 		path, err := onctlSSHConfigPath()
