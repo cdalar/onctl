@@ -20,10 +20,13 @@ type fakeCHProcess struct {
 	stopCalls  []int
 	running    map[int]bool
 	notOwned   map[int]bool
+	// lastCfg is the CHVMConfig passed to the most recent Start call.
+	lastCfg CHVMConfig
 }
 
-func (f *fakeCHProcess) Start(_ string, _ CHVMConfig, _ string) (int, error) {
+func (f *fakeCHProcess) Start(_ string, cfg CHVMConfig, _ string) (int, error) {
 	f.startCalls++
+	f.lastCfg = cfg
 	if f.startErr != nil {
 		return 0, f.startErr
 	}
@@ -104,7 +107,10 @@ func TestCHTapName(t *testing.T) {
 
 func TestCHMAC(t *testing.T) {
 	mac := chMAC("my-test-vm")
-	assert.Regexp(t, `^02:C4:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}$`, mac)
+	// Lowercase throughout, not just valid hex: dnsmasq's --dhcp-hostsfile
+	// reservation matching is case-sensitive against the lowercase MAC a
+	// DHCP client actually sends (see chMAC's doc comment).
+	assert.Regexp(t, `^02:c4:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}$`, mac)
 	assert.Equal(t, mac, chMAC("my-test-vm"))
 	// Regression check for a bug caught in review: every octet must be
 	// valid hex, or Cloud Hypervisor rejects the vm.create payload outright.
@@ -301,4 +307,122 @@ func TestProviderCH_CreateSSHKey_Invalid(t *testing.T) {
 
 	_, err := p.CreateSSHKey(keyFile)
 	assert.Error(t, err)
+}
+
+// fakeWindowsGuestPreparer is a test double for WindowsGuestPreparer.
+type fakeWindowsGuestPreparer struct {
+	diskCalls int
+	isoCalls  int
+	hostnames []string
+}
+
+func (f *fakeWindowsGuestPreparer) PrepareDisk(_, destPath string) error {
+	f.diskCalls++
+	return os.WriteFile(destPath, []byte("fake-disk"), 0600)
+}
+
+func (f *fakeWindowsGuestPreparer) BuildSeedISO(destPath, hostname, _, _ string) error {
+	f.isoCalls++
+	f.hostnames = append(f.hostnames, hostname)
+	return os.WriteFile(destPath, []byte("fake-seed"), 0600)
+}
+
+// fakeDHCPManager is a test double for DHCPManager.
+type fakeDHCPManager struct {
+	ensureCalls  []string // bridge names
+	reservations map[string]string
+	removed      []string
+}
+
+func (f *fakeDHCPManager) EnsureDHCP(bridge, _ string) error {
+	f.ensureCalls = append(f.ensureCalls, bridge)
+	return nil
+}
+
+func (f *fakeDHCPManager) AddReservation(mac, ip string) error {
+	if f.reservations == nil {
+		f.reservations = map[string]string{}
+	}
+	f.reservations[mac] = ip
+	return nil
+}
+
+func (f *fakeDHCPManager) RemoveReservation(mac string) error {
+	f.removed = append(f.removed, mac)
+	delete(f.reservations, mac)
+	return nil
+}
+
+// newTestCHProviderWindows is newTestCHProvider's counterpart for the
+// ch.os=windows path.
+func newTestCHProviderWindows(t *testing.T) (ProviderCH, *fakeCHProcess, *fakeNetworkManager, *fakeWindowsGuestPreparer, *fakeDHCPManager) {
+	t.Helper()
+	proc := &fakeCHProcess{pid: 12345}
+	net := &fakeNetworkManager{}
+	winGuest := &fakeWindowsGuestPreparer{}
+	dhcp := &fakeDHCPManager{}
+	p := ProviderCH{
+		Config: CHConfig{
+			KernelImage: "/images/CLOUDHV.fd",
+			RootfsImage: "/images/windows.raw",
+			VCPUCount:   2,
+			MemSizeMib:  4096,
+			Bridge:      "chbr0",
+			CIDR:        "172.17.0.1/24",
+			Username:    "Administrator",
+			StateDir:    t.TempDir(),
+			OS:          chOSWindows,
+		},
+		Process:      proc,
+		Net:          net,
+		WindowsGuest: winGuest,
+		DHCP:         dhcp,
+	}
+	return p, proc, net, winGuest, dhcp
+}
+
+// TestProviderCH_Deploy_Windows verifies the ch.os=windows boot path: no
+// Linux kernel cmdline is generated, CHVMConfig.Firmware/KvmHyperv are set,
+// a seed ISO is built and attached, and the guest's DHCP reservation is
+// added instead of a static ip= kernel argument.
+func TestProviderCH_Deploy_Windows(t *testing.T) {
+	p, proc, netMgr, winGuest, dhcp := newTestCHProviderWindows(t)
+	pubKeyFile := writeTestPublicKey(t)
+
+	vm, err := p.Deploy(Vm{Name: "win-vm", SSHKeyID: pubKeyFile})
+	require.NoError(t, err)
+
+	assert.Equal(t, "running", vm.Status)
+	assert.Equal(t, 1, proc.startCalls)
+	assert.True(t, proc.lastCfg.Firmware, "windows guests must boot via UEFI firmware, not a direct kernel")
+	assert.True(t, proc.lastCfg.KvmHyperv, "windows guests require Hyper-V enlightenments")
+	assert.Empty(t, proc.lastCfg.KernelArgs, "windows has no Linux kernel cmdline to parse")
+	assert.Equal(t, "/images/CLOUDHV.fd", proc.lastCfg.KernelImage, "reinterpreted as the firmware path")
+	assert.NotEmpty(t, proc.lastCfg.SeedDiskPath)
+
+	assert.Equal(t, 1, winGuest.diskCalls)
+	assert.Equal(t, 1, winGuest.isoCalls)
+	assert.Equal(t, []string{"win-vm"}, winGuest.hostnames)
+
+	assert.Equal(t, []string{"chbr0"}, dhcp.ensureCalls)
+	mac := chMAC("win-vm")
+	assert.Equal(t, "172.17.0.2", dhcp.reservations[mac])
+
+	assert.Equal(t, []string{"chbr0"}, netMgr.bridges)
+
+	meta, err := loadCHMetadata(p.metadataPath("win-vm"))
+	require.NoError(t, err)
+	assert.Equal(t, chOSWindows, meta.OS)
+	assert.NotEmpty(t, meta.SeedDiskPath)
+}
+
+// TestProviderCH_Destroy_Windows verifies Destroy removes the guest's DHCP
+// reservation on top of the usual tap/state cleanup.
+func TestProviderCH_Destroy_Windows(t *testing.T) {
+	p, _, _, _, dhcp := newTestCHProviderWindows(t)
+	_, err := p.Deploy(Vm{Name: "win-vm"})
+	require.NoError(t, err)
+
+	require.NoError(t, p.Destroy(Vm{Name: "win-vm"}))
+	assert.Contains(t, dhcp.removed, chMAC("win-vm"))
 }
