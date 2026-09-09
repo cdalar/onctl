@@ -226,6 +226,18 @@ type fcVM struct {
 	// VM name) is all "resume elsewhere" needs.
 	SnapshotStatePath   string `json:"snapshotStatePath,omitempty"`
 	SnapshotMemFilePath string `json:"snapshotMemFilePath,omitempty"`
+	// SSHPort is the guest's SSH port, persisted so List()'s SSHReady
+	// probe (see reconcileSSHReady) targets the right one instead of
+	// assuming 22 -- falls back to 22 itself when zero (a legacy record
+	// predating this field, or a caller that never set Vm.SSHPort).
+	SSHPort int `json:"sshPort,omitempty"`
+	// SSHReady is set once List() confirms this VM's SSH port is
+	// reachable (see cloud.ProbeSSHReady) -- never reset back to false
+	// once true, since this only exists to distinguish "still booting"
+	// from "actually ready," not to track live reachability from moment
+	// to moment (that's what Status/isAlive already do, via a different,
+	// cheaper signal: process liveness, not a network probe).
+	SSHReady bool `json:"sshReady,omitempty"`
 }
 
 func (p ProviderFC) vmDir(name string) string {
@@ -307,6 +319,8 @@ func mapFCVM(vm fcVM) Vm {
 		Type:      fmt.Sprintf("%dvcpu-%dmb", vm.VCPUCount, vm.MemSizeMib),
 		Image:     vm.RootfsPath,
 		Status:    vm.Status,
+		SSHPort:   vm.SSHPort,
+		SSHReady:  vm.SSHReady,
 		CreatedAt: vm.CreatedAt,
 	}
 }
@@ -632,6 +646,10 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 		return Vm{}, fmt.Errorf("failed to start microVM: %w", err)
 	}
 
+	sshPort := server.SSHPort
+	if sshPort == 0 {
+		sshPort = 22
+	}
 	vm := fcVM{
 		Name:        server.Name,
 		PID:         pid,
@@ -646,6 +664,7 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 		RootfsPath:  rootfsPath,
 		CachePath:   cachePath,
 		CacheImage:  p.Config.CacheImage,
+		SSHPort:     sshPort,
 		CreatedAt:   time.Now(),
 	}
 	if err := saveFCMetadata(p.metadataPath(server.Name), vm); err != nil {
@@ -873,6 +892,7 @@ func (p ProviderFC) List() (VmList, error) {
 	if err != nil {
 		return VmList{}, err
 	}
+	p.reconcileSSHReady(all)
 	var list VmList
 	for _, vm := range all {
 		if vm.Status == fcStatusPaused {
@@ -881,6 +901,24 @@ func (p ProviderFC) List() (VmList, error) {
 		list.List = append(list.List, mapFCVM(vm))
 	}
 	return list, nil
+}
+
+// reconcileSSHReady mirrors ProviderCH.reconcileSSHReady -- see its doc
+// comment.
+func (p ProviderFC) reconcileSSHReady(all []fcVM) {
+	candidates := make([]Vm, len(all))
+	for i, vm := range all {
+		if vm.Status == fcStatusRunning && !vm.SSHReady {
+			candidates[i] = Vm{IP: vm.IPAddress, SSHPort: vm.SSHPort}
+		}
+	}
+	ready := ProbeSSHReady(candidates)
+	for i := range ready {
+		all[i].SSHReady = true
+		if err := saveFCMetadata(p.metadataPath(all[i].Name), all[i]); err != nil {
+			log.Println("[DEBUG] failed to persist SSHReady for " + all[i].Name + ": " + err.Error())
+		}
+	}
 }
 
 // ListPaused returns all paused managed microVMs.

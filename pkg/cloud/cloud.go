@@ -2,7 +2,9 @@ package cloud
 
 import (
 	"fmt"
+	"net"
 	"reflect"
+	"sync"
 	"time"
 )
 
@@ -34,6 +36,18 @@ type Vm struct {
 	Image string `yaml:"image"`
 	// Status is the status of the instance
 	Status string
+	// SSHReady reports whether this VM's SSH port has been confirmed
+	// reachable at least once (see ProbeTCP and each local provider's
+	// List(), which is where this is actually computed for fc/ch — the
+	// remote-cloud providers below never set it, since they have no
+	// equivalent "process alive but guest still booting" gap: their own
+	// Deploy already blocks on WaitForCloudInit/WaitForSSH before ever
+	// returning, so by the time such a VM shows up in List() at all, it
+	// was already fully ready). Status alone only reflects "the VMM
+	// process is alive," not "the guest OS finished booting" -- a
+	// consumer that needs to know when it's actually safe to open a
+	// terminal (e.g. boxctl-vms) should gate on this, not on Status.
+	SSHReady bool
 	// Location is the location of the instance
 	Location string
 	// SSHKeyID is the ID of the SSH key
@@ -55,6 +69,72 @@ type CostStruct struct {
 	CostPerHour     float64
 	CostPerMonth    float64
 	AccumulatedCost float64
+}
+
+// ProbeTCP reports whether a TCP connection to addr ("host:port") succeeds
+// within timeout. Used by fc/ch's List() to compute Vm.SSHReady -- a plain
+// TCP connect, not a full SSH handshake: WaitForSSH (internal/tools/
+// remote-run.go), used at create time, already does the real handshake, but
+// that needs the operator's actual SSH private key material threaded all
+// the way into this package (pkg/cloud currently has none, by design --
+// key handling lives in cmd/ and internal/tools) and, worse, its key-
+// parsing path can block on an interactive passphrase prompt on stdin if
+// the key is passphrase-protected. That's fine once, synchronously, in a
+// CLI command a human is sitting at; it would be a real bug here, since
+// List() also runs from a long-running background poll (see boxctl-vms-
+// agent.sh) with no terminal attached, where blocking on stdin would hang
+// forever. A successful TCP connect to the SSH port is a materially
+// weaker signal (it doesn't prove key auth would succeed, only that
+// sshd/OpenSSH is listening) but is what actually closes the multi-minute
+// gap this exists for -- the "guest hasn't even finished booting /
+// networking isn't up yet" phase -- without any of the above risk.
+func ProbeTCP(addr string, timeout time.Duration) bool {
+	conn, err := net.DialTimeout("tcp", addr, timeout)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
+
+// probeTimeout bounds each individual TCP probe ProbeSSHReady issues.
+// Short, since these run inline in List() (called on every `onctl ls`,
+// including a periodic poll every few seconds -- see boxctl-vms-agent.sh)
+// and every not-yet-ready VM is probed concurrently, so this is close to
+// the actual worst-case added latency, not a per-VM sum.
+const probeTimeout = 300 * time.Millisecond
+
+// ProbeSSHReady concurrently TCP-probes every candidate VM's IP:port (see
+// ProbeTCP) and returns the set of indices (into candidates) that answered
+// within probeTimeout. Shared by ProviderFC.List and ProviderCH.List,
+// which each know how to persist SSHReady=true back to their own
+// on-disk metadata for the returned indices -- this function has no
+// opinion on persistence, just on which candidates are currently
+// reachable.
+func ProbeSSHReady(candidates []Vm) map[int]bool {
+	ready := make(map[int]bool)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for i, vm := range candidates {
+		if vm.IP == "" {
+			continue
+		}
+		port := vm.SSHPort
+		if port == 0 {
+			port = 22
+		}
+		wg.Add(1)
+		go func(i int, addr string) {
+			defer wg.Done()
+			if ProbeTCP(addr, probeTimeout) {
+				mu.Lock()
+				ready[i] = true
+				mu.Unlock()
+			}
+		}(i, net.JoinHostPort(vm.IP, fmt.Sprint(port)))
+	}
+	wg.Wait()
+	return ready
 }
 
 func (v Vm) String() string {

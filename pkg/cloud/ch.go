@@ -185,6 +185,18 @@ type chVM struct {
 	// WindowsGuestPreparer), empty for a Linux guest.
 	SeedDiskPath string    `json:"seedDiskPath,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
+	// SSHPort is the guest's SSH port, persisted so List()'s SSHReady
+	// probe (see reconcileSSHReady) targets the right one instead of
+	// assuming 22 -- falls back to 22 itself when zero (a legacy record
+	// predating this field, or a caller that never set Vm.SSHPort).
+	SSHPort int `json:"sshPort,omitempty"`
+	// SSHReady is set once List() confirms this VM's SSH port is
+	// reachable (see cloud.ProbeSSHReady) -- never reset back to false
+	// once true, since this only exists to distinguish "still booting"
+	// from "actually ready," not to track live reachability from moment
+	// to moment (that's what Status/isAlive already do, via a different,
+	// cheaper signal: process liveness, not a network probe).
+	SSHReady bool `json:"sshReady,omitempty"`
 }
 
 func (p ProviderCH) vmDir(name string) string {
@@ -254,6 +266,8 @@ func mapCHVM(vm chVM) Vm {
 		Type:      fmt.Sprintf("%dvcpu-%dmb", vm.VCPUCount, vm.MemSizeMib),
 		Image:     vm.RootfsPath,
 		Status:    vm.Status,
+		SSHPort:   vm.SSHPort,
+		SSHReady:  vm.SSHReady,
 		CreatedAt: vm.CreatedAt,
 	}
 }
@@ -537,6 +551,10 @@ func (p ProviderCH) Deploy(server Vm) (Vm, error) {
 		return Vm{}, fmt.Errorf("failed to start microVM: %w", err)
 	}
 
+	sshPort := server.SSHPort
+	if sshPort == 0 {
+		sshPort = 22
+	}
 	vm := chVM{
 		Name:         server.Name,
 		PID:          pid,
@@ -551,6 +569,7 @@ func (p ProviderCH) Deploy(server Vm) (Vm, error) {
 		RootfsPath:   rootfsPath,
 		OS:           p.Config.OS,
 		SeedDiskPath: seedDiskPath,
+		SSHPort:      sshPort,
 		CreatedAt:    time.Now(),
 	}
 	if err := saveCHMetadata(p.metadataPath(server.Name), vm); err != nil {
@@ -615,11 +634,33 @@ func (p ProviderCH) List() (VmList, error) {
 	if err != nil {
 		return VmList{}, err
 	}
+	p.reconcileSSHReady(all)
 	var list VmList
 	for _, vm := range all {
 		list.List = append(list.List, mapCHVM(vm))
 	}
 	return list, nil
+}
+
+// reconcileSSHReady TCP-probes (see cloud.ProbeSSHReady) every running,
+// not-yet-SSHReady VM in all, updating both the in-memory slice (so this
+// call's own List() result reflects newly-ready VMs immediately, not just
+// the next one) and, for any that answered, persisting SSHReady=true to
+// disk so future List() calls skip probing them again.
+func (p ProviderCH) reconcileSSHReady(all []chVM) {
+	candidates := make([]Vm, len(all))
+	for i, vm := range all {
+		if vm.Status == chStatusRunning && !vm.SSHReady {
+			candidates[i] = Vm{IP: vm.IPAddress, SSHPort: vm.SSHPort}
+		}
+	}
+	ready := ProbeSSHReady(candidates)
+	for i := range ready {
+		all[i].SSHReady = true
+		if err := saveCHMetadata(p.metadataPath(all[i].Name), all[i]); err != nil {
+			log.Println("[DEBUG] failed to persist SSHReady for " + all[i].Name + ": " + err.Error())
+		}
+	}
 }
 
 // ListPaused always returns an empty list: this provider has no pause support.
