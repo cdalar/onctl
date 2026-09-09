@@ -226,18 +226,10 @@ type fcVM struct {
 	// VM name) is all "resume elsewhere" needs.
 	SnapshotStatePath   string `json:"snapshotStatePath,omitempty"`
 	SnapshotMemFilePath string `json:"snapshotMemFilePath,omitempty"`
-	// SSHPort is the guest's SSH port, persisted so List()'s SSHReady
-	// probe (see reconcileSSHReady) targets the right one instead of
-	// assuming 22 -- falls back to 22 itself when zero (a legacy record
-	// predating this field, or a caller that never set Vm.SSHPort).
+	// SSHPort is the guest's SSH port, reported as Vm.SSHPort (mapFCVM) --
+	// falls back to 22 itself when zero (a legacy record predating this
+	// field, or a caller that never set Vm.SSHPort).
 	SSHPort int `json:"sshPort,omitempty"`
-	// SSHReady is set once List() confirms this VM's SSH port is
-	// reachable (see cloud.ProbeSSHReady) -- never reset back to false
-	// once true, since this only exists to distinguish "still booting"
-	// from "actually ready," not to track live reachability from moment
-	// to moment (that's what Status/isAlive already do, via a different,
-	// cheaper signal: process liveness, not a network probe).
-	SSHReady bool `json:"sshReady,omitempty"`
 }
 
 func (p ProviderFC) vmDir(name string) string {
@@ -312,15 +304,24 @@ func (p ProviderFC) loadAndReconcile(path string) (fcVM, error) {
 
 func mapFCVM(vm fcVM) Vm {
 	return Vm{
-		Provider:  "fc",
-		ID:        vm.Name,
-		Name:      vm.Name,
-		IP:        vm.IPAddress,
-		Type:      fmt.Sprintf("%dvcpu-%dmb", vm.VCPUCount, vm.MemSizeMib),
-		Image:     vm.RootfsPath,
-		Status:    vm.Status,
-		SSHPort:   vm.SSHPort,
-		SSHReady:  vm.SSHReady,
+		Provider: "fc",
+		ID:       vm.Name,
+		Name:     vm.Name,
+		IP:       vm.IPAddress,
+		Type:     fmt.Sprintf("%dvcpu-%dmb", vm.VCPUCount, vm.MemSizeMib),
+		Image:    vm.RootfsPath,
+		Status:   vm.Status,
+		SSHPort:  vm.SSHPort,
+		// Unlike ch (see ProviderCH.reconcileSSHReady), fc does not
+		// TCP-probe to compute this: a Firecracker microVM boots in
+		// milliseconds (the whole point of the technology -- see the
+		// dashboard's own "boot in milliseconds" copy), so by the time
+		// any caller sees this VM at all, Status=="running" is already an
+		// accurate-enough proxy for "the guest is reachable." Probing
+		// anyway would only add needless latency to List() (and, via
+		// boxctl-vms-agent.sh's periodic poll, to every dashboard refresh)
+		// for a distinction that isn't real for this provider.
+		SSHReady:  vm.Status == fcStatusRunning,
 		CreatedAt: vm.CreatedAt,
 	}
 }
@@ -892,7 +893,6 @@ func (p ProviderFC) List() (VmList, error) {
 	if err != nil {
 		return VmList{}, err
 	}
-	p.reconcileSSHReady(all)
 	var list VmList
 	for _, vm := range all {
 		if vm.Status == fcStatusPaused {
@@ -901,24 +901,6 @@ func (p ProviderFC) List() (VmList, error) {
 		list.List = append(list.List, mapFCVM(vm))
 	}
 	return list, nil
-}
-
-// reconcileSSHReady mirrors ProviderCH.reconcileSSHReady -- see its doc
-// comment.
-func (p ProviderFC) reconcileSSHReady(all []fcVM) {
-	candidates := make([]Vm, len(all))
-	for i, vm := range all {
-		if vm.Status == fcStatusRunning && !vm.SSHReady {
-			candidates[i] = Vm{IP: vm.IPAddress, SSHPort: vm.SSHPort}
-		}
-	}
-	ready := ProbeSSHReady(candidates)
-	for i := range ready {
-		all[i].SSHReady = true
-		if err := saveFCMetadata(p.metadataPath(all[i].Name), all[i]); err != nil {
-			log.Println("[DEBUG] failed to persist SSHReady for " + all[i].Name + ": " + err.Error())
-		}
-	}
 }
 
 // ListPaused returns all paused managed microVMs.

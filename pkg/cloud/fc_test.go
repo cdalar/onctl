@@ -389,6 +389,26 @@ func TestProviderFC_List_ReconcilesDeadProcess(t *testing.T) {
 	assert.Equal(t, fcStatusDead, meta.Status, "status should self-heal on disk")
 }
 
+// TestProviderFC_List_SSHReadyMirrorsStatus is a regression test for a
+// deliberate difference from ch: fc's List() must NOT TCP-probe for
+// SSHReady (see mapFCVM's doc comment -- a Firecracker microVM boots in
+// milliseconds, so Status=="running" is already an accurate-enough proxy,
+// and probing would only add needless latency to every List() call). A
+// freshly deployed VM here has no real, reachable IP at all (the fake
+// test harness never assigns one) -- if List() were still probing, this
+// VM would incorrectly come back SSHReady=false; asserting it comes back
+// true instead proves the probe path is gone, not just untested.
+func TestProviderFC_List_SSHReadyMirrorsStatus(t *testing.T) {
+	p, _, _, _, _ := newTestFCProvider(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+
+	list, err := p.List()
+	require.NoError(t, err)
+	require.Len(t, list.List, 1)
+	assert.True(t, list.List[0].SSHReady, "fc SSHReady must mirror Status==running, not a real probe")
+}
+
 // TestProviderFC_Deploy_RecreatesStaleRecord verifies that Deploy() does not
 // silently no-op when a same-named microVM's record exists but its process
 // is dead — it should clean up the stale state and boot a fresh microVM.

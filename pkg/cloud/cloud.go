@@ -36,17 +36,19 @@ type Vm struct {
 	Image string `yaml:"image"`
 	// Status is the status of the instance
 	Status string
-	// SSHReady reports whether this VM's SSH port has been confirmed
-	// reachable at least once (see ProbeTCP and each local provider's
-	// List(), which is where this is actually computed for fc/ch — the
-	// remote-cloud providers below never set it, since they have no
-	// equivalent "process alive but guest still booting" gap: their own
-	// Deploy already blocks on WaitForCloudInit/WaitForSSH before ever
-	// returning, so by the time such a VM shows up in List() at all, it
-	// was already fully ready). Status alone only reflects "the VMM
-	// process is alive," not "the guest OS finished booting" -- a
-	// consumer that needs to know when it's actually safe to open a
-	// terminal (e.g. boxctl-vms) should gate on this, not on Status.
+	// SSHReady reports whether it's actually safe to open a terminal to
+	// this VM -- Status alone only reflects "the VMM process is alive,"
+	// not "the guest OS finished booting," and for a slow-booting guest
+	// that gap can be minutes wide. Only ch (ProviderCH.reconcileSSHReady)
+	// really TCP-probes for this (see ProbeTCP/ProbeSSHReady), since a
+	// Cloud Hypervisor/Windows guest can take that long. fc derives it
+	// straight from Status instead (mapFCVM) -- a Firecracker microVM
+	// boots in milliseconds, so probing would only add latency to List()
+	// (and, via boxctl-vms-agent.sh's periodic poll, to every dashboard
+	// refresh) for a distinction that isn't real there. The remote-cloud
+	// providers below never set it at all: their own Deploy already
+	// blocks on WaitForCloudInit/WaitForSSH before ever returning, so by
+	// the time such a VM shows up in List(), it was already fully ready.
 	SSHReady bool
 	// Location is the location of the instance
 	Location string
