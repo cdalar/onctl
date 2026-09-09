@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -236,6 +237,65 @@ func TestProviderCH_GetByName_ReconcilesDeadProcess(t *testing.T) {
 	vm, err := p.GetByName("test-vm")
 	require.NoError(t, err)
 	assert.Equal(t, chStatusDead, vm.Status)
+}
+
+// TestProviderCH_List_MarksSSHReadyWhenReachable is a regression test for
+// the "which buttons should the dashboard show" gap: Status alone only
+// means "the cloud-hypervisor process is alive," not "the guest actually
+// finished booting" (chStatusRunning is set at Deploy time, well before a
+// Windows guest's cloudbase-init run finishes) -- List() must also
+// TCP-probe and report SSHReady so a consumer like boxctl-vms can tell
+// the two apart.
+func TestProviderCH_List_MarksSSHReadyWhenReachable(t *testing.T) {
+	p, _, _, _ := newTestCHProvider(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+	host, port, err := net.SplitHostPort(ln.Addr().String())
+	require.NoError(t, err)
+
+	// Simulate the VM's real, DHCP/static-assigned IP landing on our fake
+	// listener -- List() has no way to know this address is "special", it
+	// just probes whatever IPAddress metadata.json already has.
+	vm, err := loadCHMetadata(p.metadataPath("test-vm"))
+	require.NoError(t, err)
+	vm.IPAddress = host
+	var portNum int
+	_, err = fmt.Sscanf(port, "%d", &portNum)
+	require.NoError(t, err)
+	vm.SSHPort = portNum
+	require.NoError(t, saveCHMetadata(p.metadataPath("test-vm"), vm))
+
+	list, err := p.List()
+	require.NoError(t, err)
+	require.Len(t, list.List, 1)
+	assert.True(t, list.List[0].SSHReady, "List() must report SSHReady once the port is reachable")
+
+	// Must also have persisted, not just been reflected in this one call's
+	// return value -- a later List() shouldn't need to re-probe (and
+	// couldn't tell the difference if it silently didn't persist).
+	reloaded, err := loadCHMetadata(p.metadataPath("test-vm"))
+	require.NoError(t, err)
+	assert.True(t, reloaded.SSHReady)
+}
+
+// TestProviderCH_List_SSHReadyFalseUntilReachable checks the negative
+// case: a freshly deployed VM (fake test harness never assigns a real,
+// reachable IP) is reported not-ready rather than defaulting to ready --
+// the whole point is to distinguish "still booting" from "actually up",
+// so a false positive here would defeat it.
+func TestProviderCH_List_SSHReadyFalseUntilReachable(t *testing.T) {
+	p, _, _, _ := newTestCHProvider(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+
+	list, err := p.List()
+	require.NoError(t, err)
+	require.Len(t, list.List, 1)
+	assert.False(t, list.List[0].SSHReady)
 }
 
 func TestProviderCH_GetByName_NotFound(t *testing.T) {

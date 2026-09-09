@@ -1,11 +1,14 @@
 package cloud
 
 import (
+	"fmt"
+	"net"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestVmString(t *testing.T) {
@@ -93,4 +96,38 @@ func TestCostStruct(t *testing.T) {
 	assert.InDelta(t, 0.05, c.CostPerHour, 0.0001)
 	assert.InDelta(t, 36.0, c.CostPerMonth, 0.0001)
 	assert.InDelta(t, 2.5, c.AccumulatedCost, 0.0001)
+}
+
+func TestProbeTCP(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+
+	assert.True(t, ProbeTCP(ln.Addr().String(), time.Second), "a real listener must probe reachable")
+
+	// 10.255.255.1 is a non-routable address reserved for exactly this
+	// (blackholes rather than fast-refusing, so this also exercises the
+	// timeout path, not just "connection refused").
+	assert.False(t, ProbeTCP("10.255.255.1:22", 100*time.Millisecond))
+}
+
+func TestProbeSSHReady(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+	_, portStr, err := net.SplitHostPort(ln.Addr().String())
+	require.NoError(t, err)
+	var port int
+	_, err = fmt.Sscanf(portStr, "%d", &port)
+	require.NoError(t, err)
+
+	candidates := []Vm{
+		{IP: "127.0.0.1", SSHPort: port},  // reachable
+		{IP: "10.255.255.1", SSHPort: 22}, // unreachable (probeTimeout bounds this)
+		{IP: ""},                          // not a real candidate -- must be skipped, not probed
+	}
+	ready := ProbeSSHReady(candidates)
+	assert.True(t, ready[0], "index 0 (real listener) must be reported ready")
+	assert.False(t, ready[1], "index 1 (unreachable) must not be reported ready")
+	assert.False(t, ready[2], "index 2 (no IP) must not be reported ready")
 }
