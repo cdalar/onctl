@@ -286,3 +286,60 @@ func TestDnsmasqDHCPManager_ReservationRoundTrip(t *testing.T) {
 	assert.NotContains(t, string(data), "00:00:00:01")
 	assert.Contains(t, string(data), "02:c4:00:00:00:02,172.17.0.3")
 }
+
+// TestDnsmasqDHCPManager_RemoveReservation_ClearsStaleLease is a
+// regression test for a real bug found live: RemoveReservation used to
+// only strip the hosts-file reservation, leaving the corresponding
+// dnsmasq lease-file entry in place. Since dnsmasq only reads its lease
+// file at startup and then owns/rewrites it from memory, that stale entry
+// silently survived a VM's destroy and blocked the next VM that reused
+// the same low IP (chIPs allocates low addresses first) from ever
+// actually getting it via DHCP -- onctl create would report the expected
+// IP but the guest's real DHCP handshake got redirected elsewhere,
+// hanging onctl's SSH-wait until timeout. No real dnsmasq process is
+// started here (no EnsureDHCP/cidr file), so restartDnsmasq's actual
+// process kill/restart is exercised as a no-op -- this test only proves
+// the lease-file bookkeeping itself, matching
+// TestDnsmasqDHCPManager_ReservationRoundTrip's existing no-real-dnsmasq
+// pattern above.
+func TestDnsmasqDHCPManager_RemoveReservation_ClearsStaleLease(t *testing.T) {
+	stateDir := t.TempDir()
+	m := DnsmasqDHCPManager{StateDir: stateDir}
+	bridge := "chbr0"
+	require.NoError(t, os.MkdirAll(m.dhcpDir(bridge), 0755))
+	require.NoError(t, os.WriteFile(m.hostsFile(bridge), []byte("02:c4:00:00:00:01,172.17.0.2\n"), 0644))
+	require.NoError(t, os.WriteFile(m.leaseFile(bridge), []byte(
+		"1234567890 02:c4:00:00:00:01 172.17.0.2 my-old-vm 01:02:c4:00:00:00:01\n"+
+			"1234567891 02:c4:00:00:00:02 172.17.0.3 other-vm 01:02:c4:00:00:00:02\n",
+	), 0644))
+
+	require.NoError(t, m.RemoveReservation("02:C4:00:00:00:01"))
+
+	data, err := os.ReadFile(m.leaseFile(bridge))
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "00:00:00:01")
+	assert.Contains(t, string(data), "02:c4:00:00:00:02 172.17.0.3")
+
+	hostsData, err := os.ReadFile(m.hostsFile(bridge))
+	require.NoError(t, err)
+	assert.NotContains(t, string(hostsData), "00:00:00:01")
+}
+
+// TestDnsmasqDHCPManager_RemoveReservation_NoMatch checks that removing a
+// MAC with no hosts-file reservation and no lease-file entry is a clean
+// no-op (not an error, and doesn't rewrite either file with equivalent
+// content) -- Destroy calls this unconditionally, including for VMs whose
+// DHCP setup never fully completed.
+func TestDnsmasqDHCPManager_RemoveReservation_NoMatch(t *testing.T) {
+	stateDir := t.TempDir()
+	m := DnsmasqDHCPManager{StateDir: stateDir}
+	bridge := "chbr0"
+	require.NoError(t, os.MkdirAll(m.dhcpDir(bridge), 0755))
+	require.NoError(t, os.WriteFile(m.hostsFile(bridge), []byte("02:c4:00:00:00:02,172.17.0.3\n"), 0644))
+
+	require.NoError(t, m.RemoveReservation("02:c4:00:00:00:99"))
+
+	data, err := os.ReadFile(m.hostsFile(bridge))
+	require.NoError(t, err)
+	assert.Equal(t, "02:c4:00:00:00:02,172.17.0.3\n", string(data))
+}
