@@ -734,16 +734,32 @@ func (m DnsmasqDHCPManager) leaseFile(bridge string) string {
 	return filepath.Join(m.dhcpDir(bridge), "leases")
 }
 
+// cidrFile persists the cidr EnsureDHCP was last called with for bridge, so
+// restartDnsmasq (see RemoveReservation) can restart dnsmasq with the same
+// --dhcp-range without needing the cidr threaded through RemoveReservation's
+// signature (which cloud.DHCPManager's interface — and every call site —
+// only ever passes a MAC to).
+func (m DnsmasqDHCPManager) cidrFile(bridge string) string {
+	return filepath.Join(m.dhcpDir(bridge), "cidr")
+}
+
 // EnsureDHCP starts a dnsmasq instance bound to bridge if one isn't already
 // running, serving the whole of cidr's host range minus the gateway
 // address. Idempotent, like NetworkManager.EnsureBridge.
 func (m DnsmasqDHCPManager) EnsureDHCP(bridge, cidr string) error {
-	if m.isRunning(bridge) {
-		return nil
-	}
 	dir := m.dhcpDir(bridge)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
+	}
+	// Recorded unconditionally (even if dnsmasq is already running) so it's
+	// always current for the next restartDnsmasq call, same spirit as
+	// AddReservation/RemoveReservation always rewriting the hosts file
+	// rather than only on first creation.
+	if err := os.WriteFile(m.cidrFile(bridge), []byte(cidr), 0644); err != nil {
+		return err
+	}
+	if m.isRunning(bridge) {
+		return nil
 	}
 	hostsFile := m.hostsFile(bridge)
 	if _, err := os.Stat(hostsFile); os.IsNotExist(err) {
@@ -751,6 +767,15 @@ func (m DnsmasqDHCPManager) EnsureDHCP(bridge, cidr string) error {
 			return err
 		}
 	}
+	return m.startDnsmasq(bridge, cidr)
+}
+
+// startDnsmasq launches dnsmasq for bridge and returns once it's running
+// (dnsmasq daemonizes itself, so CombinedOutput returning without error is
+// sufficient — this does not itself check isRunning). Split out of
+// EnsureDHCP so restartDnsmasq (see RemoveReservation) can reuse the exact
+// same command construction after killing a stale instance.
+func (m DnsmasqDHCPManager) startDnsmasq(bridge, cidr string) error {
 	rangeStart, rangeEnd, err := dhcpRange(cidr)
 	if err != nil {
 		return err
@@ -760,7 +785,7 @@ func (m DnsmasqDHCPManager) EnsureDHCP(bridge, cidr string) error {
 		"--interface="+bridge,
 		"--bind-interfaces",
 		"--dhcp-range="+rangeStart+","+rangeEnd+",12h",
-		"--dhcp-hostsfile="+hostsFile,
+		"--dhcp-hostsfile="+m.hostsFile(bridge),
 		// Scoped under our own state dir rather than dnsmasq's system-wide
 		// default (/var/lib/misc/dnsmasq.leases): that default is shared
 		// with any other dnsmasq usage on the host (another bridge, a
@@ -769,7 +794,10 @@ func (m DnsmasqDHCPManager) EnsureDHCP(bridge, cidr string) error {
 		// — dnsmasq won't hand out an address it still has recorded as
 		// leased to a different MAC, no error, it just allocates from the
 		// free pool instead. A private lease file per bridge avoids ever
-		// colliding with unrelated leases.
+		// colliding with unrelated leases from a DIFFERENT bridge/tool —
+		// see restartDnsmasq for the remaining case this doesn't cover
+		// (a stale lease from a previously destroyed VM on this SAME
+		// bridge).
 		"--dhcp-leasefile="+m.leaseFile(bridge),
 		"--pid-file="+m.pidFile(bridge),
 		"--except-interface=lo",
@@ -826,7 +854,25 @@ func (m DnsmasqDHCPManager) AddReservation(mac, ip string) error {
 }
 
 // RemoveReservation removes a "mac,..." line previously added by
-// AddReservation and asks dnsmasq to reread the file.
+// AddReservation, plus that MAC's own lease-file entry (if any), and
+// restarts dnsmasq so both changes actually take effect.
+//
+// The lease-file cleanup (not just the hosts-file one) matters because
+// dnsmasq treats its lease file as its own persistent state, populated at
+// startup and then owned/rewritten by the running process from then on —
+// SIGHUP makes it reread the hosts file (see reload, still used by
+// AddReservation) but does NOT make it forget or reread already-granted
+// leases. Without this, a VM's MAC/IP stays "leased" in dnsmasq's memory
+// after onctl destroy has removed the VM and its reservation, and the
+// next VM that reuses that IP (chIPs allocates low addresses first, so
+// this is the common case, not an edge case) has its real DHCP handshake
+// silently redirected to a different address than the one onctl thinks it
+// reserved — the new VM never gets its expected IP, and onctl create times
+// out waiting for SSH on an address the guest never actually holds.
+// Restarting dnsmasq (rather than a lighter-weight in-place fix — there is
+// no SIGHUP-equivalent for "forget this one lease", short of adding a new
+// dhcp_release/dnsmasq-utils host dependency) is what actually clears that
+// in-memory state; see restartDnsmasq.
 func (m DnsmasqDHCPManager) RemoveReservation(mac string) error {
 	mac = strings.ToLower(mac)
 	return m.withEachBridgeHostsFile(func(bridge, hostsFile string) error {
@@ -846,7 +892,11 @@ func (m DnsmasqDHCPManager) RemoveReservation(mac string) error {
 				kept = append(kept, line)
 			}
 		}
-		if !found {
+		leaseRemoved, err := m.removeLeaseFileEntry(bridge, mac)
+		if err != nil {
+			return err
+		}
+		if !found && !leaseRemoved {
 			return nil
 		}
 		content := strings.Join(kept, "\n")
@@ -856,8 +906,79 @@ func (m DnsmasqDHCPManager) RemoveReservation(mac string) error {
 		if err := os.WriteFile(hostsFile, []byte(content), 0644); err != nil {
 			return err
 		}
-		return m.reload(bridge)
+		return m.restartDnsmasq(bridge)
 	})
+}
+
+// removeLeaseFileEntry strips any line for mac from bridge's dnsmasq lease
+// file (format: "<expiry> <mac> <ip> <hostname> <client-id>", one per
+// line — see dnsmasq(8)) and reports whether anything was removed. A
+// missing lease file (dnsmasq never started, or never granted a lease on
+// this bridge yet) is not an error — nothing to clean up.
+func (m DnsmasqDHCPManager) removeLeaseFileEntry(bridge, mac string) (bool, error) {
+	leaseFile := m.leaseFile(bridge)
+	data, err := os.ReadFile(leaseFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	lines := strings.Split(string(data), "\n")
+	kept := lines[:0]
+	found := false
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && strings.ToLower(fields[1]) == mac {
+			found = true
+			continue
+		}
+		if line != "" {
+			kept = append(kept, line)
+		}
+	}
+	if !found {
+		return false, nil
+	}
+	content := strings.Join(kept, "\n")
+	if content != "" {
+		content += "\n"
+	}
+	if err := os.WriteFile(leaseFile, []byte(content), 0644); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// restartDnsmasq kills bridge's running dnsmasq (if any, via its recorded
+// PID) and starts a fresh one from the cidr EnsureDHCP last recorded (see
+// cidrFile) — the only way to make dnsmasq forget an in-memory lease
+// short of the dhcp_release helper (see RemoveReservation's doc comment).
+// A brief DHCP gap on the bridge during the restart is harmless in
+// practice: every other VM on it already holds its IP and doesn't need
+// the server again until its next lease renewal.
+func (m DnsmasqDHCPManager) restartDnsmasq(bridge string) error {
+	if data, err := os.ReadFile(m.pidFile(bridge)); err == nil {
+		if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && pid > 0 {
+			if process, err := os.FindProcess(pid); err == nil {
+				_ = process.Signal(syscall.SIGTERM)
+				for i := 0; i < 20 && m.isRunning(bridge); i++ {
+					time.Sleep(50 * time.Millisecond)
+				}
+			}
+		}
+	}
+	cidr, err := os.ReadFile(m.cidrFile(bridge))
+	if err != nil {
+		if os.IsNotExist(err) {
+			// EnsureDHCP was never called for this bridge (or predates
+			// cidrFile) -- nothing to restart into, and RemoveReservation
+			// is a no-op on a bridge with no dnsmasq state anyway.
+			return nil
+		}
+		return err
+	}
+	return m.startDnsmasq(bridge, strings.TrimSpace(string(cidr)))
 }
 
 // withEachBridgeHostsFile applies fn to every bridge's hosts file under
