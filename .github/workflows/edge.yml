@@ -38,19 +38,17 @@ on:
 permissions:
   contents: write
 
-# Only one publish at a time: two overlapping pushes would otherwise both
-# delete+recreate the same `edge` release independently, and whichever
-# run happens to finish last wins -- if that's the older push, the rolling
-# release goes stale until the next one. Cancelling any in-progress run as
-# soon as a newer push starts means the one that actually publishes is
-# always for the newest commit.
-concurrency:
-  group: edge-build
-  cancel-in-progress: true
-
 jobs:
-  edge:
+  build:
     runs-on: onctl-4
+    # Cancelling a stale build as soon as a newer push starts avoids wasting
+    # onctl-4's limited memory on artifacts nobody will publish. Safe to
+    # cancel here because build never touches the shared `edge` release --
+    # unlike the publish job below, an interrupted build leaves nothing
+    # half-done on GitHub.
+    concurrency:
+      group: edge-build
+      cancel-in-progress: true
     steps:
       - name: Check out code
         uses: actions/checkout@v7
@@ -99,6 +97,39 @@ jobs:
           # (SIGKILL) on that box. Serializing the builds keeps peak memory
           # to one target's worth at a time.
           args: release --snapshot --clean -f .goreleaser.edge.yml --skip=publish --parallelism=1
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: edge-dist
+          path: |
+            dist/*.tar.gz
+            dist/checksums.txt
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: onctl-4
+    # `gh release create` with assets is 3 separate API calls under the hood
+    # (create the release as a draft + tag, upload assets, then publish) --
+    # confirmed in `gh release create --help`. A draft release has no real
+    # git tag until that last call lands, so an interrupted run leaves
+    # `edge` stuck as an untagged draft and get_edge.sh 404s. That used to
+    # happen here because this step shared the build job's cancel-in-progress
+    # group: a second push would kill a run mid-upload. Publish now runs as
+    # its own job in its own group with cancel-in-progress left at its
+    # default (false), so a run that reaches this job always finishes it --
+    # concurrent publishes queue instead of cancelling each other. Two full
+    # publishes back-to-back just means the newer one's delete+recreate wins
+    # last, which is what we want anyway.
+    concurrency:
+      group: edge-publish
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: edge-dist
+          path: dist
 
       - name: Replace the rolling edge release
         env:
