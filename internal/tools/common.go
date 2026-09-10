@@ -26,5 +26,8 @@ func WhichCloudProvider() string {
 	if os.Getenv("HCLOUD_TOKEN") != "" {
 		return "hetzner"
 	}
+	if os.Getenv("OVH_APPLICATION_KEY") != "" {
+		return "ovh"
+	}
 	return "none"
 }

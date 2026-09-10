@@ -18,7 +18,7 @@ Check 🌍 https://onctl.sh for detailed documentation
 ## What onctl brings 
 
 - 🌍 Simple intuitive CLI to run VMs in seconds.  
-- ⛅️ Supports multiple cloud providers (aws, azure, gcp, hetzner) plus local microVMs via Firecracker (`fc`) and Cloud Hypervisor (`ch`) -- no cloud account needed for those two
+- ⛅️ Supports multiple cloud providers (aws, azure, gcp, hetzner, ovh) plus local microVMs via Firecracker (`fc`) and Cloud Hypervisor (`ch`) -- no cloud account needed for those two
 - 🚀 Sets your public key and Gives you SSH access with `onctl ssh <vm-name>`
 - ✨ Cloud-init support. Set your own cloud-init file `onctl up -n qwe --cloud-init <cloud.init.file>`
 - 🤖 Use ready to use templates to configure your vm. Check [onctl-templates](https://github.com/cdalar/onctl-templates) `onctl up -n qwe -a k3s/k3s-server.sh`
@@ -104,8 +104,9 @@ Flags:
   -c, --config string                             Path to onctl.yaml configuration file (overrides the .onctl directory lookup)
   -h, --help                                       help for onctl
       --project gcloud config get-value project   GCP: project ID (falls back to gcloud config get-value project when the onctl.yaml placeholder is present)
-  -p, --provider string                           cloud provider: aws, hetzner, azure, gcp, fc, ch, static (overrides ONCTL_CLOUD)
+  -p, --provider string                           cloud provider: aws, hetzner, azure, gcp, ovh, fc, ch, static (overrides ONCTL_CLOUD)
       --resource-group string                     Azure: resource group (required for the azure provider; falls back to the az CLI's configured default group, if any)
+      --service-name string                       OVH: Public Cloud project service name (required for the ovh provider)
       --subscription-id az account show           Azure: subscription ID (required for the azure provider; falls back to az account show)
 
 Use "onctl [command] --help" for more information about a command.

@@ -44,9 +44,12 @@ func TestIsPausedStatus(t *testing.T) {
 		{"stopped", true},
 		{"TERMINATED", true},
 		{"VM deallocated", true},
+		{"SHELVED", true},
+		{"SHELVED_OFFLOADED", true},
 		{"running", false},
 		{"paused", false},
 		{"dead", false},
+		{"ACTIVE", false},
 	}
 	for _, tt := range tests {
 		assert.Equal(t, tt.want, isPausedStatus(tt.status), "status %q", tt.status)

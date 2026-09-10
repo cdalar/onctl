@@ -12,6 +12,7 @@ import (
 	"github.com/cdalar/onctl/internal/providerfc"
 	"github.com/cdalar/onctl/internal/providergcp"
 	"github.com/cdalar/onctl/internal/providerhtz"
+	"github.com/cdalar/onctl/internal/providerovh"
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/cdalar/onctl/pkg/cloud"
 
@@ -67,7 +68,7 @@ var (
 		},
 	}
 	cloudProvider     string
-	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "fc", "ch", "static"}
+	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "ovh", "fc", "ch", "static"}
 	provider          cloud.CloudProviderInterface
 	providerFlag      string
 )
@@ -123,6 +124,22 @@ func initState() error {
 		if err := resolveAzureIdentifiers(); err != nil {
 			return err
 		}
+	}
+	if cloudProvider == "ovh" {
+		if err := resolveOvhServiceName(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// resolveOvhServiceName just validates ovh.serviceName is set. Unlike GCP/
+// Azure, OVH has no local CLI (gcloud/az) already configured with a default
+// project to fall back to, so there's nothing to auto-resolve here.
+func resolveOvhServiceName() error {
+	name := viper.GetString("ovh.serviceName")
+	if name == "" || name == "<service-name>" {
+		return fmt.Errorf(`ovh.serviceName is required: set --service-name or edit .onctl/onctl.yaml`)
 	}
 	return nil
 }
@@ -223,6 +240,18 @@ func initProvider(cloudProvider string) {
 			VnetClient:          providerazure.GetVnetClient(),
 			NSGClient:           providerazure.GetNSGClient(),
 		}
+	case "ovh":
+		provider = &cloud.ProviderOvh{
+			Client: providerovh.GetClient(),
+			Config: cloud.OvhConfig{
+				ServiceName:   viper.GetString("ovh.serviceName"),
+				Region:        viper.GetString("ovh.location"),
+				VMType:        viper.GetString("ovh.vm.type"),
+				Image:         viper.GetString("ovh.vm.image"),
+				Username:      viper.GetString("ovh.vm.username"),
+				SSHPrivateKey: viper.GetString("ssh.privateKey"),
+			},
+		}
 	case "fc":
 		fcConfig := providerfc.GetConfig()
 		provider = &cloud.ProviderFC{
@@ -261,12 +290,14 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&flagGCPProject, "project", "", "GCP: project ID (falls back to `gcloud config get-value project` when the onctl.yaml placeholder is present)")
 	rootCmd.PersistentFlags().StringVar(&flagAzureSubscriptionID, "subscription-id", "", "Azure: subscription ID (required for the azure provider; falls back to `az account show`)")
 	rootCmd.PersistentFlags().StringVar(&flagAzureResourceGroup, "resource-group", "", "Azure: resource group (required for the azure provider; falls back to the az CLI's configured default group, if any)")
+	rootCmd.PersistentFlags().StringVar(&flagOvhServiceName, "service-name", "", "OVH: Public Cloud project service name (required for the ovh provider)")
 
 	// Bind the account-specific global flags early (persistent on root) so
 	// viper sees the CLI values in initState/resolve for all commands.
 	_ = viper.BindPFlag("gcp.project", rootCmd.PersistentFlags().Lookup("project"))
 	_ = viper.BindPFlag("azure.subscriptionId", rootCmd.PersistentFlags().Lookup("subscription-id"))
 	_ = viper.BindPFlag("azure.resourceGroup", rootCmd.PersistentFlags().Lookup("resource-group"))
+	_ = viper.BindPFlag("ovh.serviceName", rootCmd.PersistentFlags().Lookup("service-name"))
 
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(initCmd)

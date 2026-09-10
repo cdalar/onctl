@@ -11,6 +11,7 @@ var (
 	_ CloudProviderInterface = ProviderAzure{}
 	_ CloudProviderInterface = ProviderGcp{}
 	_ CloudProviderInterface = ProviderFC{}
+	_ CloudProviderInterface = ProviderOvh{}
 )
 
 // TestAllProvidersImplementPauseResume makes the cross-provider contract explicit
@@ -24,6 +25,7 @@ func TestAllProvidersImplementPauseResume(t *testing.T) {
 		"gcp":     ProviderGcp{},
 		"fc":      ProviderFC{},
 		"ch":      ProviderCH{},
+		"ovh":     ProviderOvh{},
 	}
 	for name, p := range providers {
 		if _, ok := p.(CloudProviderInterface); !ok {

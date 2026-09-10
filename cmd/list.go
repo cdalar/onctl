@@ -137,9 +137,11 @@ var listCmd = &cobra.Command{
 
 // isPausedStatus reports whether a VM status means stopped/paused rather than
 // running. AWS uses "stopped", GCP uses "TERMINATED" (stopped, not deleted),
-// Azure uses "VM deallocated".
+// Azure uses "VM deallocated", OVH uses "SHELVED"/"SHELVED_OFFLOADED".
 func isPausedStatus(status string) bool {
 	return status == "stopped" ||
 		status == "TERMINATED" ||
+		status == "SHELVED" ||
+		status == "SHELVED_OFFLOADED" ||
 		strings.Contains(strings.ToLower(status), "deallocated")
 }
