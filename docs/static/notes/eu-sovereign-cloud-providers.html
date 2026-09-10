@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>European Sovereign Cloud Providers</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #f6f7fa;
+    --surface: #ffffff;
+    --surface-raised: #fbfbfd;
+    --text: #17203a;
+    --text-muted: #5b6478;
+    --text-faint: #8890a0;
+    --border: #dee2ea;
+    --border-soft: #e8eaf0;
+    --accent: #2c4bd4;
+    --accent-soft: #e9edfc;
+    --gold: #9a6f1f;
+    --gold-soft: #f7efdd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10131c;
+      --surface: #161a26;
+      --surface-raised: #1b202f;
+      --text: #e7eaf2;
+      --text-muted: #9aa2b8;
+      --text-faint: #6d7488;
+      --border: #2a3042;
+      --border-soft: #232838;
+      --accent: #7f9bff;
+      --accent-soft: #1c2440;
+      --gold: #d9ab55;
+      --gold-soft: #2c2413;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10131c;
+    --surface: #161a26;
+    --surface-raised: #1b202f;
+    --text: #e7eaf2;
+    --text-muted: #9aa2b8;
+    --text-faint: #6d7488;
+    --border: #2a3042;
+    --border-soft: #232838;
+    --accent: #7f9bff;
+    --accent-soft: #1c2440;
+    --gold: #d9ab55;
+    --gold-soft: #2c2413;
+  }
+
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 16px;
+    line-height: 1.55;
+    margin: 0;
+    padding: 0 20px;
+  }
+  main {
+    max-width: 740px;
+    margin: 0 auto;
+    padding-block: 56px 72px;
+  }
+  h1, h2, h3 { font-family: 'Newsreader', Georgia, serif; text-wrap: balance; color: var(--text); }
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-size: clamp(30px, 5vw, 40px);
+    font-weight: 600;
+    margin: 0 0 14px;
+    letter-spacing: -0.01em;
+  }
+  .subhead {
+    font-size: 17px;
+    color: var(--text-muted);
+    max-width: 60ch;
+    margin: 0;
+  }
+  header { margin-bottom: 40px; padding-bottom: 32px; border-bottom: 1px solid var(--border); }
+
+  section { margin-top: 44px; }
+  h2 {
+    font-size: 22px;
+    font-weight: 600;
+    font-style: italic;
+    margin: 0 0 6px;
+  }
+  .section-note {
+    color: var(--text-muted);
+    font-size: 14.5px;
+    margin: 0 0 20px;
+    max-width: 62ch;
+  }
+
+  /* EC callout */
+  .callout {
+    background: var(--gold-soft);
+    border: 1px solid color-mix(in srgb, var(--gold) 35%, var(--border));
+    border-radius: 10px;
+    padding: 24px 24px 22px;
+  }
+  .callout .eyebrow { color: var(--gold); }
+  .callout h2 { font-style: normal; }
+  .callout .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 10px 0 20px;
+  }
+  .callout .meta strong { color: var(--text); font-weight: 500; }
+
+  .consortia {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  @media (max-width: 560px) {
+    .consortia { grid-template-columns: 1fr; }
+  }
+  .consortium {
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .consortium .lead {
+    font-weight: 600;
+    font-size: 15px;
+  }
+  .consortium .country {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .consortium .partners {
+    font-size: 13.5px;
+    color: var(--text-muted);
+    margin-top: 6px;
+  }
+
+  /* Provider list */
+  .list { border-top: 1px solid var(--border); }
+  .row {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .row .name {
+    flex: 0 0 180px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .row .country {
+    flex: 0 0 100px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    color: var(--text-faint);
+  }
+  .row .note {
+    flex: 1 1 auto;
+    color: var(--text-muted);
+    font-size: 14.5px;
+  }
+  @media (max-width: 560px) {
+    .row { flex-wrap: wrap; }
+    .row .name { flex: 1 1 100%; }
+    .row .country { flex: 0 0 auto; }
+  }
+
+  .pill {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.03em;
+    color: var(--gold);
+    background: var(--gold-soft);
+    border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
+    border-radius: 100px;
+    padding: 1px 7px;
+    white-space: nowrap;
+  }
+
+  .aside {
+    margin-top: 44px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+  .aside strong { color: var(--text); }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 12.5px;
+    color: var(--text-faint);
+    line-height: 1.7;
+  }
+  footer a { color: var(--text-faint); }
+  footer a:hover { color: var(--accent); }
+  .sources { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">Reference — cloud infrastructure</p>
+    <h1>European Sovereign Cloud Providers</h1>
+    <p class="subhead">Independent European cloud operators, joint ventures pairing EU legal control with US hyperscaler technology, and the four providers the European Commission selected to run its own workloads.</p>
+  </header>
+
+  <section class="callout">
+    <p class="eyebrow">European Commission · Cloud Sovereignty Framework</p>
+    <h2>The four selected providers</h2>
+    <p class="meta">Awarded <strong>April 2026</strong> · Worth up to <strong>€180M</strong> · Term <strong>6 years</strong> · Serves EU institutions, bodies &amp; agencies</p>
+    <div class="consortia">
+      <div class="consortium">
+        <div class="lead">Post Telecom</div>
+        <div class="country">Luxembourg</div>
+        <div class="partners">With CleverCloud &amp; OVHcloud</div>
+      </div>
+      <div class="consortium">
+        <div class="lead">StackIT</div>
+        <div class="country">Germany</div>
+        <div class="partners">Schwarz Group (Lidl), no external partners named</div>
+      </div>
+      <div class="consortium">
+        <div class="lead">Scaleway</div>
+        <div class="country">France</div>
+        <div class="partners">Iliad group, no external partners named</div>
+      </div>
+      <div class="consortium">
+        <div class="lead">Proximus</div>
+        <div class="country">Belgium</div>
+        <div class="partners">With S3NS, Clarence &amp; Mistral AI</div>
+      </div>
+    </div>
+    <p class="section-note" style="margin-top:16px; margin-bottom:0;">The Commission split the contract four ways on purpose, to avoid dependency on any single vendor. Providers were scored against eight sovereignty criteria: strategic, legal, operational and environmental control, supply-chain transparency, technological openness, security, and EU-law compliance.</p>
+  </section>
+
+  <section>
+    <h2>Independent, EU-owned &amp; operated</h2>
+    <p class="section-note">No non-EU parent in the ownership or technology stack.</p>
+    <div class="list">
+      <div class="row"><div class="name">OVHcloud <span class="pill">EC</span></div><div class="country">France</div><div class="note">Largest independent European cloud</div></div>
+      <div class="row"><div class="name">Scaleway <span class="pill">EC</span></div><div class="country">France</div><div class="note">Iliad group</div></div>
+      <div class="row"><div class="name">Hetzner</div><div class="country">Germany</div><div class="note">Already supported in onctl</div></div>
+      <div class="row"><div class="name">IONOS</div><div class="country">Germany</div><div class="note">United Internet</div></div>
+      <div class="row"><div class="name">STACKIT <span class="pill">EC</span></div><div class="country">Germany</div><div class="note">Schwarz Group (Lidl/Kaufland)</div></div>
+      <div class="row"><div class="name">Open Telekom Cloud</div><div class="country">Germany</div><div class="note">Deutsche Telekom / T-Systems</div></div>
+      <div class="row"><div class="name">Cloud&amp;Heat</div><div class="country">Germany</div><div class="note">Waste-heat-reuse data centers</div></div>
+      <div class="row"><div class="name">Outscale</div><div class="country">France</div><div class="note">Dassault Systèmes; SecNumCloud certified</div></div>
+      <div class="row"><div class="name">Numspot</div><div class="country">France</div><div class="note">Docaposte / Bouygues Telecom / BPCE; SecNumCloud certified</div></div>
+      <div class="row"><div class="name">CleverCloud <span class="pill">EC</span></div><div class="country">France</div><div class="note">PaaS, part of the Post Telecom bid</div></div>
+      <div class="row"><div class="name">Post Telecom <span class="pill">EC</span></div><div class="country">Luxembourg</div><div class="note">POST Luxembourg's cloud arm</div></div>
+      <div class="row"><div class="name">Clarence <span class="pill">EC</span></div><div class="country">Belgium</div><div class="note">Proximus subsidiary</div></div>
+      <div class="row"><div class="name">Exoscale</div><div class="country">Switzerland</div><div class="note">A1 Group</div></div>
+      <div class="row"><div class="name">Infomaniak</div><div class="country">Switzerland</div><div class="note">Independent, employee-owned</div></div>
+      <div class="row"><div class="name">Aruba Cloud</div><div class="country">Italy</div><div class="note">&nbsp;</div></div>
+      <div class="row"><div class="name">UpCloud</div><div class="country">Finland</div><div class="note">&nbsp;</div></div>
+      <div class="row"><div class="name">City Network</div><div class="country">Sweden</div><div class="note">OpenStack-based</div></div>
+      <div class="row"><div class="name">Leaseweb</div><div class="country">Netherlands</div><div class="note">&nbsp;</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Sovereign joint ventures with US hyperscaler tech</h2>
+    <p class="section-note">EU legal entity and operations, licensing hyperscaler software underneath.</p>
+    <div class="list">
+      <div class="row"><div class="name">S3NS <span class="pill">EC</span></div><div class="country">France</div><div class="note">Thales + Google Cloud; part of the Proximus bid</div></div>
+      <div class="row"><div class="name">Bleu</div><div class="country">France</div><div class="note">Orange / Capgemini + Microsoft Azure</div></div>
+      <div class="row"><div class="name">Delos Cloud</div><div class="country">Germany</div><div class="note">SAP / Arvato + Microsoft Azure</div></div>
+    </div>
+  </section>
+
+  <p class="aside"><strong>Mistral AI</strong> (France) isn't a cloud infrastructure provider, but it joined the Proximus consortium to supply sovereign AI models — worth noting since the EC award bundles AI capability alongside compute. <strong>Gaia-X</strong> is a related EU initiative: a data-sovereignty standard and federation framework, not a provider itself.</p>
+
+  <footer>
+    Compiled September 2026 for reference against onctl's supported providers (AWS, Azure, GCP, Hetzner).
+    <div class="sources">
+      Sources:
+      <a href="https://www.datacenterdynamics.com/en/news/eu-commission-selects-four-cloud-providers-under-180m-sovereign-cloud-tender/" target="_blank" rel="noopener">DataCenterDynamics — EU Commission selects four cloud providers</a>
+      <a href="https://www.theregister.com/2026/04/20/europe_picks_4_sovereign_cloud/" target="_blank" rel="noopener">The Register — Europe picks 4 sovereign cloud providers</a>
+      <a href="https://commission.europa.eu/news-and-media/news/sovereign-cloud-framework-explained-2026-06-01_en" target="_blank" rel="noopener">European Commission — Sovereign Cloud Framework explained</a>
+    </div>
+  </footer>
+</main>
+</body>
+</html>
