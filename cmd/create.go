@@ -63,6 +63,9 @@ var (
 	// works for ls/destroy/ssh too, not just create). Bound to azure.* .
 	flagAzureSubscriptionID string
 	flagAzureResourceGroup  string
+	// OVH account-specific flag (persistent in root, same reasoning as
+	// Azure's above). Bound to ovh.serviceName.
+	flagOvhServiceName string
 )
 
 func parseConfigFile(configFile string) (*cmdCreateOptions, error) {
@@ -134,6 +137,14 @@ func init() {
 	_ = viper.BindPFlag("azure.location", createCmd.Flags().Lookup("location"))
 	_ = viper.BindPFlag("azure.vm.type", createCmd.Flags().Lookup("type"))
 	_ = viper.BindPFlag("azure.vm.username", createCmd.Flags().Lookup("username"))
+
+	// OVH. Same generic flags, bound to the ovh.* keys read by
+	// internal/providerovh/pkg/cloud/ovh.go. ovh.serviceName is bound as a
+	// root persistent flag (see --service-name) since it's needed outside create too.
+	_ = viper.BindPFlag("ovh.vm.type", createCmd.Flags().Lookup("type"))
+	_ = viper.BindPFlag("ovh.location", createCmd.Flags().Lookup("location"))
+	_ = viper.BindPFlag("ovh.vm.username", createCmd.Flags().Lookup("username"))
+	_ = viper.BindPFlag("ovh.vm.image", createCmd.Flags().Lookup("image"))
 
 	// Firecracker-specific flags, each bound to the fc.* key read by
 	// providerfc.GetConfig. Defaults live in onctl.yaml's fc: section (and
@@ -208,8 +219,8 @@ var createCmd = &cobra.Command{
 				viper.Set("aws.vm.image", opt.Vm.Image)
 			}
 		}
-		if opt.Vm.Image != "" && cloudProvider != "hetzner" && cloudProvider != "aws" {
-			log.Fatalf("--image flag is only supported for the hetzner and aws providers (current provider: %s)", cloudProvider)
+		if opt.Vm.Image != "" && cloudProvider != "hetzner" && cloudProvider != "aws" && cloudProvider != "ovh" {
+			log.Fatalf("--image flag is only supported for the hetzner, aws and ovh providers (current provider: %s)", cloudProvider)
 		}
 		s := ui.New() // Build our new spinner
 		s.Suffix = " Checking vm..."

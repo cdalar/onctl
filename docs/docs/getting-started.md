@@ -9,8 +9,8 @@
 
 1 directory, 1 file
 ```
-    1. `onctl.yaml` is the single source of truth for every configurable parameter for every provider (global settings, hetzner, aws, gcp, azure, fc, ch), each grouped under its own section, pre-filled with working defaults.
-    2. edit the values you want to change; CLI flags (`onctl create --help`) still override whatever is in this file. `gcp.project` and `azure.subscriptionId` ship as placeholders and must be set to use those providers.
+    1. `onctl.yaml` is the single source of truth for every configurable parameter for every provider (global settings, hetzner, aws, gcp, azure, ovh, fc, ch), each grouped under its own section, pre-filled with working defaults.
+    2. edit the values you want to change; CLI flags (`onctl create --help`) still override whatever is in this file. `gcp.project`, `azure.subscriptionId` and `ovh.serviceName` ship as placeholders and must be set to use those providers.
 
 ## set cloud provider
 1. set `ONCTL_CLOUD` environment variable (or pass `-p`/`--provider` on any command) to the name of the cloud provider. Supported values; 
@@ -18,6 +18,7 @@
     - azure
     - gcp
     - hetzner
+    - ovh (requires a one-time consumer-key setup — see [api.ovh.com/createToken](https://api.ovh.com/createToken/) — then set `OVH_APPLICATION_KEY`, `OVH_APPLICATION_SECRET`, `OVH_CONSUMER_KEY`)
     - fc (local Firecracker microVM, no cloud account needed)
     - ch (local Cloud Hypervisor microVM, no cloud account needed)
 1. 

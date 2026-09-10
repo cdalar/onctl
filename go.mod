@@ -16,6 +16,7 @@ require (
 	github.com/gofrs/uuid/v5 v5.5.1
 	github.com/hetznercloud/hcloud-go/v2 v2.47.0
 	github.com/manifoldco/promptui v0.9.0
+	github.com/ovh/go-ovh v1.9.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/term v0.45.0
@@ -108,6 +109,7 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/grpc v1.83.2 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
+	gopkg.in/ini.v1 v1.67.0 // indirect
 )
 
 require (

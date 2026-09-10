@@ -17,7 +17,7 @@ Check 🌍 https://onctl.sh for detailed documentation
 ## What onctl brings 
 
 - 🌍 Simple intuitive CLI to run VMs in seconds.  
-- ⛅️ Supports multi cloud providers (aws, azure, gcp, hetzner, more coming soon...)
+- ⛅️ Supports multi cloud providers (aws, azure, gcp, hetzner, ovh, more coming soon...)
 - 🔥 Run local microVMs with the `fc` (Firecracker) provider (Linux + KVM, no cloud account needed). No bare-metal Linux box? Create a nested-virtualization-enabled GCP VM (`gcp.vm.nestedVirtualization: true`) with `onctl create -n fc-host -a firecracker/firecracker-host-setup.sh`, then SSH in and run `ONCTL_CLOUD=fc onctl create -n my-microvm`.
 - 🐮 Run local microVMs with the `ch` ([Cloud Hypervisor](https://github.com/cloud-hypervisor/cloud-hypervisor)) provider — same idea as `fc` (Linux + KVM, no cloud account needed), no pause/resume support yet. Point `ch.kernelImage`/`ch.rootfsImage` at a kernel + rootfs image and run `ONCTL_CLOUD=ch onctl create -n my-microvm`. Also supports **Windows guests** via `--ch-os windows` (UEFI boot) — see [TESTING-ch-windows.md](TESTING-ch-windows.md) for base-image prep; unverified against real hardware.
 - 🚀 Sets your public key and Gives you SSH access with `onctl ssh <vm-name>`

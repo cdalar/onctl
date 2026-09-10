@@ -69,6 +69,20 @@ azure:
         name: onctl-subnet1
         cidr: 10.1.1.0/24
 
+# ---- OVHcloud ----
+# Requires OVH_APPLICATION_KEY, OVH_APPLICATION_SECRET, OVH_CONSUMER_KEY env
+# vars (see https://api.ovh.com/createToken/ for one-time setup).
+# NOTE: onctl treats every instance in this OVH Public Cloud project as its
+# own -- OVH has no server-side tagging to scope by, unlike the other
+# providers above. Don't point onctl at a project that has unrelated VMs.
+ovh:
+  serviceName: <service-name>     # REQUIRED: your OVH Public Cloud project ID
+  location: GRA11                 # region
+  vm:
+    type: d2-4                    # flavor name
+    username: ubuntu               # ssh user
+    image: Ubuntu 22.04            # OS image name
+
 # ---- Firecracker (fc) ----
 fc:
   kernelImage: ~/.onctl/firecracker/images/vmlinux  # uncompressed kernel (vmlinux)
