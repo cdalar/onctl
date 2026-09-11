@@ -114,7 +114,7 @@ sudo install onctl /usr/local/bin/
 To install or update to the `edge` build, an unsigned binary rebuilt from the tip of `main` on every push (no macOS or Windows build):
 
 ```bash
-curl -sLS https://onctl.sh/get_edge.sh | bash
+curl -sLS https://onctl.sh/get-edge.sh | bash
 sudo install onctl /usr/local/bin/
 ```
 
