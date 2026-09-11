@@ -3,7 +3,7 @@
 # Installs the "edge" build of onctl: an unsigned snapshot built from the
 # tip of main on every push (see .github/workflows/edge.yml), published as
 # a single rolling prerelease at a fixed tag rather than a versioned one.
-# Linux only -- the edge workflow does not build macOS or Windows binaries.
+# Linux and macOS -- the edge workflow does not build Windows binaries.
 
 set -euo pipefail
 

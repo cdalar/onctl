@@ -49,6 +49,8 @@ function HomepageHeader() {
             showCursor
             lines={[
               { type: 'prompt', text: 'curl -fsSL https://onctl.sh/get.sh | bash' },
+              { type: 'output', text: '# or, latest main (edge build):', dim: true },
+              { type: 'prompt', text: 'curl -fsSL https://onctl.sh/get-edge.sh | bash' },
               { type: 'prompt', text: 'onctl create -n my-box -p aws' },
               { type: 'output', text: 'Using: aws', dim: true },
               { type: 'output', text: 'Server IP: 3.68.140.22', dim: true },
