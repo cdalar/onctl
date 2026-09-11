@@ -114,7 +114,7 @@ jobs:
     # (create the release as a draft + tag, upload assets, then publish) --
     # confirmed in `gh release create --help`. A draft release has no real
     # git tag until that last call lands, so an interrupted run leaves
-    # `edge` stuck as an untagged draft and get_edge.sh 404s. That used to
+    # `edge` stuck as an untagged draft and get-edge.sh 404s. That used to
     # happen here because this step shared the build job's cancel-in-progress
     # group: a second push would kill a run mid-upload. Publish now runs as
     # its own job in its own group with cancel-in-progress left at its
