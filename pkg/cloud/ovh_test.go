@@ -278,4 +278,37 @@ func TestMapOvhInstance(t *testing.T) {
 		})
 		assert.Equal(t, "N/A", vm.PrivateIP)
 	})
+
+	t.Run("prefers IPv4 over IPv6 regardless of order", func(t *testing.T) {
+		// OVH instances get both a public IPv4 and IPv6 address; SSH must
+		// use the IPv4 one since IPv6 reachability to the guest isn't
+		// guaranteed. Order in the API response shouldn't matter.
+		vmIPv6First := mapOvhInstance(ovhInstance{
+			ID: "1", Name: "vm1",
+			IPAddresses: []ovhIPAddress{
+				{IP: "2001:41d0:304:300::9ed", Type: "public", Version: 6},
+				{IP: "203.0.113.1", Type: "public", Version: 4},
+			},
+		})
+		assert.Equal(t, "203.0.113.1", vmIPv6First.IP)
+
+		vmIPv4First := mapOvhInstance(ovhInstance{
+			ID: "1", Name: "vm1",
+			IPAddresses: []ovhIPAddress{
+				{IP: "203.0.113.1", Type: "public", Version: 4},
+				{IP: "2001:41d0:304:300::9ed", Type: "public", Version: 6},
+			},
+		})
+		assert.Equal(t, "203.0.113.1", vmIPv4First.IP)
+	})
+
+	t.Run("falls back to IPv6 when no IPv4 public address exists", func(t *testing.T) {
+		vm := mapOvhInstance(ovhInstance{
+			ID: "1", Name: "vm1",
+			IPAddresses: []ovhIPAddress{
+				{IP: "2001:41d0:304:300::9ed", Type: "public", Version: 6},
+			},
+		})
+		assert.Equal(t, "2001:41d0:304:300::9ed", vm.IP)
+	})
 }
