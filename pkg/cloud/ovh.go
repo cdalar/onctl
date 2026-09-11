@@ -382,7 +382,13 @@ func mapOvhInstance(inst ovhInstance) Vm {
 	for _, addr := range inst.IPAddresses {
 		switch addr.Type {
 		case "public":
-			ip = addr.IP
+			// OVH instances typically carry both an IPv4 and IPv6 public
+			// address; prefer IPv4 (Version 4) since IPv6 reachability to
+			// the guest isn't guaranteed (routing/DHCPv6 timing), and only
+			// fall back to whatever's available if no IPv4 address exists.
+			if ip == "" || addr.Version == 4 {
+				ip = addr.IP
+			}
 		case "private":
 			privateIP = addr.IP
 		}
