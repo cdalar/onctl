@@ -36,8 +36,9 @@ case $os in
         unzip_command="tar zxvf"
         ;;
     Darwin)
-        echo "Error: no edge build is published for macOS -- use 'brew install --HEAD --fetch-HEAD cdalar/tap/onctl-dev' instead."
-        exit 1
+        os="darwin"
+        extension=".tar.gz"
+        unzip_command="tar zxvf"
         ;;
     CYGWIN*|MINGW32*|MSYS*|MINGW*)
         echo "Error: no edge build is published for Windows -- download a tagged release from the releases page instead."

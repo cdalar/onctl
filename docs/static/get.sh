@@ -62,7 +62,7 @@ echo "System architecture is: $architecture"
 download_url="$GITHUB/$REPO/releases/download/$latest_release/onctl-${os}-${arch}${extension}"
 
 # Download the binary
-echo "Downloading parampiper from $download_url"
+echo "Downloading onctl from $download_url"
 curl -L $download_url -o "onctl-${os}-${arch}-${latest_release}${extension}"
 
 # Unzip the binary if on Windows or use tar command if on Linux
