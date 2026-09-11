@@ -86,25 +86,12 @@ func TestSpinnerSuffix(t *testing.T) {
 		t.Errorf("Expected suffix %q, got %q", newSuffix, s.Suffix)
 	}
 
-	if s.model.suffix != newSuffix {
-		t.Errorf("Expected model suffix %q, got %q", newSuffix, s.model.suffix)
+	if s.suffix != newSuffix {
+		t.Errorf("Expected rendered suffix %q, got %q", newSuffix, s.suffix)
 	}
 
 	s.Stop()
 	time.Sleep(20 * time.Millisecond)
-}
-
-func TestModelUpdateSuffixMsg(t *testing.T) {
-	// The running tea program must apply suffix changes sent by SetSuffix;
-	// otherwise the spinner keeps rendering the previous phase's text.
-	m := model{suffix: " old phase"}
-
-	updated, _ := m.Update(suffixMsg(" new phase"))
-
-	got := updated.(model).suffix
-	if got != " new phase" {
-		t.Errorf("Expected rendered suffix %q, got %q", " new phase", got)
-	}
 }
 
 func TestSpinnerActive(t *testing.T) {

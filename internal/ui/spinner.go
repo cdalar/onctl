@@ -6,89 +6,38 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
 )
 
-// pristineState is the terminal's cooked-mode state captured just before the
-// very first spinner ever puts stdin into raw mode. Stop() uses it to force a
-// real termios restore if bubbletea's own async cleanup doesn't finish in
-// time, which otherwise leaves the pty stuck in raw mode (no echo, no output
-// post-processing) for the rest of the shell session when a caller os.Exit()s
-// (e.g. log.Fatalln) right after Stop() returns.
-var (
-	pristineState      *term.State
-	capturePristineOne sync.Once
+// spinnerFrames and spinnerInterval mirror the "Dot" spinner previously
+// rendered via charmbracelet/bubbles, kept for visual parity.
+var spinnerFrames = []string{"⣾ ", "⣽ ", "⣻ ", "⢿ ", "⡿ ", "⣟ ", "⣯ ", "⣷ "}
+
+const spinnerInterval = 100 * time.Millisecond
+
+// spinnerColor is the SGR sequence used to color the spinner glyph (ANSI 256
+// color 205, matching the previous lipgloss style), reset afterwards.
+const (
+	spinnerColorOn  = "\033[38;5;205m"
+	spinnerColorOff = "\033[0m"
 )
 
-func capturePristineState() {
-	capturePristineOne.Do(func() {
-		if term.IsTerminal(int(os.Stdin.Fd())) {
-			if st, err := term.GetState(int(os.Stdin.Fd())); err == nil {
-				pristineState = st
-			}
-		}
-	})
-}
-
-// Spinner wraps the Bubble Tea spinner to provide a simple API similar to briandowns/spinner
+// Spinner is a minimal terminal spinner that writes plain ANSI escape
+// sequences directly to stderr. Unlike the bubbletea-based implementation it
+// replaces, it never probes terminal capabilities (e.g. background-color
+// queries), so it can't block on an unresponsive pty.
 type Spinner struct {
-	model      model
-	program    *tea.Program
-	mu         sync.Mutex
-	Suffix     string // Public field to match briandowns/spinner API
-	isRunning  bool
-	hideOutput bool
-	done       chan struct{} // closed when the program goroutine exits
-}
-
-type model struct {
-	spinner spinner.Model
-	suffix  string
-}
-
-func (m model) Init() tea.Cmd {
-	return m.spinner.Tick
-}
-
-// suffixMsg updates the spinner suffix while the program is running
-type suffixMsg string
-
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		return m, tea.Quit
-	case suffixMsg:
-		m.suffix = string(msg)
-		return m, nil
-	default:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-	}
-}
-
-func (m model) View() string {
-	if m.suffix == "" {
-		return m.spinner.View()
-	}
-	return lipgloss.JoinHorizontal(lipgloss.Left, m.spinner.View(), m.suffix)
+	mu        sync.Mutex
+	Suffix    string // Public field to match briandowns/spinner API
+	suffix    string // suffix currently rendered by the running loop
+	isRunning bool
+	stopCh    chan struct{}
+	done      chan struct{} // closed when the render loop exits
 }
 
 // New creates a new spinner with a dots style
 func New() *Spinner {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-
-	return &Spinner{
-		model: model{
-			spinner: s,
-		},
-		hideOutput: false,
-	}
+	return &Spinner{}
 }
 
 // Start begins the spinner animation
@@ -100,77 +49,76 @@ func (s *Spinner) Start() {
 		return
 	}
 
-	// Sync the suffix
-	s.model.suffix = s.Suffix
-
-	capturePristineState()
+	s.suffix = s.Suffix
+	s.isRunning = true
 
 	// Check if we are in a terminal
 	if !term.IsTerminal(int(os.Stderr.Fd())) {
-		s.isRunning = true
-		s.program = nil
+		s.stopCh = nil
 		s.done = make(chan struct{})
 		close(s.done)
 		return
 	}
 
-	s.program = tea.NewProgram(s.model, tea.WithOutput(os.Stderr))
-	s.done = make(chan struct{})
-	s.isRunning = true
+	stopCh := make(chan struct{})
+	done := make(chan struct{})
+	s.stopCh = stopCh
+	s.done = done
 
-	go func() {
-		if _, err := s.program.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error running spinner: %v\n", err)
+	go s.run(stopCh, done)
+}
+
+func (s *Spinner) run(stopCh, done chan struct{}) {
+	defer close(done)
+
+	ticker := time.NewTicker(spinnerInterval)
+	defer ticker.Stop()
+
+	fmt.Fprint(os.Stderr, "\033[?25l") // hide cursor
+	defer fmt.Fprint(os.Stderr, "\033[?25h")
+
+	frame := 0
+	for {
+		s.mu.Lock()
+		suffix := s.suffix
+		s.mu.Unlock()
+
+		fmt.Fprintf(os.Stderr, "\r\033[K%s%s%s%s", spinnerColorOn, spinnerFrames[frame%len(spinnerFrames)], spinnerColorOff, suffix)
+
+		select {
+		case <-stopCh:
+			fmt.Fprint(os.Stderr, "\r\033[K")
+			return
+		case <-ticker.C:
+			frame++
 		}
-		close(s.done)
-	}()
-
-	// Give the program a moment to start
-	time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // Stop stops the spinner animation
 func (s *Spinner) Stop() {
 	s.mu.Lock()
-
 	if !s.isRunning {
 		s.mu.Unlock()
 		return
 	}
 
-	// Mark as stopped and capture state before releasing the lock
 	s.isRunning = false
+	stopCh := s.stopCh
 	done := s.done
-	if s.program != nil {
-		s.program.Quit()
-	}
 	s.mu.Unlock()
 
-	// Wait for bubbletea to finish restoring the terminal (cursor, echo, raw mode).
-	// This must happen outside the lock to avoid blocking other callers.
+	if stopCh != nil {
+		close(stopCh)
+	}
 	if done != nil {
-		select {
-		case <-done:
-		case <-time.After(500 * time.Millisecond):
-			// bubbletea didn't finish its own terminal cleanup in time.
-			// Force the pty back to cooked mode so a caller that os.Exit()s
-			// right after Stop() (e.g. log.Fatalln) doesn't leave the shell
-			// stuck with no echo and no output post-processing.
-			if pristineState != nil {
-				_ = term.Restore(int(os.Stdin.Fd()), pristineState)
-			}
-			fmt.Fprint(os.Stderr, "\033[?25h") // show cursor
-		}
+		<-done
 	}
 }
 
 // Restart stops and starts the spinner
 func (s *Spinner) Restart() {
 	s.Stop()
-	// Sync the suffix before restarting
-	s.mu.Lock()
-	s.model.suffix = s.Suffix
-	s.mu.Unlock()
 	s.Start()
 }
 
@@ -180,11 +128,7 @@ func (s *Spinner) SetSuffix(suffix string) {
 	defer s.mu.Unlock()
 
 	s.Suffix = suffix
-	s.model.suffix = suffix
-
-	if s.isRunning && s.program != nil {
-		s.program.Send(suffixMsg(suffix))
-	}
+	s.suffix = suffix
 }
 
 // Active returns whether the spinner is currently running
