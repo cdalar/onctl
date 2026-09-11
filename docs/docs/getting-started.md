@@ -23,6 +23,7 @@
     - ch (local Cloud Hypervisor microVM, no cloud account needed)
 1. 
 ```
+# set the active cloud provider
 export ONCTL_CLOUD=hetzner
 ```
 
@@ -33,6 +34,7 @@ export ONCTL_CLOUD=hetzner
 ## spin up a virtual machine
 1. We're ready. Let's create a Virtual Machine (Instance) 
 ```
+# create a VM
 ❯ onctl up -n onctl-test
 Using: hetzner
 Creating SSHKey: onctl-xxx...
@@ -44,6 +46,7 @@ Vm started.
 ## ssh access
 1. Just use ssh command to ssh into the virtual machine. 
 ```
+# ssh into the VM
 ❯ onctl ssh onctl-test
 Using: hetzner
 .
