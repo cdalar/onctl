@@ -6,6 +6,8 @@ package providerfc
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -489,6 +492,99 @@ func (DebugfsRootfsPreparer) Prepare(baseImage, destPath, hostname, sshPublicKey
 	return injectSSHKey(destPath, sshPublicKey, username)
 }
 
+// baseImageSidecarSuffix names the cached-digest sidecar file
+// baseImageIdentity maintains next to a base image (baseImage + this
+// suffix), holding "<sha256hex> <sizeBytes> <mtimeUnixNano>".
+const baseImageSidecarSuffix = ".sha256sum"
+
+func (DebugfsRootfsPreparer) BaseImageIdentity(baseImage string) (sha256Hex string, sizeBytes int64, err error) {
+	return baseImageIdentity(baseImage)
+}
+
+// baseImageIdentity returns baseImage's sha256 and size, computing and
+// caching the digest in a sidecar file next to it -- invalidated by a
+// change in baseImage's mtime or size -- so repeated Deploys against the
+// same golden image don't re-hash a multi-GB file every time. Safe for
+// concurrent callers targeting the same baseImage (mirrors
+// ensureCacheImage's locking, reusing the same lockPath helper).
+func baseImageIdentity(baseImage string) (string, int64, error) {
+	unlock, err := lockPath(baseImage)
+	if err != nil {
+		return "", 0, err
+	}
+	defer unlock()
+
+	info, err := os.Stat(baseImage)
+	if err != nil {
+		return "", 0, err
+	}
+
+	sidecarPath := baseImage + baseImageSidecarSuffix
+	if hash, size, ok := readBaseImageSidecar(sidecarPath, info); ok {
+		return hash, size, nil
+	}
+
+	hash, err := hashFile(baseImage)
+	if err != nil {
+		return "", 0, err
+	}
+	size := info.Size()
+	if err := writeBaseImageSidecar(sidecarPath, hash, size, info.ModTime()); err != nil {
+		// The hash just computed is still correct even if it couldn't be
+		// cached for next time -- don't fail the caller over this.
+		return hash, size, nil
+	}
+	return hash, size, nil
+}
+
+// readBaseImageSidecar reads sidecarPath and reports the cached digest
+// only if its recorded size/mtime still match info -- otherwise (missing,
+// malformed, or stale) ok is false and the caller must recompute.
+func readBaseImageSidecar(sidecarPath string, info os.FileInfo) (hash string, size int64, ok bool) {
+	data, err := os.ReadFile(sidecarPath)
+	if err != nil {
+		return "", 0, false
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) != 3 {
+		return "", 0, false
+	}
+	cachedSize, err := strconv.ParseInt(fields[1], 10, 64)
+	if err != nil {
+		return "", 0, false
+	}
+	cachedMtimeNano, err := strconv.ParseInt(fields[2], 10, 64)
+	if err != nil {
+		return "", 0, false
+	}
+	if cachedSize != info.Size() || cachedMtimeNano != info.ModTime().UnixNano() {
+		return "", 0, false
+	}
+	return fields[0], cachedSize, true
+}
+
+func writeBaseImageSidecar(sidecarPath, hash string, size int64, mtime time.Time) error {
+	line := fmt.Sprintf("%s %d %d\n", hash, size, mtime.UnixNano())
+	tmp := sidecarPath + ".tmp"
+	if err := os.WriteFile(tmp, []byte(line), 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, sidecarPath)
+}
+
+func hashFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
 // ReflinkCacheDiskPreparer is the real cloud.CacheDiskPreparer
 // implementation. It clones the golden cache image into a per-VM copy via
 // a copy-on-write reflink (`cp --reflink=always`), so attaching a multi-GB
@@ -524,7 +620,7 @@ func (ReflinkCacheDiskPreparer) MergeBack(vmCachePath, goldenImage string) error
 		// cache drive attached (e.g. it failed to boot).
 		return nil
 	}
-	unlock, err := lockCacheImage(goldenImage)
+	unlock, err := lockPath(goldenImage)
 	if err != nil {
 		return err
 	}
@@ -553,7 +649,7 @@ func ensureCacheImage(goldenImage string, sizeMib int64) error {
 	if err := os.MkdirAll(filepath.Dir(goldenImage), 0755); err != nil {
 		return err
 	}
-	unlock, err := lockCacheImage(goldenImage)
+	unlock, err := lockPath(goldenImage)
 	if err != nil {
 		return err
 	}
@@ -583,19 +679,21 @@ func ensureCacheImage(goldenImage string, sizeMib int64) error {
 	return os.Rename(tmp, goldenImage)
 }
 
-// lockCacheImage acquires an exclusive advisory lock scoped to goldenImage,
-// serializing concurrent create/merge-back calls for the same image (e.g.
-// Build and Lint jobs for the same repo finishing at the same time).
-// Returns an unlock func; callers must defer it.
-func lockCacheImage(goldenImage string) (unlock func(), err error) {
-	lockPath := goldenImage + ".lock"
-	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
+// lockPath acquires an exclusive advisory lock scoped to path, serializing
+// concurrent callers targeting the same file -- originally written for
+// ensureCacheImage/MergeBack's create/merge-back races (e.g. Build and
+// Lint jobs for the same repo finishing at the same time), and reused
+// as-is by baseImageIdentity for the same reason. Returns an unlock func;
+// callers must defer it.
+func lockPath(path string) (unlock func(), err error) {
+	lockFilePath := path + ".lock"
+	f, err := os.OpenFile(lockFilePath, os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open lock file %q: %w", lockPath, err)
+		return nil, fmt.Errorf("failed to open lock file %q: %w", lockFilePath, err)
 	}
 	if err := tools.Flock(f); err != nil {
 		_ = f.Close()
-		return nil, fmt.Errorf("failed to lock %q: %w", lockPath, err)
+		return nil, fmt.Errorf("failed to lock %q: %w", lockFilePath, err)
 	}
 	return func() {
 		_ = tools.Funlock(f)

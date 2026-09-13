@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -442,6 +443,74 @@ func TestCopyFile_MissingSource(t *testing.T) {
 	dir := t.TempDir()
 	err := copyFile(filepath.Join(dir, "nope"), filepath.Join(dir, "dst"))
 	assert.Error(t, err)
+}
+
+func TestHashFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "image")
+	require.NoError(t, os.WriteFile(path, []byte("hello"), 0644))
+
+	hash, err := hashFile(path)
+	require.NoError(t, err)
+	// sha256("hello")
+	assert.Equal(t, "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", hash)
+}
+
+func TestHashFile_MissingSource(t *testing.T) {
+	_, err := hashFile(filepath.Join(t.TempDir(), "nope"))
+	assert.Error(t, err)
+}
+
+func TestBaseImageIdentity_MissingSource(t *testing.T) {
+	_, _, err := baseImageIdentity(filepath.Join(t.TempDir(), "nope"))
+	assert.Error(t, err)
+}
+
+func TestBaseImageIdentity_ComputesAndCaches(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "image")
+	require.NoError(t, os.WriteFile(path, []byte("hello"), 0644))
+
+	hash, size, err := baseImageIdentity(path)
+	require.NoError(t, err)
+	assert.Equal(t, "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", hash)
+	assert.Equal(t, int64(5), size)
+
+	sidecarPath := path + baseImageSidecarSuffix
+	sidecarBefore, err := os.ReadFile(sidecarPath)
+	require.NoError(t, err)
+
+	// Corrupt the cached hash in place (leaving size/mtime untouched) --
+	// a second call that still returns the corrupted value proves the
+	// sidecar cache was actually used, not silently recomputed every time.
+	corrupted := "deadbeef" + strings.TrimPrefix(string(sidecarBefore), hash)
+	require.NoError(t, os.WriteFile(sidecarPath, []byte(corrupted), 0644))
+
+	hash2, size2, err := baseImageIdentity(path)
+	require.NoError(t, err)
+	assert.Equal(t, "deadbeef", hash2)
+	assert.Equal(t, int64(5), size2)
+}
+
+func TestBaseImageIdentity_RecomputesWhenFileChanges(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "image")
+	require.NoError(t, os.WriteFile(path, []byte("hello"), 0644))
+
+	hash1, _, err := baseImageIdentity(path)
+	require.NoError(t, err)
+
+	// A different mtime alone (same size) must also invalidate the cache
+	// -- not just a size change -- since the sidecar keys on both.
+	future := time.Now().Add(time.Hour)
+	require.NoError(t, os.Chtimes(path, future, future))
+	require.NoError(t, os.WriteFile(path, []byte("world"), 0644))
+	require.NoError(t, os.Chtimes(path, future, future))
+
+	hash2, size2, err := baseImageIdentity(path)
+	require.NoError(t, err)
+	assert.NotEqual(t, hash1, hash2)
+	assert.Equal(t, int64(5), size2)
 }
 
 func TestDebugfsRootfsPreparer_Prepare_NoBaseImage(t *testing.T) {
