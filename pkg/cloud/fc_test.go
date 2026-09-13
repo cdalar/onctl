@@ -123,12 +123,23 @@ func (f *fakeNetworkManager) DeleteTap(tapName string) error {
 type fakeRootfsPreparer struct {
 	calls     []string
 	hostnames []string
+	// identityErr, when set, is returned by BaseImageIdentity instead of
+	// the fixed fake hash/size below -- lets tests exercise Deploy's
+	// soft-fail path (a hashing failure must not fail Deploy itself).
+	identityErr error
 }
 
 func (f *fakeRootfsPreparer) Prepare(_, destPath, hostname, _, _ string) error {
 	f.calls = append(f.calls, destPath)
 	f.hostnames = append(f.hostnames, hostname)
 	return os.WriteFile(destPath, []byte("rootfs"), 0600)
+}
+
+func (f *fakeRootfsPreparer) BaseImageIdentity(baseImage string) (string, int64, error) {
+	if f.identityErr != nil {
+		return "", 0, f.identityErr
+	}
+	return "fakehash-" + baseImage, 42, nil
 }
 
 func newTestFCProvider(t *testing.T) (ProviderFC, *fakeFCProcess, *fakeFCAPI, *fakeNetworkManager, *fakeRootfsPreparer) {
@@ -321,6 +332,27 @@ func TestProviderFC_Deploy(t *testing.T) {
 	assert.Equal(t, 12345, meta.PID)
 	assert.Equal(t, "172.16.0.2", meta.IPAddress)
 	assert.Equal(t, fcStatusRunning, meta.Status)
+	assert.Equal(t, "/images/rootfs.ext4", meta.BaseImagePath)
+	assert.Equal(t, "fakehash-/images/rootfs.ext4", meta.BaseImageSHA256)
+	assert.Equal(t, int64(42), meta.BaseImageSizeBytes)
+}
+
+// TestProviderFC_Deploy_BaseImageIdentityFailureIsNonFatal covers Deploy's
+// soft-fail path: BaseImageIdentity is purely an optimization for a later,
+// unrelated feature (diff-based export) and must never block VM creation.
+func TestProviderFC_Deploy_BaseImageIdentityFailureIsNonFatal(t *testing.T) {
+	p, _, _, _, rootfs := newTestFCProvider(t)
+	rootfs.identityErr = errors.New("boom")
+
+	vm, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	assert.Equal(t, "test-vm", vm.Name)
+
+	meta, err := loadFCMetadata(p.metadataPath("test-vm"))
+	require.NoError(t, err)
+	assert.Empty(t, meta.BaseImagePath)
+	assert.Empty(t, meta.BaseImageSHA256)
+	assert.Zero(t, meta.BaseImageSizeBytes)
 }
 
 func TestProviderFC_Deploy_CustomType(t *testing.T) {

@@ -168,6 +168,24 @@ type RootfsPreparer interface {
 	Prepare(baseImage, destPath, hostname, sshPublicKey, username string) error
 }
 
+// BaseImageIdentifier is implemented by a RootfsPreparer that can report a
+// base image's content identity for diff-based export -- Firecracker
+// only (see Service.Pause's existing errUnsupportedForProvider rejection
+// of ch/Windows VMs, and boxctl-vms/docs/plans/
+// rootfs-diff-export-import.md). A separate, optional interface rather
+// than a method on RootfsPreparer itself: RootfsPreparer is also
+// implemented by Cloud Hypervisor's own preparer (internal/providerch),
+// which has no equivalent export path and so has no reason to implement
+// this. ProviderFC.Deploy type-asserts for it rather than requiring it.
+type BaseImageIdentifier interface {
+	// BaseImageIdentity returns baseImage's sha256 and size, computing and
+	// caching the digest in a sidecar file next to it (invalidated by a
+	// change in baseImage's mtime or size) so repeated Deploys against the
+	// same golden image don't re-hash a multi-GB file every time. Recorded
+	// on each VM at Deploy time (see fcVM.BaseImageSHA256).
+	BaseImageIdentity(baseImage string) (sha256Hex string, sizeBytes int64, err error)
+}
+
 // CacheDiskPreparer manages a persistent, host-owned disk image shared
 // across a series of microVMs (e.g. one per GitHub repo), so repeated jobs
 // reuse compiled build artifacts instead of starting cold every time,
@@ -230,6 +248,21 @@ type fcVM struct {
 	// falls back to 22 itself when zero (a legacy record predating this
 	// field, or a caller that never set Vm.SSHPort).
 	SSHPort int `json:"sshPort,omitempty"`
+	// BaseImagePath/BaseImageSHA256/BaseImageSizeBytes identify the exact
+	// base image RootfsPath was cloned from at Deploy time (rootfsImage,
+	// per the Deploy call to Rootfs.Prepare) -- empty for a VM created
+	// before this field existed, or if BaseImageIdentity failed (soft
+	// error, logged, never fails Deploy itself). A later export uses these
+	// to tell whether a destination host already has a byte-identical copy
+	// of this base image, and can therefore ship only the bytes this VM's
+	// rootfs has diverged by instead of the whole file -- see
+	// boxctl-vms/docs/plans/rootfs-diff-export-import.md. Deliberately not
+	// re-verified here after Deploy: if the base image is later changed on
+	// this host, that plan's own hash re-check at export time is what
+	// notices and falls back, not anything in onctl.
+	BaseImagePath      string `json:"baseImagePath,omitempty"`
+	BaseImageSHA256    string `json:"baseImageSha256,omitempty"`
+	BaseImageSizeBytes int64  `json:"baseImageSizeBytes,omitempty"`
 }
 
 func (p ProviderFC) vmDir(name string) string {
@@ -580,6 +613,24 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 		return Vm{}, fmt.Errorf("failed to prepare rootfs: %w", err)
 	}
 
+	// Best-effort: a failure here only means this VM won't be eligible for
+	// diff-based export later (see fcVM.BaseImagePath's doc comment) — it
+	// must never fail Deploy itself over what's purely an optimization for
+	// a later, unrelated feature. p.Rootfs might not implement
+	// BaseImageIdentifier at all (see that interface's doc comment).
+	var baseImagePath string
+	var baseImageSHA256 string
+	var baseImageSizeBytes int64
+	if identifier, ok := p.Rootfs.(BaseImageIdentifier); ok {
+		if hash, size, err := identifier.BaseImageIdentity(rootfsImage); err != nil {
+			log.Println("[DEBUG] failed to compute base image identity for " + rootfsImage + ": " + err.Error())
+		} else {
+			baseImagePath = rootfsImage
+			baseImageSHA256 = hash
+			baseImageSizeBytes = size
+		}
+	}
+
 	var cachePath string
 	if p.Config.CacheImage != "" {
 		cachePath = filepath.Join(dir, "cache.ext4")
@@ -652,21 +703,24 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 		sshPort = 22
 	}
 	vm := fcVM{
-		Name:        server.Name,
-		PID:         pid,
-		SocketPath:  socketPath,
-		TapDevice:   tapDevice,
-		IPAddress:   ip,
-		MacAddress:  mac,
-		VCPUCount:   vcpu,
-		MemSizeMib:  mem,
-		Status:      fcStatusRunning,
-		KernelImage: kernelImage,
-		RootfsPath:  rootfsPath,
-		CachePath:   cachePath,
-		CacheImage:  p.Config.CacheImage,
-		SSHPort:     sshPort,
-		CreatedAt:   time.Now(),
+		Name:               server.Name,
+		PID:                pid,
+		SocketPath:         socketPath,
+		TapDevice:          tapDevice,
+		IPAddress:          ip,
+		MacAddress:         mac,
+		VCPUCount:          vcpu,
+		MemSizeMib:         mem,
+		Status:             fcStatusRunning,
+		KernelImage:        kernelImage,
+		RootfsPath:         rootfsPath,
+		CachePath:          cachePath,
+		CacheImage:         p.Config.CacheImage,
+		SSHPort:            sshPort,
+		CreatedAt:          time.Now(),
+		BaseImagePath:      baseImagePath,
+		BaseImageSHA256:    baseImageSHA256,
+		BaseImageSizeBytes: baseImageSizeBytes,
 	}
 	if err := saveFCMetadata(p.metadataPath(server.Name), vm); err != nil {
 		return Vm{}, fmt.Errorf("microVM started but failed to persist metadata: %w", err)
