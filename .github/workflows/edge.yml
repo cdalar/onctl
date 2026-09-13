@@ -99,7 +99,7 @@ jobs:
           args: release --snapshot --clean -f .goreleaser.edge.yml --skip=publish --parallelism=1
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: edge-dist
           path: |
