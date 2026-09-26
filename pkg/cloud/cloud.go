@@ -163,6 +163,22 @@ type ImageLister interface {
 	ListImages() ([]CloudImage, error)
 }
 
+// Restarter is an optional interface for providers that can cold-boot an
+// existing VM from its own disk -- a reboot that keeps the disk, as opposed to
+// Resume (which restores a snapshot, memory included) or Destroy + Deploy
+// (which starts from a fresh disk). Only Firecracker implements it today.
+type Restarter interface {
+	Restart(server Vm, opts RestartOptions) (Vm, error)
+}
+
+// RestartOptions changes how a VM comes back from Restart.
+type RestartOptions struct {
+	// KernelImage, when set, is the kernel the VM boots from now on (and on
+	// later restarts); empty keeps the one it was deployed or last restarted
+	// with.
+	KernelImage string
+}
+
 type CloudProviderInterface interface {
 	// Deploy deploys a new instance
 	Deploy(Vm) (Vm, error)

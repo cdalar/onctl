@@ -27,8 +27,8 @@ const (
 	// fcStatusDead marks a microVM whose firecracker process is no longer
 	// alive even though its persisted metadata was last written as "running"
 	// or "paused" (e.g. the host rebooted, or the process crashed).
-	// Firecracker VMMs have no restart-from-disk: recovering from this state
-	// requires destroying and redeploying the microVM. Deliberately not
+	// Firecracker VMMs don't survive that; Restart cold-boots the microVM
+	// again from its disk (Resume can't: there is no snapshot). Deliberately not
 	// "stopped" — cmd.isPausedStatus treats that string as the cross-provider
 	// paused/resumable convention (AWS "stopped", GCP "TERMINATED", Azure
 	// "deallocated"), which "dead" is not: there is nothing to resume.
@@ -672,11 +672,7 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 		return Vm{}, err
 	}
 
-	kernelArgs := strings.TrimSpace(p.Config.KernelArgs)
-	if kernelArgs == "" {
-		kernelArgs = defaultFCKernelArgs
-	}
-	kernelArgs = fmt.Sprintf("%s ip=%s::%s:%s::eth0:off", kernelArgs, ip, gateway, mask)
+	kernelArgs := p.kernelArgs(ip, gateway, mask)
 
 	mac := fcMAC(server.Name)
 	socketPath := filepath.Join(dir, "fc.sock")
@@ -726,6 +722,18 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 		return Vm{}, fmt.Errorf("microVM started but failed to persist metadata: %w", err)
 	}
 	return mapFCVM(vm), nil
+}
+
+// kernelArgs is the guest kernel command line: the configured (or default)
+// args plus the static IP configuration for eth0. Shared by Deploy and
+// Restart so a restarted VM comes back on exactly the network settings it
+// was deployed with.
+func (p ProviderFC) kernelArgs(ip, gateway, mask string) string {
+	args := strings.TrimSpace(p.Config.KernelArgs)
+	if args == "" {
+		args = defaultFCKernelArgs
+	}
+	return fmt.Sprintf("%s ip=%s::%s:%s::eth0:off", args, ip, gateway, mask)
 }
 
 // Destroy stops the microVM (if running), removes its TAP device and deletes
@@ -934,6 +942,142 @@ func (p ProviderFC) Resume(server Vm) (Vm, error) {
 		_ = p.Process.Stop(pid)
 		_ = p.Net.DeleteTap(tapDevice)
 		return Vm{}, fmt.Errorf("microVM %q resumed but failed to save metadata: %w", server.Name, err)
+	}
+	return mapFCVM(vm), nil
+}
+
+// Restart cold-boots an existing microVM from its own disk: it stops the
+// firecracker process if one is running (after a best-effort guest
+// filesystem sync), recreates the TAP device and boots a fresh VMM against
+// the VM's existing rootfs (and cache disk, if any) with the same IP, MAC,
+// vCPUs and memory. Unlike Resume, guest memory isn't restored -- to the
+// guest this is a reboot.
+//
+// opts.KernelImage, when set, replaces the kernel the VM boots and is
+// recorded in its metadata, so later restarts keep it. This is the only way
+// to move an existing VM to a new kernel without losing its disk: a
+// snapshot carries the kernel it was taken under, and Deploy over a stale
+// record starts from a fresh rootfs.
+//
+// Works on a running, a paused (its snapshot is discarded, so anything only
+// in memory at Pause time is lost -- a non-hot Pause synced the disk first)
+// and a dead VM, e.g. after a host reboot, which previously could only be
+// recovered by destroying and redeploying it.
+func (p ProviderFC) Restart(server Vm, opts RestartOptions) (Vm, error) {
+	if server.Name == "" {
+		return Vm{}, errors.New("vm name is required")
+	}
+	vm, err := loadFCMetadata(p.metadataPath(server.Name))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return Vm{}, fmt.Errorf("no microVM found with name %q", server.Name)
+		}
+		return Vm{}, err
+	}
+
+	kernelImage := opts.KernelImage
+	if kernelImage == "" {
+		kernelImage = vm.KernelImage
+	}
+	if kernelImage == "" {
+		kernelImage = p.Config.KernelImage
+	}
+	if _, err := os.Stat(kernelImage); err != nil {
+		return Vm{}, fmt.Errorf("kernel image for %q: %w", server.Name, err)
+	}
+	if _, err := os.Stat(vm.RootfsPath); err != nil {
+		return Vm{}, fmt.Errorf("rootfs of %q: %w", server.Name, err)
+	}
+	if vm.CachePath != "" {
+		if _, err := os.Stat(vm.CachePath); err != nil {
+			return Vm{}, fmt.Errorf("cache disk of %q: %w", server.Name, err)
+		}
+	}
+
+	if p.isAlive(vm) {
+		p.flushGuestFilesystem(vm)
+		if err := p.Process.Stop(vm.PID); err != nil {
+			return Vm{}, fmt.Errorf("failed to stop microVM %q: %w", server.Name, err)
+		}
+	}
+	if vm.TapDevice != "" {
+		if err := p.Net.DeleteTap(vm.TapDevice); err != nil {
+			log.Println("[DEBUG] failed to delete tap device " + vm.TapDevice + " before restart: " + err.Error())
+		}
+	}
+
+	bridge := p.Config.Bridge
+	if bridge == "" {
+		bridge = "fcbr0"
+	}
+	cidr := p.Config.CIDR
+	if cidr == "" {
+		cidr = "172.16.0.1/24"
+	}
+	if err := p.Net.EnsureBridge(bridge, cidr); err != nil {
+		return Vm{}, fmt.Errorf("failed to set up bridge %q: %w", bridge, err)
+	}
+	gateway, mask, err := bridgeGatewayAndMask(cidr)
+	if err != nil {
+		return Vm{}, err
+	}
+	tapDevice := vm.TapDevice
+	if tapDevice == "" {
+		tapDevice = fcTapName(server.Name)
+	}
+	if err := p.Net.CreateTap(tapDevice, bridge); err != nil {
+		return Vm{}, fmt.Errorf("failed to create tap device: %w", err)
+	}
+	mac := vm.MacAddress
+	if mac == "" {
+		mac = fcMAC(server.Name)
+	}
+	socketPath := vm.SocketPath
+	if socketPath == "" {
+		socketPath = filepath.Join(p.vmDir(server.Name), "fc.sock")
+	}
+
+	pid, err := p.Process.Start(socketPath, FCVMConfig{
+		KernelImage: kernelImage,
+		KernelArgs:  p.kernelArgs(vm.IPAddress, gateway, mask),
+		RootfsPath:  vm.RootfsPath,
+		CachePath:   vm.CachePath,
+		VCPUCount:   vm.VCPUCount,
+		MemSizeMib:  vm.MemSizeMib,
+		TapDevice:   tapDevice,
+		MacAddress:  mac,
+	}, filepath.Join(p.vmDir(server.Name), "fc.log"))
+	if err != nil {
+		_ = p.Net.DeleteTap(tapDevice)
+		// The old process is gone either way; record that rather than leave
+		// metadata claiming a VM that isn't there.
+		vm.PID = 0
+		vm.Status = fcStatusDead
+		if saveErr := saveFCMetadata(p.metadataPath(server.Name), vm); saveErr != nil {
+			log.Println("[DEBUG] failed to record failed restart of " + server.Name + ": " + saveErr.Error())
+		}
+		return Vm{}, fmt.Errorf("failed to start microVM %q: %w", server.Name, err)
+	}
+
+	// A cold boot makes any pause snapshot meaningless (and wrong to resume
+	// from: it would bring back the old kernel and pre-restart memory).
+	for _, f := range []string{vm.SnapshotStatePath, vm.SnapshotMemFilePath} {
+		if f != "" {
+			_ = os.Remove(f)
+		}
+	}
+	vm.SnapshotStatePath, vm.SnapshotMemFilePath = "", ""
+	vm.PID = pid
+	vm.Status = fcStatusRunning
+	vm.KernelImage = kernelImage
+	vm.TapDevice = tapDevice
+	vm.MacAddress = mac
+	vm.SocketPath = socketPath
+	if err := saveFCMetadata(p.metadataPath(server.Name), vm); err != nil {
+		// Same reasoning as Resume: never leave an unrecorded VMM running.
+		_ = p.Process.Stop(pid)
+		_ = p.Net.DeleteTap(tapDevice)
+		return Vm{}, fmt.Errorf("microVM %q restarted but failed to save metadata: %w", server.Name, err)
 	}
 	return mapFCVM(vm), nil
 }
