@@ -69,6 +69,8 @@ sudo onctl create -n mv2 --provider fc --vcpu 2 --memory 1024 \
 
 # pause / resume:
 sudo ONCTL_CLOUD=fc onctl pause mv2 && sudo ONCTL_CLOUD=fc onctl resume mv2
+# cold restart from the VM's own disk, optionally on another kernel (data kept, memory not):
+sudo ONCTL_CLOUD=fc onctl restart mv2 -f --kernel-image /opt/fc/images/boxctl-kernel.vmlinux
 
 # cleanup:
 sudo ONCTL_CLOUD=fc onctl destroy mv1 -f && sudo ONCTL_CLOUD=fc onctl destroy mv2 -f

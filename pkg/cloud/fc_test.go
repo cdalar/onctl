@@ -21,6 +21,7 @@ import (
 type fakeFCProcess struct {
 	pid            int
 	startCalls     int
+	startCfgs      []FCVMConfig
 	startErr       error
 	startBareCalls int
 	startBareErr   error
@@ -29,8 +30,9 @@ type fakeFCProcess struct {
 	notOwned       map[int]bool
 }
 
-func (f *fakeFCProcess) Start(_ string, _ FCVMConfig, _ string) (int, error) {
+func (f *fakeFCProcess) Start(_ string, cfg FCVMConfig, _ string) (int, error) {
 	f.startCalls++
+	f.startCfgs = append(f.startCfgs, cfg)
 	if f.startErr != nil {
 		return 0, f.startErr
 	}
@@ -625,6 +627,139 @@ func TestProviderFC_PauseResume(t *testing.T) {
 	running, err = p.List()
 	require.NoError(t, err)
 	require.Len(t, running.List, 1)
+}
+
+// newTestFCProviderWithKernels is newTestFCProvider with real kernel files,
+// since Restart checks the kernel it boots exists.
+func newTestFCProviderWithKernels(t *testing.T) (ProviderFC, *fakeFCProcess, *fakeNetworkManager, *fakeRootfsPreparer, string, string) {
+	t.Helper()
+	p, proc, _, net, rootfs := newTestFCProvider(t)
+	dir := t.TempDir()
+	oldKernel := filepath.Join(dir, "vmlinux-old")
+	newKernel := filepath.Join(dir, "vmlinux-new")
+	require.NoError(t, os.WriteFile(oldKernel, []byte("old"), 0644))
+	require.NoError(t, os.WriteFile(newKernel, []byte("new"), 0644))
+	p.Config.KernelImage = oldKernel
+	return p, proc, net, rootfs, oldKernel, newKernel
+}
+
+func TestProviderFC_Restart_RunningWithNewKernel(t *testing.T) {
+	p, proc, net, rootfs, oldKernel, newKernel := newTestFCProviderWithKernels(t)
+	deployed, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	before, err := loadFCMetadata(p.metadataPath("test-vm"))
+	require.NoError(t, err)
+	assert.Equal(t, oldKernel, before.KernelImage)
+
+	proc.pid = 23456 // the new VMM gets a new PID
+	vm, err := p.Restart(Vm{Name: "test-vm"}, RestartOptions{KernelImage: newKernel})
+	require.NoError(t, err)
+
+	// The old process is stopped and a fresh VMM boots the same disk, IP and
+	// MAC on the new kernel -- no new rootfs is prepared.
+	assert.Equal(t, []int{12345}, proc.stopCalls)
+	require.Len(t, proc.startCfgs, 2)
+	cfg := proc.startCfgs[1]
+	assert.Equal(t, newKernel, cfg.KernelImage)
+	assert.Equal(t, before.RootfsPath, cfg.RootfsPath)
+	assert.Equal(t, before.MacAddress, cfg.MacAddress)
+	assert.Equal(t, proc.startCfgs[0].KernelArgs, cfg.KernelArgs, "same kernel command line, incl. the static IP")
+	assert.Len(t, rootfs.calls, 1)
+	assert.Contains(t, net.deleted, fcTapName("test-vm"))
+	assert.Equal(t, []string{fcTapName("test-vm"), fcTapName("test-vm")}, net.taps)
+
+	assert.Equal(t, "running", vm.Status)
+	assert.Equal(t, deployed.IP, vm.IP)
+	after, err := loadFCMetadata(p.metadataPath("test-vm"))
+	require.NoError(t, err)
+	assert.Equal(t, newKernel, after.KernelImage, "the new kernel sticks for later restarts")
+	assert.Equal(t, 23456, after.PID)
+}
+
+func TestProviderFC_Restart_KeepsKernelByDefault(t *testing.T) {
+	p, proc, _, _, oldKernel, _ := newTestFCProviderWithKernels(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+
+	_, err = p.Restart(Vm{Name: "test-vm"}, RestartOptions{})
+	require.NoError(t, err)
+	require.Len(t, proc.startCfgs, 2)
+	assert.Equal(t, oldKernel, proc.startCfgs[1].KernelImage)
+}
+
+func TestProviderFC_Restart_DeadVM(t *testing.T) {
+	// A host reboot kills every VMM; Restart must bring the VM back from its
+	// disk rather than requiring destroy + redeploy.
+	p, proc, _, rootfs, _, _ := newTestFCProviderWithKernels(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	delete(proc.running, proc.pid)
+	byName, err := p.GetByName("test-vm")
+	require.NoError(t, err)
+	require.Equal(t, "dead", byName.Status)
+
+	vm, err := p.Restart(Vm{Name: "test-vm"}, RestartOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "running", vm.Status)
+	assert.Empty(t, proc.stopCalls, "nothing to stop for a dead VM")
+	assert.Len(t, rootfs.calls, 1, "the existing disk is reused")
+}
+
+func TestProviderFC_Restart_PausedVMDiscardsSnapshot(t *testing.T) {
+	p, proc, _, _, _, newKernel := newTestFCProviderWithKernels(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	require.NoError(t, p.Pause(Vm{Name: "test-vm"}, true))
+	paused, err := loadFCMetadata(p.metadataPath("test-vm"))
+	require.NoError(t, err)
+	require.FileExists(t, paused.SnapshotMemFilePath)
+
+	vm, err := p.Restart(Vm{Name: "test-vm"}, RestartOptions{KernelImage: newKernel})
+	require.NoError(t, err)
+	assert.Equal(t, "running", vm.Status)
+	assert.Equal(t, 0, proc.startBareCalls, "a cold boot, not a snapshot restore")
+	assert.NoFileExists(t, paused.SnapshotStatePath)
+	assert.NoFileExists(t, paused.SnapshotMemFilePath)
+	after, err := loadFCMetadata(p.metadataPath("test-vm"))
+	require.NoError(t, err)
+	assert.Empty(t, after.SnapshotStatePath)
+	assert.Empty(t, after.SnapshotMemFilePath)
+}
+
+func TestProviderFC_Restart_MissingKernelLeavesVMAlone(t *testing.T) {
+	p, proc, _, _, _, _ := newTestFCProviderWithKernels(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+
+	_, err = p.Restart(Vm{Name: "test-vm"}, RestartOptions{KernelImage: "/does/not/exist"})
+	require.Error(t, err)
+	assert.Empty(t, proc.stopCalls, "a bad kernel path must not take the running VM down")
+}
+
+func TestProviderFC_Restart_StartFailureMarksDead(t *testing.T) {
+	p, proc, net, _, _, newKernel := newTestFCProviderWithKernels(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	proc.startErr = errors.New("boom")
+
+	_, err = p.Restart(Vm{Name: "test-vm"}, RestartOptions{KernelImage: newKernel})
+	require.Error(t, err)
+	after, err := loadFCMetadata(p.metadataPath("test-vm"))
+	require.NoError(t, err)
+	assert.Equal(t, "dead", after.Status)
+	assert.Equal(t, 0, after.PID)
+	assert.Contains(t, net.deleted, fcTapName("test-vm"))
+}
+
+func TestProviderFC_Restart_NotFound(t *testing.T) {
+	p, _, _, _, _, _ := newTestFCProviderWithKernels(t)
+	_, err := p.Restart(Vm{Name: "nope"}, RestartOptions{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no microVM found")
+}
+
+func TestProviderFC_ImplementsRestarter(t *testing.T) {
+	var _ Restarter = ProviderFC{}
 }
 
 func TestProviderFC_Pause_NotAlive(t *testing.T) {
