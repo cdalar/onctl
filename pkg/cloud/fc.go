@@ -769,7 +769,7 @@ func (p ProviderFC) Destroy(server Vm) error {
 		if !p.Process.Owns(vm.PID, vm.SocketPath) {
 			log.Println("[DEBUG] persisted PID " + fmt.Sprint(vm.PID) + " for " + server.Name + " is no longer the firecracker process for this microVM; skipping stop")
 		} else if err := p.Process.Stop(vm.PID); err != nil {
-			return fmt.Errorf("failed to stop microVM: %w", err)
+			return fmt.Errorf("failed to stop microVM: %w", withRootHint(server.Name, err))
 		}
 	}
 	if vm.TapDevice != "" {
@@ -778,6 +778,18 @@ func (p ProviderFC) Destroy(server Vm) error {
 		}
 	}
 	return os.RemoveAll(p.vmDir(server.Name))
+}
+
+// withRootHint appends a "re-run with sudo" hint to err when it is a
+// permission error. The firecracker process and its API socket belong to
+// whoever created the microVM (root, since Deploy needs CAP_NET_ADMIN), so
+// a non-root onctl can see the VM but gets EACCES/EPERM when signalling the
+// process or connecting to the socket.
+func withRootHint(name string, err error) error {
+	if errors.Is(err, os.ErrPermission) {
+		return fmt.Errorf("%w (microVM %q is owned by another user, typically root; re-run with sudo)", err, name)
+	}
+	return err
 }
 
 // flushGuestFilesystem asks vm's guest to flush all filesystem write
@@ -842,7 +854,7 @@ func (p ProviderFC) Pause(server Vm, hot bool) error {
 		p.flushGuestFilesystem(vm)
 	}
 	if err := p.API.SetState(vm.SocketPath, "Paused"); err != nil {
-		return fmt.Errorf("failed to pause microVM: %w", err)
+		return fmt.Errorf("failed to pause microVM: %w", withRootHint(server.Name, err))
 	}
 	statePath := p.snapshotStatePath(server.Name)
 	memPath := p.snapshotMemFilePath(server.Name)
@@ -854,7 +866,7 @@ func (p ProviderFC) Pause(server Vm, hot bool) error {
 		return fmt.Errorf("failed to snapshot microVM: %w", err)
 	}
 	if err := p.Process.Stop(vm.PID); err != nil {
-		return fmt.Errorf("microVM %q snapshotted but failed to stop its process (snapshot files at %s are still usable): %w", server.Name, p.vmDir(server.Name), err)
+		return fmt.Errorf("microVM %q snapshotted but failed to stop its process (snapshot files at %s are still usable): %w", server.Name, p.vmDir(server.Name), withRootHint(server.Name, err))
 	}
 	if vm.TapDevice != "" {
 		if err := p.Net.DeleteTap(vm.TapDevice); err != nil {
@@ -999,7 +1011,7 @@ func (p ProviderFC) Restart(server Vm, opts RestartOptions) (Vm, error) {
 	if p.isAlive(vm) {
 		p.flushGuestFilesystem(vm)
 		if err := p.Process.Stop(vm.PID); err != nil {
-			return Vm{}, fmt.Errorf("failed to stop microVM %q: %w", server.Name, err)
+			return Vm{}, fmt.Errorf("failed to stop microVM %q: %w", server.Name, withRootHint(server.Name, err))
 		}
 	}
 	if vm.TapDevice != "" {
