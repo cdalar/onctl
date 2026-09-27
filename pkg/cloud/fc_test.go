@@ -6,10 +6,12 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -28,6 +30,7 @@ type fakeFCProcess struct {
 	stopCalls      []int
 	running        map[int]bool
 	notOwned       map[int]bool
+	stopErr        error
 }
 
 func (f *fakeFCProcess) Start(_ string, cfg FCVMConfig, _ string) (int, error) {
@@ -57,6 +60,9 @@ func (f *fakeFCProcess) StartBare(_ string, _ string) (int, error) {
 
 func (f *fakeFCProcess) Stop(pid int) error {
 	f.stopCalls = append(f.stopCalls, pid)
+	if f.stopErr != nil {
+		return f.stopErr
+	}
 	delete(f.running, pid)
 	return nil
 }
@@ -76,11 +82,12 @@ type fakeFCAPI struct {
 	createSnapshotErr error
 	loadCalls         []string // "snapshotPath|memFilePath"
 	loadSnapshotErr   error
+	setStateErr       error
 }
 
 func (f *fakeFCAPI) SetState(_ string, state string) error {
 	f.states = append(f.states, state)
-	return nil
+	return f.setStateErr
 }
 
 func (f *fakeFCAPI) CreateSnapshot(_ string, snapshotPath, memFilePath string) error {
@@ -868,4 +875,61 @@ func TestSanitizeGuestHostname_TruncationPreservesUniqueness(t *testing.T) {
 	assert.NotEqual(t, hostnameA, hostnameB, "distinct VM names sharing a long common prefix must not collide after truncation")
 	assert.LessOrEqual(t, len(hostnameA), 63)
 	assert.LessOrEqual(t, len(hostnameB), 63)
+}
+
+// TestProviderFC_PermissionErrorsSuggestSudo verifies that when a non-root
+// onctl hits a root-owned microVM (EACCES on its API socket, EPERM when
+// signalling its process), the error tells the user to re-run with sudo
+// instead of leaving them with a bare "permission denied".
+func TestProviderFC_PermissionErrorsSuggestSudo(t *testing.T) {
+	sockErr := &net.OpError{Op: "dial", Net: "unix", Err: os.NewSyscallError("connect", syscall.EACCES)}
+
+	t.Run("pause", func(t *testing.T) {
+		p, _, api, _, _ := newTestFCProvider(t)
+		_, err := p.Deploy(Vm{Name: "test-vm"})
+		require.NoError(t, err)
+		api.setStateErr = sockErr
+
+		err = p.Pause(Vm{Name: "test-vm"}, true)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, syscall.EACCES)
+		assert.Contains(t, err.Error(), "re-run with sudo")
+	})
+
+	t.Run("destroy", func(t *testing.T) {
+		p, proc, _, _, _ := newTestFCProvider(t)
+		_, err := p.Deploy(Vm{Name: "test-vm"})
+		require.NoError(t, err)
+		proc.stopErr = syscall.EPERM
+
+		err = p.Destroy(Vm{Name: "test-vm"})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, syscall.EPERM)
+		assert.Contains(t, err.Error(), "re-run with sudo")
+		// Nothing was deleted: the root-owned VM is still intact.
+		_, statErr := os.Stat(p.vmDir("test-vm"))
+		assert.NoError(t, statErr)
+	})
+
+	t.Run("restart", func(t *testing.T) {
+		p, proc, _, _, _, _ := newTestFCProviderWithKernels(t)
+		_, err := p.Deploy(Vm{Name: "test-vm"})
+		require.NoError(t, err)
+		proc.stopErr = syscall.EPERM
+
+		_, err = p.Restart(Vm{Name: "test-vm"}, RestartOptions{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "re-run with sudo")
+	})
+
+	t.Run("other errors get no hint", func(t *testing.T) {
+		p, proc, _, _, _ := newTestFCProvider(t)
+		_, err := p.Deploy(Vm{Name: "test-vm"})
+		require.NoError(t, err)
+		proc.stopErr = errors.New("boom")
+
+		err = p.Destroy(Vm{Name: "test-vm"})
+		require.Error(t, err)
+		assert.NotContains(t, err.Error(), "sudo")
+	})
 }
