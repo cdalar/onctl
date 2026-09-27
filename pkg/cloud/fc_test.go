@@ -337,6 +337,7 @@ func TestProviderFC_Deploy(t *testing.T) {
 	assert.Equal(t, "/images/rootfs.ext4", meta.BaseImagePath)
 	assert.Equal(t, "fakehash-/images/rootfs.ext4", meta.BaseImageSHA256)
 	assert.Equal(t, int64(42), meta.BaseImageSizeBytes)
+	assert.Equal(t, "/images/rootfs.ext4", vm.BaseImage)
 }
 
 // TestProviderFC_Deploy_BaseImageIdentityFailureIsNonFatal covers Deploy's
@@ -349,10 +350,13 @@ func TestProviderFC_Deploy_BaseImageIdentityFailureIsNonFatal(t *testing.T) {
 	vm, err := p.Deploy(Vm{Name: "test-vm"})
 	require.NoError(t, err)
 	assert.Equal(t, "test-vm", vm.Name)
+	// The path is recorded regardless -- it's what Vm.BaseImage reports --
+	// but without a SHA export won't try to diff against it.
+	assert.Equal(t, "/images/rootfs.ext4", vm.BaseImage)
 
 	meta, err := loadFCMetadata(p.metadataPath("test-vm"))
 	require.NoError(t, err)
-	assert.Empty(t, meta.BaseImagePath)
+	assert.Equal(t, "/images/rootfs.ext4", meta.BaseImagePath)
 	assert.Empty(t, meta.BaseImageSHA256)
 	assert.Zero(t, meta.BaseImageSizeBytes)
 }

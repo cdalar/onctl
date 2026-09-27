@@ -250,9 +250,11 @@ type fcVM struct {
 	SSHPort int `json:"sshPort,omitempty"`
 	// BaseImagePath/BaseImageSHA256/BaseImageSizeBytes identify the exact
 	// base image RootfsPath was cloned from at Deploy time (rootfsImage,
-	// per the Deploy call to Rootfs.Prepare) -- empty for a VM created
-	// before this field existed, or if BaseImageIdentity failed (soft
-	// error, logged, never fails Deploy itself). A later export uses these
+	// per the Deploy call to Rootfs.Prepare) -- all empty for a VM created
+	// before these fields existed. BaseImagePath is always recorded since
+	// then (it's also Vm.BaseImage); the SHA/size are empty if
+	// BaseImageIdentity failed (soft error, logged, never fails Deploy
+	// itself), and export keys off the SHA, not the path. A later export uses these
 	// to tell whether a destination host already has a byte-identical copy
 	// of this base image, and can therefore ship only the bytes this VM's
 	// rootfs has diverged by instead of the whole file -- see
@@ -337,14 +339,15 @@ func (p ProviderFC) loadAndReconcile(path string) (fcVM, error) {
 
 func mapFCVM(vm fcVM) Vm {
 	return Vm{
-		Provider: "fc",
-		ID:       vm.Name,
-		Name:     vm.Name,
-		IP:       vm.IPAddress,
-		Type:     fmt.Sprintf("%dvcpu-%dmb", vm.VCPUCount, vm.MemSizeMib),
-		Image:    vm.RootfsPath,
-		Status:   vm.Status,
-		SSHPort:  vm.SSHPort,
+		Provider:  "fc",
+		ID:        vm.Name,
+		Name:      vm.Name,
+		IP:        vm.IPAddress,
+		Type:      fmt.Sprintf("%dvcpu-%dmb", vm.VCPUCount, vm.MemSizeMib),
+		Image:     vm.RootfsPath,
+		BaseImage: vm.BaseImagePath,
+		Status:    vm.Status,
+		SSHPort:   vm.SSHPort,
 		// Unlike ch (see ProviderCH.reconcileSSHReady), fc does not
 		// TCP-probe to compute this: a Firecracker microVM boots in
 		// milliseconds (the whole point of the technology -- see the
@@ -618,14 +621,13 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 	// must never fail Deploy itself over what's purely an optimization for
 	// a later, unrelated feature. p.Rootfs might not implement
 	// BaseImageIdentifier at all (see that interface's doc comment).
-	var baseImagePath string
+	baseImagePath := rootfsImage
 	var baseImageSHA256 string
 	var baseImageSizeBytes int64
 	if identifier, ok := p.Rootfs.(BaseImageIdentifier); ok {
 		if hash, size, err := identifier.BaseImageIdentity(rootfsImage); err != nil {
 			log.Println("[DEBUG] failed to compute base image identity for " + rootfsImage + ": " + err.Error())
 		} else {
-			baseImagePath = rootfsImage
 			baseImageSHA256 = hash
 			baseImageSizeBytes = size
 		}

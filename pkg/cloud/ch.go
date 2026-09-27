@@ -179,6 +179,10 @@ type chVM struct {
 	Status      string `json:"status"`
 	KernelImage string `json:"kernelImage"`
 	RootfsPath  string `json:"rootfsPath"`
+	// BaseImagePath is the base image RootfsPath was copied from at
+	// Deploy time (Vm.BaseImage) -- empty for a VM created before this
+	// field existed.
+	BaseImagePath string `json:"baseImagePath,omitempty"`
 	// OS is chOSWindows for a Windows guest, empty/"linux" otherwise.
 	OS string `json:"os,omitempty"`
 	// SeedDiskPath is the NoCloud seed ISO path for a Windows guest (see
@@ -265,6 +269,7 @@ func mapCHVM(vm chVM) Vm {
 		IP:        vm.IPAddress,
 		Type:      fmt.Sprintf("%dvcpu-%dmb", vm.VCPUCount, vm.MemSizeMib),
 		Image:     vm.RootfsPath,
+		BaseImage: vm.BaseImagePath,
 		Status:    vm.Status,
 		SSHPort:   vm.SSHPort,
 		SSHReady:  vm.SSHReady,
@@ -556,21 +561,22 @@ func (p ProviderCH) Deploy(server Vm) (Vm, error) {
 		sshPort = 22
 	}
 	vm := chVM{
-		Name:         server.Name,
-		PID:          pid,
-		SocketPath:   socketPath,
-		TapDevice:    tapDevice,
-		IPAddress:    ip,
-		MacAddress:   mac,
-		VCPUCount:    vcpu,
-		MemSizeMib:   mem,
-		Status:       chStatusRunning,
-		KernelImage:  kernelImage,
-		RootfsPath:   rootfsPath,
-		OS:           p.Config.OS,
-		SeedDiskPath: seedDiskPath,
-		SSHPort:      sshPort,
-		CreatedAt:    time.Now(),
+		Name:          server.Name,
+		PID:           pid,
+		SocketPath:    socketPath,
+		TapDevice:     tapDevice,
+		IPAddress:     ip,
+		MacAddress:    mac,
+		VCPUCount:     vcpu,
+		MemSizeMib:    mem,
+		Status:        chStatusRunning,
+		KernelImage:   kernelImage,
+		RootfsPath:    rootfsPath,
+		BaseImagePath: rootfsImage,
+		OS:            p.Config.OS,
+		SeedDiskPath:  seedDiskPath,
+		SSHPort:       sshPort,
+		CreatedAt:     time.Now(),
 	}
 	if err := saveCHMetadata(p.metadataPath(server.Name), vm); err != nil {
 		return Vm{}, fmt.Errorf("microVM started but failed to persist metadata: %w", err)
