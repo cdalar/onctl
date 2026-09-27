@@ -142,6 +142,8 @@ func TestProviderCH_Deploy(t *testing.T) {
 	assert.Equal(t, 12345, meta.PID)
 	assert.Equal(t, "172.17.0.2", meta.IPAddress)
 	assert.Equal(t, chStatusRunning, meta.Status)
+	assert.Equal(t, "/images/rootfs.ext4", meta.BaseImagePath)
+	assert.Equal(t, "/images/rootfs.ext4", vm.BaseImage)
 }
 
 func TestProviderCH_Deploy_CustomType(t *testing.T) {

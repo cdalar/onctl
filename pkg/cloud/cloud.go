@@ -34,6 +34,11 @@ type Vm struct {
 	Type string `yaml:"type"`
 	// Image is the OS image to use for the instance
 	Image string `yaml:"image"`
+	// BaseImage is, for fc/ch, the base rootfs image this VM's own disk
+	// (Image) was cloned from at Deploy time -- what callers like
+	// boxctl-vms map back to a named image. Empty for a VM deployed
+	// before it was recorded, and for every remote-cloud provider.
+	BaseImage string
 	// Status is the status of the instance
 	Status string
 	// SSHReady reports whether it's actually safe to open a terminal to
