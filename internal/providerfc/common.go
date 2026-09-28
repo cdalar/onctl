@@ -102,18 +102,19 @@ func GetConfig() cloud.FCConfig {
 	}
 
 	return cloud.FCConfig{
-		KernelImage:  expandHome(viper.GetString("fc.kernelImage")),
-		RootfsImage:  expandHome(viper.GetString("fc.rootfsImage")),
-		KernelArgs:   viper.GetString("fc.kernelArgs"),
-		VCPUCount:    vcpu,
-		MemSizeMib:   mem,
-		Bridge:       bridge,
-		CIDR:         cidr,
-		Username:     username,
-		BinPath:      binPath,
-		StateDir:     stateDir,
-		CacheImage:   expandHome(viper.GetString("fc.cacheImage")),
-		CacheSizeMib: cacheSizeMib,
+		KernelImage:   expandHome(viper.GetString("fc.kernelImage")),
+		RootfsImage:   expandHome(viper.GetString("fc.rootfsImage")),
+		KernelArgs:    viper.GetString("fc.kernelArgs"),
+		VCPUCount:     vcpu,
+		MemSizeMib:    mem,
+		RootfsSizeMib: viper.GetInt64("fc.rootfsSizeMib"),
+		Bridge:        bridge,
+		CIDR:          cidr,
+		Username:      username,
+		BinPath:       binPath,
+		StateDir:      stateDir,
+		CacheImage:    expandHome(viper.GetString("fc.cacheImage")),
+		CacheSizeMib:  cacheSizeMib,
 		// Shared with every other provider's SSH usage (onctl.yaml's
 		// top-level ssh.privateKey), not fc-specific — reused here only to
 		// flush a job VM's cache-disk writes before Destroy merges them back.
@@ -490,6 +491,38 @@ func (DebugfsRootfsPreparer) Prepare(baseImage, destPath, hostname, sshPublicKey
 		return nil
 	}
 	return injectSSHKey(destPath, sshPublicKey, username)
+}
+
+// GrowRootfs extends rootfsPath to sizeMib with a sparse truncate, then
+// grows its ext4 filesystem offline with resize2fs (e2fsprogs, the same
+// package debugfs comes from). resize2fs refuses to grow an image that
+// hasn't just been checked, hence the e2fsck -f first.
+func (DebugfsRootfsPreparer) GrowRootfs(rootfsPath string, sizeMib int64) error {
+	info, err := os.Stat(rootfsPath)
+	if err != nil {
+		return err
+	}
+	want := sizeMib << 20
+	if want < info.Size() {
+		return fmt.Errorf("rootfs size %d MiB is smaller than the base image (%d MiB)", sizeMib, info.Size()>>20)
+	}
+	if want == info.Size() {
+		return nil
+	}
+	if err := os.Truncate(rootfsPath, want); err != nil {
+		return err
+	}
+	// e2fsck exits 1 (or 2) when it corrected something, which is still a
+	// usable filesystem; 4 and up means it couldn't.
+	out, err := exec.Command("e2fsck", "-f", "-y", rootfsPath).CombinedOutput()
+	var exitErr *exec.ExitError
+	if err != nil && !(errors.As(err, &exitErr) && exitErr.ExitCode() < 4) {
+		return fmt.Errorf("e2fsck %s: %w: %s", rootfsPath, err, strings.TrimSpace(string(out)))
+	}
+	if out, err := exec.Command("resize2fs", rootfsPath).CombinedOutput(); err != nil {
+		return fmt.Errorf("resize2fs %s: %w: %s", rootfsPath, err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // baseImageSidecarSuffix names the cached-digest sidecar file

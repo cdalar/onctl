@@ -770,3 +770,137 @@ func TestDebugfsRootfsPreparer_Prepare_HostnameDebugfsFails(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "debugfs failed")
 }
+
+// installFakeResizeTools puts fake e2fsck and resize2fs on PATH, each
+// appending "<tool> <args>" to recordPath and exiting with its given code.
+func installFakeResizeTools(t *testing.T, recordPath string, e2fsckExit, resize2fsExit int) {
+	t.Helper()
+	binDir := t.TempDir()
+	for tool, code := range map[string]int{"e2fsck": e2fsckExit, "resize2fs": resize2fsExit} {
+		script := fmt.Sprintf("#!/bin/sh\necho %s \"$@\" >> %q\nexit %d\n", tool, recordPath, code)
+		require.NoError(t, os.WriteFile(filepath.Join(binDir, tool), []byte(script), 0755))
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func readCalls(t *testing.T, recordPath string) string {
+	t.Helper()
+	data, err := os.ReadFile(recordPath)
+	if os.IsNotExist(err) {
+		return ""
+	}
+	require.NoError(t, err)
+	return string(data)
+}
+
+func TestDebugfsRootfsPreparer_GrowRootfs(t *testing.T) {
+	dir := t.TempDir()
+	rootfs := filepath.Join(dir, "rootfs.ext4")
+	require.NoError(t, os.WriteFile(rootfs, make([]byte, 1<<20), 0600))
+	calls := filepath.Join(dir, "calls.txt")
+	installFakeResizeTools(t, calls, 0, 0)
+
+	require.NoError(t, DebugfsRootfsPreparer{}.GrowRootfs(rootfs, 4))
+
+	info, err := os.Stat(rootfs)
+	require.NoError(t, err)
+	assert.Equal(t, int64(4<<20), info.Size())
+	// resize2fs refuses to grow an unchecked filesystem, so the check has
+	// to come first.
+	assert.Equal(t, "e2fsck -f -y "+rootfs+"\nresize2fs "+rootfs+"\n", readCalls(t, calls))
+}
+
+func TestDebugfsRootfsPreparer_GrowRootfs_SameSizeIsNoop(t *testing.T) {
+	dir := t.TempDir()
+	rootfs := filepath.Join(dir, "rootfs.ext4")
+	require.NoError(t, os.WriteFile(rootfs, make([]byte, 1<<20), 0600))
+	calls := filepath.Join(dir, "calls.txt")
+	installFakeResizeTools(t, calls, 0, 0)
+
+	require.NoError(t, DebugfsRootfsPreparer{}.GrowRootfs(rootfs, 1))
+	assert.Empty(t, readCalls(t, calls))
+}
+
+func TestDebugfsRootfsPreparer_GrowRootfs_RefusesToShrink(t *testing.T) {
+	dir := t.TempDir()
+	rootfs := filepath.Join(dir, "rootfs.ext4")
+	require.NoError(t, os.WriteFile(rootfs, make([]byte, 2<<20), 0600))
+	calls := filepath.Join(dir, "calls.txt")
+	installFakeResizeTools(t, calls, 0, 0)
+
+	err := DebugfsRootfsPreparer{}.GrowRootfs(rootfs, 1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "smaller than the base image")
+
+	// Truncating below the filesystem's own size would corrupt it.
+	info, statErr := os.Stat(rootfs)
+	require.NoError(t, statErr)
+	assert.Equal(t, int64(2<<20), info.Size())
+	assert.Empty(t, readCalls(t, calls))
+}
+
+func TestDebugfsRootfsPreparer_GrowRootfs_E2fsckExitCodes(t *testing.T) {
+	tests := []struct {
+		name       string
+		e2fsckExit int
+		wantErr    bool
+	}{
+		{"errors corrected is still usable", 1, false},
+		{"uncorrected errors fail", 4, true},
+		{"operational error fails", 8, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			rootfs := filepath.Join(dir, "rootfs.ext4")
+			require.NoError(t, os.WriteFile(rootfs, make([]byte, 1<<20), 0600))
+			calls := filepath.Join(dir, "calls.txt")
+			installFakeResizeTools(t, calls, tt.e2fsckExit, 0)
+
+			err := DebugfsRootfsPreparer{}.GrowRootfs(rootfs, 2)
+			if !tt.wantErr {
+				require.NoError(t, err)
+				assert.Contains(t, readCalls(t, calls), "resize2fs")
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "e2fsck")
+			assert.NotContains(t, readCalls(t, calls), "resize2fs")
+		})
+	}
+}
+
+func TestDebugfsRootfsPreparer_GrowRootfs_Resize2fsFailure(t *testing.T) {
+	dir := t.TempDir()
+	rootfs := filepath.Join(dir, "rootfs.ext4")
+	require.NoError(t, os.WriteFile(rootfs, make([]byte, 1<<20), 0600))
+	installFakeResizeTools(t, filepath.Join(dir, "calls.txt"), 0, 1)
+
+	err := DebugfsRootfsPreparer{}.GrowRootfs(rootfs, 2)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "resize2fs")
+}
+
+// TestDebugfsRootfsPreparer_GrowRootfs_RealExt4 runs the real e2fsprogs
+// against a real ext4 image: the filesystem, not just the file, has to
+// end up at the new size, or the guest sees none of the extra space.
+func TestDebugfsRootfsPreparer_GrowRootfs_RealExt4(t *testing.T) {
+	for _, tool := range []string{"mkfs.ext4", "e2fsck", "resize2fs", "dumpe2fs"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skip(tool + " not available")
+		}
+	}
+	rootfs := filepath.Join(t.TempDir(), "rootfs.ext4")
+	require.NoError(t, os.WriteFile(rootfs, nil, 0600))
+	require.NoError(t, os.Truncate(rootfs, 16<<20))
+	out, err := exec.Command("mkfs.ext4", "-q", "-F", "-b", "4096", rootfs).CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	require.NoError(t, DebugfsRootfsPreparer{}.GrowRootfs(rootfs, 64))
+
+	out, err = exec.Command("dumpe2fs", "-h", rootfs).CombinedOutput()
+	require.NoError(t, err, string(out))
+	assert.Regexp(t, `(?m)^Block count:\s+16384$`, string(out)) // 64 MiB / 4 KiB
+	out, err = exec.Command("e2fsck", "-f", "-n", rootfs).CombinedOutput()
+	assert.NoError(t, err, "grown filesystem should check clean: %s", out)
+}

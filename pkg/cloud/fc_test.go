@@ -136,12 +136,19 @@ type fakeRootfsPreparer struct {
 	// the fixed fake hash/size below -- lets tests exercise Deploy's
 	// soft-fail path (a hashing failure must not fail Deploy itself).
 	identityErr error
+	growCalls   []string // "rootfsPath:sizeMib"
+	growErr     error
 }
 
 func (f *fakeRootfsPreparer) Prepare(_, destPath, hostname, _, _ string) error {
 	f.calls = append(f.calls, destPath)
 	f.hostnames = append(f.hostnames, hostname)
 	return os.WriteFile(destPath, []byte("rootfs"), 0600)
+}
+
+func (f *fakeRootfsPreparer) GrowRootfs(rootfsPath string, sizeMib int64) error {
+	f.growCalls = append(f.growCalls, fmt.Sprintf("%s:%d", rootfsPath, sizeMib))
+	return f.growErr
 }
 
 func (f *fakeRootfsPreparer) BaseImageIdentity(baseImage string) (string, int64, error) {
@@ -366,6 +373,58 @@ func TestProviderFC_Deploy_BaseImageIdentityFailureIsNonFatal(t *testing.T) {
 	assert.Equal(t, "/images/rootfs.ext4", meta.BaseImagePath)
 	assert.Empty(t, meta.BaseImageSHA256)
 	assert.Zero(t, meta.BaseImageSizeBytes)
+}
+
+func TestProviderFC_Deploy_DefaultKeepsBaseImageSize(t *testing.T) {
+	p, _, _, _, rootfs := newTestFCProvider(t)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	assert.Empty(t, rootfs.growCalls)
+}
+
+func TestProviderFC_Deploy_GrowsRootfs(t *testing.T) {
+	p, _, _, _, rootfs := newTestFCProvider(t)
+	p.Config.RootfsSizeMib = 30720
+
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	wantPath := filepath.Join(p.vmDir("test-vm"), "rootfs.ext4")
+	assert.Equal(t, []string{wantPath + ":30720"}, rootfs.growCalls)
+}
+
+func TestProviderFC_Deploy_GrowFailureCleansUp(t *testing.T) {
+	p, proc, _, _, rootfs := newTestFCProvider(t)
+	p.Config.RootfsSizeMib = 30720
+	rootfs.growErr = errors.New("boom")
+
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to grow rootfs")
+	assert.Zero(t, proc.startCalls)
+	_, statErr := os.Stat(p.vmDir("test-vm"))
+	assert.True(t, os.IsNotExist(statErr))
+}
+
+// prepareOnlyRootfs is a RootfsPreparer that can't grow a rootfs.
+type prepareOnlyRootfs struct{}
+
+func (prepareOnlyRootfs) Prepare(_, destPath, _, _, _ string) error {
+	return os.WriteFile(destPath, []byte("rootfs"), 0600)
+}
+
+// A size that can't be honored must fail the create rather than boot a
+// VM with a smaller disk than the caller asked for.
+func TestProviderFC_Deploy_RootfsSizeWithoutResizerFails(t *testing.T) {
+	p, proc, _, _, _ := newTestFCProvider(t)
+	p.Config.RootfsSizeMib = 30720
+	p.Rootfs = prepareOnlyRootfs{}
+
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "rootfsSizeMib")
+	assert.Zero(t, proc.startCalls)
+	_, statErr := os.Stat(p.vmDir("test-vm"))
+	assert.True(t, os.IsNotExist(statErr))
 }
 
 func TestProviderFC_Deploy_CustomType(t *testing.T) {

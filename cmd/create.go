@@ -49,6 +49,7 @@ var (
 	flagFCMemory       int64
 	flagFCCacheImage   string
 	flagFCCacheSizeMib int64
+	flagFCRootfsSize   int64
 	// Cloud Hypervisor-specific flags bound to ch.* viper keys (see init
 	// below). --vcpu/--memory/--username are shared with fc (see above).
 	flagCHKernelImage string
@@ -155,6 +156,7 @@ func init() {
 	createCmd.Flags().StringVar(&flagFCBinary, "fc-binary", "firecracker", "Firecracker: path to the firecracker binary")
 	createCmd.Flags().Int64Var(&flagFCVCPU, "vcpu", 1, "Firecracker: number of vCPUs")
 	createCmd.Flags().Int64Var(&flagFCMemory, "memory", 2048, "Firecracker: memory size in MiB")
+	createCmd.Flags().Int64Var(&flagFCRootfsSize, "rootfs-size", 0, "Firecracker: grow the microVM's rootfs to this size in MiB (0 keeps the base image's size)")
 	createCmd.Flags().StringVar(&flagFCCacheImage, "cache-image", "", "Firecracker: path to a persistent cache disk image (ext4), attached as a second drive; created and formatted on first use if missing. Empty (default) disables the feature")
 	createCmd.Flags().Int64Var(&flagFCCacheSizeMib, "cache-size", 8192, "Firecracker: size (MiB) to format --cache-image at, if it doesn't already exist")
 	_ = viper.BindPFlag("fc.kernelImage", createCmd.Flags().Lookup("kernel-image"))
@@ -163,6 +165,7 @@ func init() {
 	_ = viper.BindPFlag("fc.vcpuCount", createCmd.Flags().Lookup("vcpu"))
 	_ = viper.BindPFlag("fc.memSizeMib", createCmd.Flags().Lookup("memory"))
 	_ = viper.BindPFlag("fc.vm.username", createCmd.Flags().Lookup("username"))
+	_ = viper.BindPFlag("fc.rootfsSizeMib", createCmd.Flags().Lookup("rootfs-size"))
 	_ = viper.BindPFlag("fc.cacheImage", createCmd.Flags().Lookup("cache-image"))
 	_ = viper.BindPFlag("fc.cacheSizeMib", createCmd.Flags().Lookup("cache-size"))
 
