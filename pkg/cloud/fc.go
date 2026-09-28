@@ -49,6 +49,13 @@ type FCConfig struct {
 	VCPUCount int64
 	// MemSizeMib is the default memory size (in MiB) for new microVMs.
 	MemSizeMib int64
+	// RootfsSizeMib, when non-zero, grows each new microVM's rootfs (and
+	// the ext4 filesystem on it) to this size (MiB) after it's copied from
+	// RootfsImage, so one small base image can back microVMs with much
+	// bigger disks. The extension is sparse: it costs no host disk until
+	// the guest writes there. 0 (default) keeps the base image's size;
+	// smaller than the base image is an error.
+	RootfsSizeMib int64
 	// Bridge is the name of the host bridge device microVM TAP devices attach to.
 	Bridge string
 	// CIDR is the bridge's address and subnet (e.g. "172.16.0.1/24"). The
@@ -184,6 +191,20 @@ type BaseImageIdentifier interface {
 	// same golden image don't re-hash a multi-GB file every time. Recorded
 	// on each VM at Deploy time (see fcVM.BaseImageSHA256).
 	BaseImageIdentity(baseImage string) (sha256Hex string, sizeBytes int64, err error)
+}
+
+// RootfsResizer is implemented by a RootfsPreparer that can grow a
+// prepared rootfs, for FCConfig.RootfsSizeMib. A separate, optional
+// interface for the same reason as BaseImageIdentifier -- Cloud
+// Hypervisor's preparer has no use for it -- but unlike that one it isn't
+// best-effort: ProviderFC.Deploy fails when RootfsSizeMib is set and the
+// preparer can't honor it, rather than booting a VM with a smaller disk
+// than asked for.
+type RootfsResizer interface {
+	// GrowRootfs grows the ext4 image at rootfsPath, and the filesystem on
+	// it, to sizeMib. A no-op when it's already that size; an error when
+	// it's bigger.
+	GrowRootfs(rootfsPath string, sizeMib int64) error
 }
 
 // CacheDiskPreparer manages a persistent, host-owned disk image shared
@@ -614,6 +635,17 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 	if err := p.Rootfs.Prepare(rootfsImage, rootfsPath, sanitizeGuestHostname(server.Name), sshPublicKey, username); err != nil {
 		_ = os.RemoveAll(dir)
 		return Vm{}, fmt.Errorf("failed to prepare rootfs: %w", err)
+	}
+	if p.Config.RootfsSizeMib > 0 {
+		resizer, ok := p.Rootfs.(RootfsResizer)
+		if !ok {
+			_ = os.RemoveAll(dir)
+			return Vm{}, errors.New("fc.rootfsSizeMib is set but this rootfs preparer can't grow a rootfs")
+		}
+		if err := resizer.GrowRootfs(rootfsPath, p.Config.RootfsSizeMib); err != nil {
+			_ = os.RemoveAll(dir)
+			return Vm{}, fmt.Errorf("failed to grow rootfs: %w", err)
+		}
 	}
 
 	// Best-effort: a failure here only means this VM won't be eligible for
