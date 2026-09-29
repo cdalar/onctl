@@ -342,14 +342,49 @@ func (r *Remote) CopyAndRunRemoteFile(config *CopyAndRunRemoteFileConfig) error 
 	}
 
 	config.Vars = append(config.Vars, "PUBLIC_IP="+r.IPAddress)
-	command = "cd " + ONCTLDIR + "/" + nextApplyDir + " && chmod +x " + fileBaseName + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && " + variablesToEnvVars(config.Vars) + "sudo -E ./" + fileBaseName + "> output-" + fileBaseName + ".log 2>&1"
+	command = applyCommand(ONCTLDIR+"/"+nextApplyDir, fileBaseName, variablesToEnvVars(config.Vars))
 
 	log.Println("[DEBUG] command: ", command)
-	_, err = r.RemoteRun(&RemoteRunConfig{
-		Command: command,
-	})
+	return r.remoteRunStream(command, os.Stdout)
+}
+
+// applyCommand is the remote shell script that runs an apply file and
+// streams its output back. The apply file itself runs in a background
+// subshell with every stream redirected to output-<file>.log, so it no
+// longer depends on this SSH session: if the session goes away (Ctrl+C,
+// a dropped connection) the script keeps running to completion instead
+// of dying of SIGPIPE mid-install, and the log -- plus exit-code-<file>,
+// written when it finishes -- stays behind in the apply dir. pid-<file>
+// holds the background subshell's PID, so a later session can follow the
+// same log the same way (tail --pid) while it is still running. The
+// session itself only tails that log until the script exits, then exits
+// with the script's own exit code.
+func applyCommand(dir, file, envVars string) string {
+	logFile := "output-" + file + ".log"
+	return "cd " + dir + " && chmod +x " + file + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && : > " + logFile + " || exit 1\n" +
+		"( " + envVars + "sudo -E ./" + file + " > " + logFile + " 2>&1; rc=$?; echo $rc > exit-code-" + file + "; exit $rc ) < /dev/null > /dev/null 2>&1 &\n" +
+		"pid=$!\n" +
+		"echo $pid > pid-" + file + "\n" +
+		"tail -n +1 -f --pid=$pid " + logFile + "\n" +
+		"wait $pid"
+}
+
+// remoteRunStream runs command like RemoteRun, but copies its stdout and
+// stderr to w as they arrive instead of returning them once it exits.
+func (r *Remote) remoteRunStream(command string, w io.Writer) error {
+	if err := r.NewSSHConnection(); err != nil {
+		return err
+	}
+	session, err := r.Client.NewSession()
 	if err != nil {
 		return err
 	}
-	return nil
+	defer func() {
+		if err := session.Close(); err != nil && err != io.EOF {
+			log.Printf("Failed to close session: %v", err)
+		}
+	}()
+	session.Stdout = w
+	session.Stderr = w
+	return session.Run(command)
 }

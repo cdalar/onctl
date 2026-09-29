@@ -376,8 +376,11 @@ var createCmd = &cobra.Command{
 
 		// BEGIN Apply File
 		for i, applyFile := range applyFileFound {
-			s.Suffix = " Running " + opt.ApplyFiles[i] + " on Remote..."
-			s.Restart()
+			// No spinner here: the apply file's own output streams to
+			// stdout (see tools.CopyAndRunRemoteFile) and would be
+			// garbled by one.
+			s.Stop()
+			fmt.Println("Running " + opt.ApplyFiles[i] + " on Remote...")
 
 			err = remote.CopyAndRunRemoteFile(&tools.CopyAndRunRemoteFileConfig{
 				File: applyFile,
