@@ -354,14 +354,17 @@ func (r *Remote) CopyAndRunRemoteFile(config *CopyAndRunRemoteFileConfig) error 
 // longer depends on this SSH session: if the session goes away (Ctrl+C,
 // a dropped connection) the script keeps running to completion instead
 // of dying of SIGPIPE mid-install, and the log -- plus exit-code-<file>,
-// written when it finishes -- stays behind in the apply dir. The session
-// itself only tails that log until the script exits (tail --pid), then
-// exits with the script's own exit code.
+// written when it finishes -- stays behind in the apply dir. pid-<file>
+// holds the background subshell's PID, so a later session can follow the
+// same log the same way (tail --pid) while it is still running. The
+// session itself only tails that log until the script exits, then exits
+// with the script's own exit code.
 func applyCommand(dir, file, envVars string) string {
 	logFile := "output-" + file + ".log"
 	return "cd " + dir + " && chmod +x " + file + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && : > " + logFile + " || exit 1\n" +
 		"( " + envVars + "sudo -E ./" + file + " > " + logFile + " 2>&1; rc=$?; echo $rc > exit-code-" + file + "; exit $rc ) < /dev/null > /dev/null 2>&1 &\n" +
 		"pid=$!\n" +
+		"echo $pid > pid-" + file + "\n" +
 		"tail -n +1 -f --pid=$pid " + logFile + "\n" +
 		"wait $pid"
 }

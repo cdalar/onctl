@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -97,6 +98,14 @@ func TestApplyCommandSurvivesLostSession(t *testing.T) {
 	}
 	if string(out) != "first\nlast bar\n" {
 		t.Errorf("log = %q, want the apply file's whole output", out)
+	}
+	// What a later session would pass to tail --pid to follow the log.
+	pid, err := os.ReadFile(filepath.Join(dir, "pid-apply.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := strconv.Atoi(strings.TrimSpace(string(pid))); err != nil {
+		t.Errorf("pid file = %q, want a PID", pid)
 	}
 }
 
