@@ -9,7 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.6
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.336.1
 	github.com/aws/smithy-go v1.28.2
-	github.com/cloudflare/cloudflare-go v0.118.0
+	github.com/cloudflare/cloudflare-go v0.119.0
 	github.com/gofrs/uuid/v5 v5.5.1
 	github.com/hetznercloud/hcloud-go/v2 v2.48.0
 	github.com/manifoldco/promptui v0.9.0
