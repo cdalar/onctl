@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [onctl-4, ubuntu-latest]
+        runner: [onctl-2, ubuntu-latest]
 
     steps:
       - name: Check out code
@@ -63,7 +63,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [onctl-4, ubuntu-latest]
+        runner: [onctl-2, ubuntu-latest]
 
     steps:
       - name: Checkout code

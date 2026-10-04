@@ -25,7 +25,7 @@ env:
 jobs:
   run:
     name: Build
-    runs-on: onctl-4
+    runs-on: onctl-2
     timeout-minutes: 5
     strategy:
       fail-fast: true

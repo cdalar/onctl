@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   security:
-    runs-on: onctl-4
+    runs-on: onctl-2
     # if: github.actor != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
