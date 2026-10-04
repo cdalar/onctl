@@ -38,7 +38,17 @@ var (
 	_ CloudProviderInterface = (*ProviderBoxes)(nil)
 	_ Dialer                 = (*ProviderBoxes)(nil)
 	_ ImageLister            = (*ProviderBoxes)(nil)
+	_ KeyAuthorizer          = (*ProviderBoxes)(nil)
 )
+
+// AuthorizeKey makes sure the box is running and publicKey can log in.
+func (p *ProviderBoxes) AuthorizeKey(vm Vm, publicKey string) error {
+	ctx := context.Background()
+	if err := p.ensureRunning(ctx, vm.Name); err != nil {
+		return err
+	}
+	return p.authorizeKey(ctx, vm.Name, publicKey)
+}
 
 const (
 	// boxesReadyTimeout bounds waiting for a created or resumed box.
