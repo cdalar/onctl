@@ -50,6 +50,14 @@ var (
 			case "init", "version", "help", "import", "login", "logout", "__complete", "__completeNoDesc":
 				return nil
 			}
+			// onctl claude runs on boxes: it needs the claude-agent image's
+			// tools and the boxes tunnel (docs/plans/boxes-provider.md).
+			if isClaudeCommand(cmd) {
+				if providerFlag != "" && providerFlag != "boxes" {
+					return fmt.Errorf("onctl claude runs on boxes only (for now), not %s", providerFlag)
+				}
+				providerFlag = "boxes"
+			}
 			if providerFlag != "" {
 				if !tools.Contains(cloudProviderList, providerFlag) {
 					return fmt.Errorf("unsupported provider %q; use one of: %s", providerFlag, strings.Join(cloudProviderList, ", "))
@@ -193,6 +201,17 @@ func resolveAzureIdentifiers() error {
 		}
 	}
 	return nil
+}
+
+// isClaudeCommand reports whether cmd is onctl claude or one of its
+// subcommands.
+func isClaudeCommand(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if c == claudeCmd {
+			return true
+		}
+	}
+	return false
 }
 
 // ensureProvider builds the provider client if it hasn't been already.

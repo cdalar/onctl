@@ -262,3 +262,14 @@ func (c *Client) ListSizes(ctx context.Context) ([]Size, error) {
 	}
 	return sizes, nil
 }
+
+// SetIdleTTL sets how long name may go unused before the service pauses
+// it (10 minutes to 30 days); zero means never.
+func (c *Client) SetIdleTTL(ctx context.Context, name string, ttl time.Duration) (*VM, error) {
+	body := map[string]int64{"idle_ttl_seconds": int64(ttl.Seconds())}
+	var vm VM
+	if err := c.do(ctx, c.http, http.MethodPut, vmPath(name, "/idle-ttl"), body, &vm); err != nil {
+		return nil, err
+	}
+	return &vm, nil
+}

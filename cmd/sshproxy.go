@@ -36,7 +36,7 @@ create and onctl ssh add it.`,
 		if !ok {
 			return fmt.Errorf("ssh-proxy is for providers whose VMs aren't reachable directly (boxes); %s VMs take ssh at their IP", cloudProvider)
 		}
-		name := strings.TrimSuffix(args[0], ".box")
+		name := sshProxyHost(args[0])
 		port := 22
 		if len(args) == 2 {
 			p, err := strconv.Atoi(args[1])
@@ -52,6 +52,12 @@ create and onctl ssh add it.`,
 		defer func() { _ = conn.Close() }()
 		return relayStdio(conn, os.Stdin, os.Stdout)
 	},
+}
+
+// sshProxyHost strips a ".box" suffix, so an ssh config can match
+// `Host *.box` and pass %h or %n straight through.
+func sshProxyHost(host string) string {
+	return strings.TrimSuffix(host, ".box")
 }
 
 // relayStdio copies in to conn and conn to out until the VM side ends
