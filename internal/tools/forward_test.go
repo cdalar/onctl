@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -192,7 +193,7 @@ func TestForwarder(t *testing.T) {
 	sshPub, _ := ssh.NewPublicKey(pub)
 	srv := newSSHForwardServer(t, sshPub)
 
-	dials := 0
+	var dials atomic.Int32
 	remote := &Remote{
 		Username:   "root",
 		IPAddress:  "vm",
@@ -200,7 +201,7 @@ func TestForwarder(t *testing.T) {
 		PrivateKey: string(pem.EncodeToMemory(block)),
 		// Through Dial, as for boxes; a plain TCP Remote works the same.
 		Dial: func(ctx context.Context, port int) (net.Conn, error) {
-			dials++
+			dials.Add(1)
 			return net.Dial("tcp", srv.ln.Addr().String())
 		},
 	}
@@ -231,14 +232,14 @@ func TestForwarder(t *testing.T) {
 		t.Fatalf("got %q %v", got, err)
 	}
 	// Two connections, one ssh connection.
-	if got, _ := roundTrip(t, ln.Addr().String(), "again"); got != "echo: again\n" || dials != 1 {
-		t.Fatalf("got %q after %d ssh dials", got, dials)
+	if got, _ := roundTrip(t, ln.Addr().String(), "again"); got != "echo: again\n" || dials.Load() != 1 {
+		t.Fatalf("got %q after %d ssh dials", got, dials.Load())
 	}
 
 	// The ssh connection drops; the next forwarded connection reconnects.
 	srv.dropAll()
-	if got, err := roundTrip(t, ln.Addr().String(), "back"); err != nil || got != "echo: back\n" || dials != 2 {
-		t.Fatalf("after a drop: got %q %v after %d ssh dials", got, err, dials)
+	if got, err := roundTrip(t, ln.Addr().String(), "back"); err != nil || got != "echo: back\n" || dials.Load() != 2 {
+		t.Fatalf("after a drop: got %q %v after %d ssh dials", got, err, dials.Load())
 	}
 
 	// Nothing listening on the VM's side: reported, and no reconnect for it.
@@ -258,8 +259,8 @@ func TestForwarder(t *testing.T) {
 	}
 	errMu.Lock()
 	defer errMu.Unlock()
-	if len(errs) != 1 || !strings.Contains(errs[0], "connection refused") || dials != 2 {
-		t.Fatalf("errs %q after %d ssh dials", errs, dials)
+	if len(errs) != 1 || !strings.Contains(errs[0], "connection refused") || dials.Load() != 2 {
+		t.Fatalf("errs %q after %d ssh dials", errs, dials.Load())
 	}
 }
 
@@ -339,14 +340,14 @@ func TestForwarderReconnectsSilentConnection(t *testing.T) {
 	srv := newSSHForwardServer(t, sshPub)
 	relay := &freezableRelay{target: srv.ln.Addr().String()}
 
-	dials := 0
+	var dials atomic.Int32
 	f := &Forwarder{Remote: &Remote{
 		Username:   "root",
 		IPAddress:  "vm",
 		SSHPort:    22,
 		PrivateKey: string(pem.EncodeToMemory(block)),
 		Dial: func(ctx context.Context, port int) (net.Conn, error) {
-			dials++
+			dials.Add(1)
 			relay.thaw() // a fresh connection (the VM resumed) flows again
 			return relay.dial()
 		},
@@ -362,8 +363,8 @@ func TestForwarderReconnectsSilentConnection(t *testing.T) {
 	relay.freeze()
 	start := time.Now()
 	got, err := roundTrip(t, ln.Addr().String(), "two")
-	if err != nil || got != "echo: two\n" || dials != 2 {
-		t.Fatalf("after the connection went silent: got %q %v after %d ssh dials", got, err, dials)
+	if err != nil || got != "echo: two\n" || dials.Load() != 2 {
+		t.Fatalf("after the connection went silent: got %q %v after %d ssh dials", got, err, dials.Load())
 	}
 	if waited := time.Since(start); waited > 5*time.Second {
 		t.Fatalf("took %s to notice the silent connection", waited)
