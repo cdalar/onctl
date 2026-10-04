@@ -20,14 +20,9 @@ configured location. The default size is marked with *.`,
   onctl sizes -p boxes`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		switch cloudProvider {
-		case "fc", "ch":
-			fmt.Println("The " + cloudProvider + " provider has no fixed sizes: set --vcpu and --memory on create.")
-			return
-		}
 		lister, ok := provider.(cloud.SizeLister)
 		if !ok {
-			fmt.Println("The current cloud provider does not support listing sizes yet.")
+			fmt.Println(sizesUnsupported(cloudProvider))
 			return
 		}
 		sizes, err := lister.ListSizes()
@@ -40,6 +35,24 @@ configured location. The default size is marked with *.`,
 		}
 		TabWriter(rows, sizesTemplate(sizes))
 	},
+}
+
+// sizesUnsupported explains, for a provider without a SizeLister, why
+// there's no list and where to find what --type takes instead.
+func sizesUnsupported(provider string) string {
+	switch provider {
+	case "fc", "ch":
+		return "The " + provider + " provider has no fixed sizes: set --vcpu and --memory on create."
+	case "static":
+		return "Imported (static) hosts already exist: there are no sizes to choose."
+	case "aws":
+		return "onctl sizes doesn't list AWS instance types yet. Pass one with --type (e.g. t3.medium); see them with:\n  aws ec2 describe-instance-types --query 'InstanceTypes[].InstanceType'"
+	case "gcp":
+		return "onctl sizes doesn't list GCP machine types yet. Pass one with --type (e.g. e2-medium); see them with:\n  gcloud compute machine-types list --zones <zone>"
+	case "azure":
+		return "onctl sizes doesn't list Azure VM sizes yet. Pass one with --type (e.g. Standard_B2s); see them with:\n  az vm list-sizes --location <location> -o table"
+	}
+	return "onctl sizes doesn't support the " + provider + " provider yet."
 }
 
 // sizeRow is a CloudSize formatted for the table.

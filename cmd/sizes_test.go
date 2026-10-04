@@ -23,3 +23,12 @@ func TestNewSizeRow(t *testing.T) {
 	assert.Equal(t, "3.9 GiB", formatMiB(4000), "OVH's 4000 MB isn't a whole GiB")
 	assert.Equal(t, "8 GiB", formatMiB(8192))
 }
+
+func TestSizesUnsupported(t *testing.T) {
+	assert.Contains(t, sizesUnsupported("aws"), "aws ec2 describe-instance-types")
+	assert.Contains(t, sizesUnsupported("gcp"), "gcloud compute machine-types list")
+	assert.Contains(t, sizesUnsupported("azure"), "az vm list-sizes")
+	assert.Contains(t, sizesUnsupported("fc"), "--vcpu and --memory")
+	assert.Contains(t, sizesUnsupported("static"), "no sizes")
+	assert.Contains(t, sizesUnsupported("newcloud"), "newcloud")
+}
