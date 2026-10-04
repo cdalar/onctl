@@ -1,6 +1,9 @@
 # Hosted boxes as an onctl provider
 
-> **Status:** proposal. Nothing here is built yet.
+> **Status:** rollout step 1 (provider and login) is built: `-p boxes`,
+> `onctl login`/`logout`, `cloud.Dialer` with `tools.Remote.Dial`, and
+> `onctl ssh-proxy`. Open questions 1, 2 and 5 were settled as proposed:
+> provider ID `boxes`, `onctl login`, `gorilla/websocket`. Steps 2-5 remain.
 
 ## Context
 

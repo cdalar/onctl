@@ -171,6 +171,7 @@ var sshCmd = &cobra.Command{
 			PrivateKey: string(privateKey),
 			Spinner:    s,
 		}
+		attachDialer(&remote, vm)
 		// For imported (static) hosts, the username/port/key live in the
 		// inventory, not in viper config or global SSH defaults.
 		if cloudProvider == "static" {

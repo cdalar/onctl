@@ -224,6 +224,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 			PrivateKey: string(privateKey),
 			Spinner:    s,
 		}
+		attachDialer(&remote, vm)
 
 		// Get remote VM architecture first
 		s.Suffix = " Getting remote VM architecture..."

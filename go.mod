@@ -11,6 +11,7 @@ require (
 	github.com/aws/smithy-go v1.28.2
 	github.com/cloudflare/cloudflare-go v0.119.0
 	github.com/gofrs/uuid/v5 v5.5.1
+	github.com/gorilla/websocket v1.5.3
 	github.com/hetznercloud/hcloud-go/v2 v2.49.0
 	github.com/manifoldco/promptui v0.9.0
 	github.com/ovh/go-ovh v1.9.0

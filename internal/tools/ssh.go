@@ -14,6 +14,9 @@ type SSHIntoVMRequest struct {
 	Port           int
 	PrivateKeyFile string
 	Command        []string
+	// ProxyCommand, when set, is how ssh reaches the VM (for VMs with no
+	// address of their own, like boxes); IPAddress is then just a name.
+	ProxyCommand string
 }
 
 func SSHIntoVM(request SSHIntoVMRequest) {
@@ -21,10 +24,15 @@ func SSHIntoVM(request SSHIntoVMRequest) {
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "StrictHostKeyChecking=no",
 		"-i", request.PrivateKeyFile,
+	}
+	if request.ProxyCommand != "" {
+		sshArgs = append(sshArgs, "-o", "ProxyCommand="+request.ProxyCommand)
+	}
+	sshArgs = append(sshArgs,
 		"-l", request.User,
 		request.IPAddress,
 		"-p", fmt.Sprint(request.Port),
-	}
+	)
 	if len(request.Command) > 0 {
 		sshArgs = append(sshArgs, "--")
 		sshArgs = append(sshArgs, request.Command...)

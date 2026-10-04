@@ -1,6 +1,7 @@
 package cloud
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"reflect"
@@ -182,6 +183,14 @@ type RestartOptions struct {
 	// later restarts); empty keeps the one it was deployed or last restarted
 	// with.
 	KernelImage string
+}
+
+// Dialer is implemented by providers whose VMs aren't reachable at their
+// IP: a connection to a VM's port goes through the provider instead (for
+// boxes, the service's tunnel). Commands that talk to a VM over ssh
+// (create, ssh, deploy) use it in place of a TCP dial when present.
+type Dialer interface {
+	DialVM(ctx context.Context, vm Vm, port int) (net.Conn, error)
 }
 
 type CloudProviderInterface interface {
