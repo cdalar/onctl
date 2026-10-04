@@ -70,10 +70,22 @@ snapshot:
   version_template: "{{ incpatch .Version }}-next"
 changelog:
   sort: asc
+  # Drop commit hashes so the notes read as a summary of changes, not a git log.
+  abbrev: -1
   filters:
     exclude:
       - "^docs:"
       - "^test:"
+      - "^ci:"
+      - "^Merge "
+  # A group without a regexp takes every remaining entry, so it must be listed
+  # last; `order` puts it first in the notes.
+  groups:
+    - title: Dependency updates
+      regexp: '^.*?build\(deps\).*$'
+      order: 1
+    - title: Changes
+      order: 0
 
 release:
   github:
