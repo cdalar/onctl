@@ -992,3 +992,28 @@ func TestProviderFC_PermissionErrorsSuggestSudo(t *testing.T) {
 		assert.NotContains(t, err.Error(), "sudo")
 	})
 }
+
+// FuzzAllocateFCIP feeds allocateFCIP arbitrary bridge CIDRs. The CIDR comes
+// from user config, so a malformed value must surface as an error rather than
+// a panic, and an address handed to a VM must never collide with the bridge
+// gateway or an address another VM already holds.
+func FuzzAllocateFCIP(f *testing.F) {
+	f.Add("172.16.0.1/24", "172.16.0.2")
+	f.Add("172.16.0.1/30", "172.16.0.2")
+	f.Add("10.0.0.1/32", "")
+	f.Add("fd00::1/64", "")
+	f.Add("not-a-cidr", "")
+	f.Fuzz(func(t *testing.T, cidr, usedIP string) {
+		ip, err := allocateFCIP(cidr, map[string]bool{usedIP: true})
+		if err != nil {
+			return
+		}
+		gateway, ipNet, parseErr := net.ParseCIDR(cidr)
+		require.NoError(t, parseErr)
+		parsed := net.ParseIP(ip)
+		require.NotNil(t, parsed.To4(), "allocated %q is not an IPv4 address", ip)
+		assert.True(t, ipNet.Contains(parsed), "allocated %s outside %s", ip, cidr)
+		assert.False(t, parsed.Equal(gateway), "allocated the gateway address %s", ip)
+		assert.NotEqual(t, usedIP, ip, "allocated an address already in use")
+	})
+}
