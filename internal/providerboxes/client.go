@@ -245,3 +245,20 @@ func (c *Client) DialPort(ctx context.Context, name string, port int) (*WSConn, 
 	}
 	return NewWSConn(conn), nil
 }
+
+// Size is a box size the service offers; Name is what Create takes.
+type Size struct {
+	Name    string `json:"name"`
+	VCPU    int    `json:"vcpu"`
+	MemMiB  int    `json:"mem_mib"`
+	DiskMiB int    `json:"disk_mib"`
+	Default bool   `json:"default"`
+}
+
+func (c *Client) ListSizes(ctx context.Context) ([]Size, error) {
+	var sizes []Size
+	if err := c.do(ctx, c.http, http.MethodGet, "/api/sizes", nil, &sizes); err != nil {
+		return nil, err
+	}
+	return sizes, nil
+}

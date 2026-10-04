@@ -169,6 +169,28 @@ type ImageLister interface {
 	ListImages() ([]CloudImage, error)
 }
 
+// CloudSize is one VM size a provider offers: what `--type` takes.
+type CloudSize struct {
+	Name      string
+	VCPU      int
+	MemoryMiB int
+	DiskGiB   int
+	Arch      string // empty when the provider doesn't say
+	// HourlyPrice and MonthlyPrice are formatted with their currency, or
+	// empty when the provider's API doesn't publish prices.
+	HourlyPrice  string
+	MonthlyPrice string
+	// Default is the size used when --type isn't given, when the
+	// provider says which that is.
+	Default bool
+}
+
+// SizeLister is an optional interface for providers that can list the VM
+// sizes `--type` accepts (`onctl sizes`).
+type SizeLister interface {
+	ListSizes() ([]CloudSize, error)
+}
+
 // Restarter is an optional interface for providers that can cold-boot an
 // existing VM from its own disk -- a reboot that keeps the disk, as opposed to
 // Resume (which restores a snapshot, memory included) or Destroy + Deploy

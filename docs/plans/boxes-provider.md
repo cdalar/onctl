@@ -7,6 +7,8 @@
 > way: `onctl port-forward` (alias `pf`) is built, for every provider --
 > over the ssh connection, so through the tunnel for boxes. `sizes` comes
 > next, also for every provider, and `--idle-ttl`. Steps 3-5 remain.
+> `onctl sizes` is built for boxes, Hetzner and OVH (AWS, GCP and Azure
+> next), and completes `create --type`.
 
 ## Context
 
