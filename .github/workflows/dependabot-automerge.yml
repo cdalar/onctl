@@ -11,7 +11,7 @@ jobs:
   dependabot-automerge:
     # Sadece Dependabot'un açtığı PR'larda çalışsın
     if: ${{ github.actor == 'dependabot[bot]' }}
-    runs-on: onctl-4
+    runs-on: onctl-2
     permissions:
       contents: write
       pull-requests: write

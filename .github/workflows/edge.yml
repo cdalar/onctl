@@ -40,9 +40,9 @@ permissions:
 
 jobs:
   build:
-    runs-on: onctl-4
+    runs-on: onctl-2
     # Cancelling a stale build as soon as a newer push starts avoids wasting
-    # onctl-4's limited memory on artifacts nobody will publish. Safe to
+    # onctl-2's limited memory on artifacts nobody will publish. Safe to
     # cancel here because build never touches the shared `edge` release --
     # unlike the publish job below, an interrupted build leaves nothing
     # half-done on GitHub.
@@ -91,7 +91,7 @@ jobs:
           distribution: goreleaser
           version: "~> v2"
           # --parallelism=1: this workflow moved from ubuntu-latest (7-16GB)
-          # to the self-hosted onctl-4 runner, which can't sustain
+          # to the self-hosted onctl-2 runner, which can't sustain
           # GoReleaser's default of building all 3 targets at once --
           # compiling aws-sdk-go-v2/service/ec2 three times in parallel OOM
           # (SIGKILL) on that box. Serializing the builds keeps peak memory
@@ -109,7 +109,7 @@ jobs:
 
   publish:
     needs: build
-    runs-on: onctl-4
+    runs-on: onctl-2
     permissions:
       contents: write
     # `gh release create` with assets is 3 separate API calls under the hood

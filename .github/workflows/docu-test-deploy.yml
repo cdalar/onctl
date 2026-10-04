@@ -14,7 +14,7 @@ permissions:
 jobs:
   test-deploy:
     name: Test deployment
-    runs-on: onctl-4
+    runs-on: onctl-2
     defaults:
         run:
             shell: bash
