@@ -8,19 +8,21 @@ on:
 
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   goreleaser:
     runs-on: [self-hosted, macOS, ARM64]
+    permissions:
+      contents: write
+      packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: 'go.mod'
           check-latest: true
@@ -35,13 +37,19 @@ jobs:
           fingerprint=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ { print $10; exit }')
           echo "GPG_FINGERPRINT=$fingerprint" >> "$GITHUB_ENV"
       - name: install quill
+        env:
+          QUILL_VERSION: 0.7.1
+          QUILL_SHA256: 086cfb3fc69a305d55d9aa5131bed7739d706bbd8bab78c18d011e7260111e96
         run: |
-          curl -sSfL https://get.anchore.io/quill | sh -s -- -b "$RUNNER_TEMP/bin"
+          curl -sSfL -o "$RUNNER_TEMP/quill.tar.gz" "https://github.com/anchore/quill/releases/download/v${QUILL_VERSION}/quill_${QUILL_VERSION}_darwin_arm64.tar.gz"
+          echo "${QUILL_SHA256}  $RUNNER_TEMP/quill.tar.gz" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$RUNNER_TEMP/quill.tar.gz" -C "$RUNNER_TEMP/bin" quill
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: verify quill
         run: quill version
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v7.2.3
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser
           version: "~> v2"
