@@ -4,6 +4,9 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
+permissions:
+  contents: read
+
 jobs:
   dependabot-automerge:
     # Sadece Dependabot'un açtığı PR'larda çalışsın
@@ -16,14 +19,14 @@ jobs:
     steps:
       - name: Fetch Dependabot metadata
         id: meta
-        uses: dependabot/fetch-metadata@v3
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       # Patch ve minor güncellemeleri otomatik birleştir
       - name: Enable auto-merge (patch/minor)
         if: ${{ steps.meta.outputs.update-type == 'version-update:semver-patch' || steps.meta.outputs.update-type == 'version-update:semver-minor' }}
-        uses: peter-evans/enable-pull-request-automerge@v3
+        uses: peter-evans/enable-pull-request-automerge@a660677d5469627102a1c1e11409dd063606628d # v3.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           pull-request-number: ${{ github.event.pull_request.number }}
@@ -33,7 +36,7 @@ jobs:
       # yerine gözden geçirmeye bırak
       - name: Label major updates
         if: ${{ steps.meta.outputs.update-type == 'version-update:semver-major' }}
-        uses: actions-ecosystem/action-add-labels@v1
+        uses: actions-ecosystem/action-add-labels@18f1af5e3544586314bbe15c0273249c770b2daf # v1.1.3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           number: ${{ github.event.pull_request.number }}
