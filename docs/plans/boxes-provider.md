@@ -1,14 +1,21 @@
 # Hosted boxes as an onctl provider
 
-> **Status:** rollout step 1 (provider and login) is built: `-p boxes`,
-> `onctl login`/`logout`, `cloud.Dialer` with `tools.Remote.Dial`, and
-> `onctl ssh-proxy`. Open questions 1, 2 and 5 were settled as proposed:
-> provider ID `boxes`, `onctl login`, `gorilla/websocket`. Step 2 is under
-> way: `onctl port-forward` (alias `pf`) is built, for every provider --
-> over the ssh connection, so through the tunnel for boxes. `sizes` comes
-> next, also for every provider, and `--idle-ttl`. Steps 3-5 remain.
-> `onctl sizes` is built for boxes, Hetzner and OVH (AWS, GCP and Azure
-> next), and completes `create --type`.
+> **Status:** steps 1-3 are built.
+> 1. Provider and login: `-p boxes`, `onctl login`/`logout`, `cloud.Dialer`
+>    with `tools.Remote.Dial`, `onctl ssh-proxy`.
+> 2. `onctl port-forward` (alias `pf`) and `onctl sizes`, for every
+>    provider (sizes: boxes, Hetzner, OVH; AWS, GCP and Azure say where to
+>    look instead). `--idle-ttl` on `onctl create` was left out; `onctl
+>    claude` has its own.
+> 3. `onctl claude`, ported from boxctl with its tests. Local state moved
+>    to `~/.onctl/claude`, reading boxctl's (`~/.boxctl/claude`, its
+>    Keychain entry) so nothing has to be redone; everything on the box
+>    (`/root/.boxctl`, `refs/boxctl/wip`, `BOXCTL_GH_SOCKET`) is unchanged.
+>    `--prompt` lost its `-p` shorthand, which is onctl's `--provider`.
+>
+> Open questions 1, 2 and 5 were settled as proposed: provider ID `boxes`,
+> `onctl login`, `gorilla/websocket`. Steps 4 (the plugin) and 5 (retiring
+> boxctl) remain.
 
 ## Context
 
