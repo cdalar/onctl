@@ -184,3 +184,5 @@ func TestBoxesProxyCommand(t *testing.T) {
 		t.Fatalf("got %s", got)
 	}
 }
+
+func newBoxesClient(url string) *providerboxes.Client { return providerboxes.New(url, "t") }

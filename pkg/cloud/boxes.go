@@ -290,3 +290,24 @@ func (p *ProviderBoxes) ListImages() ([]CloudImage, error) {
 	}
 	return out, nil
 }
+
+var _ SizeLister = (*ProviderBoxes)(nil)
+
+// ListSizes is `onctl sizes -p boxes`.
+func (p *ProviderBoxes) ListSizes() ([]CloudSize, error) {
+	sizes, err := p.Client.ListSizes(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	out := make([]CloudSize, 0, len(sizes))
+	for _, s := range sizes {
+		out = append(out, CloudSize{
+			Name:      s.Name,
+			VCPU:      s.VCPU,
+			MemoryMiB: s.MemMiB,
+			DiskGiB:   s.DiskMiB / 1024,
+			Default:   s.Default,
+		})
+	}
+	return out, nil
+}
