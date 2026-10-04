@@ -18,7 +18,6 @@ func init() {
 	restartCmd.Flags().BoolVarP(&restartForce, "force", "f", false, "restart without confirmation")
 	restartCmd.Flags().StringVar(&restartKernelImage, "kernel-image", "", "Firecracker: boot this kernel (vmlinux) from now on instead of the VM's current one")
 	rootCmd.AddCommand(restartCmd)
-	vmCmd.AddCommand(restartCmd)
 }
 
 var restartCmd = &cobra.Command{

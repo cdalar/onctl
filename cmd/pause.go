@@ -18,7 +18,6 @@ func init() {
 	pauseCmd.Flags().BoolVarP(&pauseForce, "force", "f", false, "pause without confirmation")
 	pauseCmd.Flags().BoolVar(&pauseHot, "hot", false, "snapshot without shutting down first (faster, crash-consistent)")
 	rootCmd.AddCommand(pauseCmd)
-	vmCmd.AddCommand(pauseCmd)
 }
 
 var pauseCmd = &cobra.Command{

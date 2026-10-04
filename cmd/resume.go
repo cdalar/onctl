@@ -15,7 +15,6 @@ var resumePublicKeyFile string
 func init() {
 	resumeCmd.Flags().StringVarP(&resumePublicKeyFile, "publicKey", "k", "", "Path to publicKey file (default: ~/.ssh/id_rsa)")
 	rootCmd.AddCommand(resumeCmd)
-	vmCmd.AddCommand(resumeCmd)
 }
 
 var resumeCmd = &cobra.Command{
