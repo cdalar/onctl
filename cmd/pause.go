@@ -48,6 +48,10 @@ snapshot. Use 'onctl resume <name>' to bring it back.`,
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		fmt.Println("\033[32m✔\033[0m VM Paused (snapshot saved, server deleted): " + serverName)
+		if cloudProvider == "hetzner" {
+			fmt.Println("\033[32m✔\033[0m VM Paused (snapshot saved, server deleted): " + serverName)
+		} else {
+			fmt.Println("\033[32m✔\033[0m VM Paused: " + serverName)
+		}
 	},
 }

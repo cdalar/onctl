@@ -8,6 +8,7 @@ import (
 
 	"github.com/cdalar/onctl/internal/provideraws"
 	"github.com/cdalar/onctl/internal/providerazure"
+	"github.com/cdalar/onctl/internal/providerboxes"
 	"github.com/cdalar/onctl/internal/providerch"
 	"github.com/cdalar/onctl/internal/providerfc"
 	"github.com/cdalar/onctl/internal/providergcp"
@@ -46,7 +47,7 @@ var (
 				return nil
 			}
 			switch cmd.Name() {
-			case "init", "version", "help", "import", "__complete", "__completeNoDesc":
+			case "init", "version", "help", "import", "login", "logout", "__complete", "__completeNoDesc":
 				return nil
 			}
 			if providerFlag != "" {
@@ -68,7 +69,7 @@ var (
 		},
 	}
 	cloudProvider     string
-	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "ovh", "fc", "ch", "static"}
+	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "ovh", "fc", "ch", "static", "boxes"}
 	provider          cloud.CloudProviderInterface
 	providerFlag      string
 )
@@ -113,7 +114,12 @@ func initState() error {
 	cloudProvider = checkCloudProvider()
 	log.Println("[DEBUG] Cloud: " + cloudProvider)
 	if err := ReadConfig(); err != nil {
-		return err
+		// boxes needs no onctl.yaml: its defaults are built in, and its
+		// token comes from `onctl login`.
+		if cloudProvider != "boxes" {
+			return err
+		}
+		log.Println("[DEBUG] boxes: no onctl.yaml, using defaults:", err)
 	}
 	if cloudProvider == "gcp" {
 		if err := resolveGCPProject(); err != nil {
@@ -271,6 +277,24 @@ func initProvider(cloudProvider string) {
 			Rootfs:       providerch.NewRootfsPreparer(),
 			WindowsGuest: providerch.NewWindowsGuestPreparer(),
 			DHCP:         providerch.NewDHCPManager(chConfig.StateDir),
+		}
+	case "boxes":
+		creds, err := providerboxes.LoadCredentials(viper.GetString("boxes.apiURL"))
+		if err != nil {
+			log.Fatalln(err)
+		}
+		bin, err := os.Executable()
+		if err != nil {
+			bin = "onctl"
+		}
+		provider = &cloud.ProviderBoxes{
+			Client: providerboxes.New(creds.APIURL, creds.Token),
+			Config: cloud.BoxesConfig{
+				VMType:   viper.GetString("boxes.vm.type"),
+				Image:    viper.GetString("boxes.vm.image"),
+				Username: viper.GetString("boxes.vm.username"),
+				OnctlBin: bin,
+			},
 		}
 	case "static":
 		path, err := onctlSSHConfigPath()

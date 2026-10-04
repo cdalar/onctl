@@ -2,6 +2,7 @@ package tools
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -31,6 +32,10 @@ type Remote struct {
 	Spinner     *ui.Spinner
 	Client      *ssh.Client
 	DialTimeout time.Duration // 0 means default (7s); set to a shorter value for fast-retry polling
+	// Dial, when set, opens the connection to the VM's port instead of a
+	// TCP dial to IPAddress -- for providers whose VMs have no reachable
+	// address (cloud.Dialer).
+	Dial func(ctx context.Context, port int) (net.Conn, error)
 }
 
 type RemoteRunConfig struct {
@@ -105,10 +110,25 @@ func (r *Remote) NewSSHConnection() error {
 		},
 	}
 	// Connect
-	r.Client, err = ssh.Dial("tcp", net.JoinHostPort(r.IPAddress, fmt.Sprint(r.SSHPort)), config)
+	if r.Dial == nil {
+		r.Client, err = ssh.Dial("tcp", net.JoinHostPort(r.IPAddress, fmt.Sprint(r.SSHPort)), config)
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
+	defer cancel()
+	conn, err := r.Dial(ctx, r.SSHPort)
 	if err != nil {
 		return err
 	}
+	// The handshake gets the same bound ssh.Dial's Timeout gives it.
+	_ = conn.SetDeadline(time.Now().Add(dialTimeout))
+	c, chans, reqs, err := ssh.NewClientConn(conn, r.IPAddress, config)
+	if err != nil {
+		_ = conn.Close()
+		return err
+	}
+	_ = conn.SetDeadline(time.Time{})
+	r.Client = ssh.NewClient(c, chans, reqs)
 	return nil
 }
 

@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -19,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/cdalar/onctl/internal/files"
 	"github.com/cdalar/onctl/internal/tools"
+	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/gofrs/uuid/v5"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/viper"
@@ -524,4 +527,17 @@ func MergeConfig(opt *cmdCreateOptions, config *cmdCreateOptions) {
 	}
 
 	log.Println("[DEBUG] Merged options: ", opt)
+}
+
+// attachDialer routes remote's ssh connection through the provider when
+// the provider's VMs have no reachable address of their own
+// (cloud.Dialer, e.g. boxes); otherwise remote dials vm's IP as usual.
+func attachDialer(remote *tools.Remote, vm cloud.Vm) {
+	d, ok := provider.(cloud.Dialer)
+	if !ok {
+		return
+	}
+	remote.Dial = func(ctx context.Context, port int) (net.Conn, error) {
+		return d.DialVM(ctx, vm, port)
+	}
 }

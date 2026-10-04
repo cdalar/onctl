@@ -22,11 +22,19 @@ var imagesCmd = &cobra.Command{
 	Use:   "images",
 	Short: "List available OS images for the current cloud provider",
 	Run: func(cmd *cobra.Command, args []string) {
-		if cloudProvider != "hetzner" {
+		var lister cloud.ImageLister
+		switch cloudProvider {
+		case "hetzner":
+			lister = hetznerImageLister()
+		case "boxes":
+			ensureProvider()
+			lister, _ = provider.(cloud.ImageLister)
+		}
+		if lister == nil {
 			fmt.Println("The current cloud provider does not support listing images.")
 			return
 		}
-		images, err := hetznerImageLister().ListImages()
+		images, err := lister.ListImages()
 		if err != nil {
 			log.Fatalln(err)
 		}

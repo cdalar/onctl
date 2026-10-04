@@ -169,6 +169,11 @@ func init() {
 	_ = viper.BindPFlag("fc.cacheImage", createCmd.Flags().Lookup("cache-image"))
 	_ = viper.BindPFlag("fc.cacheSizeMib", createCmd.Flags().Lookup("cache-size"))
 
+	// boxes. Only --username is bound: --type's default is Hetzner's
+	// (cpx21), which isn't a box size, so the create run takes --type for
+	// boxes only when it's given explicitly, and --image directly.
+	_ = viper.BindPFlag("boxes.vm.username", createCmd.Flags().Lookup("username"))
+
 	// Cloud Hypervisor, each bound to the ch.* key read by
 	// providerch.GetConfig. --kernel-image/--rootfs-image/--binary can't be
 	// shared with fc's flags of the same purpose above: their defaults point
@@ -222,8 +227,16 @@ var createCmd = &cobra.Command{
 				viper.Set("aws.vm.image", opt.Vm.Image)
 			}
 		}
-		if opt.Vm.Image != "" && cloudProvider != "hetzner" && cloudProvider != "aws" && cloudProvider != "ovh" {
-			log.Fatalf("--image flag is only supported for the hetzner, aws and ovh providers (current provider: %s)", cloudProvider)
+		if opt.Vm.Image != "" && cloudProvider != "hetzner" && cloudProvider != "aws" && cloudProvider != "ovh" && cloudProvider != "boxes" {
+			log.Fatalf("--image flag is only supported for the hetzner, aws, ovh and boxes providers (current provider: %s)", cloudProvider)
+		}
+		if cloudProvider == "boxes" {
+			if opt.Domain != "" {
+				log.Fatalln("--domain points a DNS record at the VM's public IP, and a box has none")
+			}
+			if cmd.Flags().Changed("type") {
+				opt.Vm.Type = flagType
+			}
 		}
 		s := ui.New() // Build our new spinner
 		s.Suffix = " Checking vm..."
@@ -324,6 +337,7 @@ var createCmd = &cobra.Command{
 			PrivateKey: string(privateKey),
 			Spinner:    s,
 		}
+		attachDialer(&remote, vm)
 
 		// BEGIN Domain
 		if opt.Domain != "" {
@@ -342,7 +356,7 @@ var createCmd = &cobra.Command{
 			}
 		}
 
-		if cloudProvider != "fc" && cloudProvider != "ch" {
+		if cloudProvider != "fc" && cloudProvider != "ch" && cloudProvider != "boxes" {
 			s.Suffix = " Waiting for VM to be ready..."
 			s.Restart()
 			remote.WaitForCloudInit(viper.GetString("vm.cloud-init.timeout"))
