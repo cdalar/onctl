@@ -151,6 +151,8 @@ Use "onctl [command] --help" for more information about a command.
 
 ## Contributing
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to report issues and what a pull request needs.
+
 For development guidelines — especially when using AI coding agents (opencode, Claude, etc.) — see [AGENTS.md](AGENTS.md).
 
 **Important:** When running multiple AI agents in parallel on this repo, you must use separate git worktrees (or clones) for isolation. See the "Coordinating multiple agents..." section in AGENTS.md.
