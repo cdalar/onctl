@@ -3,7 +3,10 @@
 > **Status:** rollout step 1 (provider and login) is built: `-p boxes`,
 > `onctl login`/`logout`, `cloud.Dialer` with `tools.Remote.Dial`, and
 > `onctl ssh-proxy`. Open questions 1, 2 and 5 were settled as proposed:
-> provider ID `boxes`, `onctl login`, `gorilla/websocket`. Steps 2-5 remain.
+> provider ID `boxes`, `onctl login`, `gorilla/websocket`. Step 2 is under
+> way: `onctl port-forward` (alias `pf`) is built, for every provider --
+> over the ssh connection, so through the tunnel for boxes. `sizes` comes
+> next, also for every provider, and `--idle-ttl`. Steps 3-5 remain.
 
 ## Context
 

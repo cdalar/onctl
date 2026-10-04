@@ -193,6 +193,13 @@ type Dialer interface {
 	DialVM(ctx context.Context, vm Vm, port int) (net.Conn, error)
 }
 
+// KeyAuthorizer is implemented by providers that can put an ssh public
+// key on an existing VM themselves (boxes, through its exec endpoint), so
+// commands that ssh in work on a VM made elsewhere (the dashboard).
+type KeyAuthorizer interface {
+	AuthorizeKey(vm Vm, publicKey string) error
+}
+
 type CloudProviderInterface interface {
 	// Deploy deploys a new instance
 	Deploy(Vm) (Vm, error)

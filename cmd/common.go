@@ -24,6 +24,7 @@ import (
 	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/gofrs/uuid/v5"
 	"github.com/manifoldco/promptui"
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/util/duration"
 )
@@ -540,4 +541,25 @@ func attachDialer(remote *tools.Remote, vm cloud.Vm) {
 	remote.Dial = func(ctx context.Context, port int) (net.Conn, error) {
 		return d.DialVM(ctx, vm, port)
 	}
+}
+
+// completeVMName completes a command's first argument with the provider's
+// VM names.
+func completeVMName(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	ensureProvider()
+	if provider == nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+	vms, err := provider.List()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+	var names []string
+	for _, vm := range vms.List {
+		names = append(names, vm.Name)
+	}
+	return names, cobra.ShellCompDirectiveNoFileComp
 }
