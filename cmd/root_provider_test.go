@@ -20,12 +20,16 @@ func withProvider(t *testing.T, p cloud.CloudProviderInterface) {
 	t.Cleanup(func() { provider = orig })
 }
 
-// withViper sets a viper key for one test and restores the previous value.
+// withViper sets a viper key for one test, and clears it afterwards.
 func withViper(t *testing.T, key string, value any) {
 	t.Helper()
-	orig := viper.Get(key)
 	viper.Set(key, value)
-	t.Cleanup(func() { viper.Set(key, orig) })
+	// Clear the override rather than Set it back to the old value: an
+	// override outranks flags, config and defaults, so "restoring" one
+	// would pin the key for every later test (TestCreateFlagsBindToViper
+	// then can't change fc.binPath through --fc-binary). viper has no
+	// Unset, but a nil override falls through to the layers below.
+	t.Cleanup(func() { viper.Set(key, nil) })
 }
 
 // ovh has no CLI to auto-resolve the service name from, so both an unset
