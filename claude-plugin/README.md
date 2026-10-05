@@ -37,8 +37,16 @@ both; uninstall `boxctl@boxctl` so only one routes Bash.
 
 ## Releases
 
-`plugin.json` has no `version` on purpose: Claude Code then versions the
-plugin by git commit, so every change merged to `main` reaches users on
-their next `claude plugin update` (or automatically, with auto-update on
-for this marketplace). Validate with `claude plugin validate ./claude-plugin`
--- `--strict` would flag the missing version.
+The plugin is versioned with onctl: each onctl release publishes the
+plugin as it was at that release, with the same version number
+(`v0.1.34` -> plugin `0.1.34`). `.github/workflows/plugin-release.yml`
+does it on every `v*` tag: it stamps `plugin.json`'s version and
+force-pushes the result to the `plugin-stable` branch, which the
+marketplace entry points at. Changes on `main` reach users with the next
+release, through `claude plugin update` (or auto-update, if they turned
+it on for this marketplace).
+
+`plugin.json` on `main` therefore has no `version`: the release adds it.
+Validate with `claude plugin validate ./claude-plugin` -- `--strict`
+flags the missing version. To republish a release by hand, run the
+workflow with its tag.
