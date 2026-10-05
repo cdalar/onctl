@@ -317,7 +317,12 @@ var createCmd = &cobra.Command{
 			log.Fatalln(err)
 		}
 		s.Stop()
-		fmt.Println("\033[32m✔\033[0m VM IP: " + vm.IP)
+		if _, viaProvider := provider.(cloud.Dialer); viaProvider {
+			// No public address (boxes): reached through the provider.
+			fmt.Println("\033[32m✔\033[0m VM: " + vm.Name + " (private IP " + vm.PrivateIP + ")")
+		} else {
+			fmt.Println("\033[32m✔\033[0m VM IP: " + vm.IP)
+		}
 
 		log.Println("[DEBUG] Vm:" + vm.String())
 		privateKey, err := os.ReadFile(privateKeyFile)

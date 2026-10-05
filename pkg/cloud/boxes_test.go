@@ -186,3 +186,30 @@ func TestBoxesProxyCommand(t *testing.T) {
 }
 
 func newBoxesClient(url string) *providerboxes.Client { return providerboxes.New(url, "t") }
+
+func TestBoxesListOrderAndAddresses(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `[
+			{"name":"newest","ip":"172.16.0.9","state":"running","created_at":"2026-10-05T10:00:00Z"},
+			{"name":"b-old","ip":"172.16.0.2","state":"paused","created_at":"2026-10-01T10:00:00Z"},
+			{"name":"a-old","ip":"172.16.0.3","state":"paused","created_at":"2026-10-01T10:00:00Z"},
+			{"name":"middle","ip":"172.16.0.5","state":"running","created_at":"2026-10-03T10:00:00Z"}
+		]`)
+	}))
+	defer srv.Close()
+	p := &ProviderBoxes{Client: newBoxesClient(srv.URL)}
+	list, err := p.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, vm := range list.List {
+		names = append(names, vm.Name)
+	}
+	if got := strings.Join(names, ","); got != "a-old,b-old,middle,newest" {
+		t.Fatalf("order %s, want oldest first (ties by name)", got)
+	}
+	if vm := list.List[3]; vm.IP != "N/A" || vm.PrivateIP != "172.16.0.9" {
+		t.Fatalf("a box's IP is private to its host: got IP %q, private %q", vm.IP, vm.PrivateIP)
+	}
+}
