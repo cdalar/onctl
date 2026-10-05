@@ -519,7 +519,10 @@ func TestMergeConfig_PreferCmdLineOptions(t *testing.T) {
 }
 
 func TestReadConfig_NoConfigDirectory(t *testing.T) {
-	// Test that ReadConfig function handles missing config directories properly
+	// Test that ReadConfig function handles missing config directories properly.
+	// Isolate HOME so a real ~/.onctl on the developer's machine isn't found
+	// (and isn't left on viper's search path for later tests).
+	t.Setenv("HOME", t.TempDir())
 	err := ReadConfig()
 	assert.Error(t, err)
 }

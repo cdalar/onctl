@@ -9,6 +9,7 @@ import (
 func TestReadConfig_FunctionExists(t *testing.T) {
 	// Test that ReadConfig function exists and is callable
 	// This tests the function's signature without requiring specific behavior
+	t.Setenv("HOME", t.TempDir()) // keep the real ~/.onctl off viper's search path
 	assert.NotPanics(t, func() {
 		// ReadConfig may succeed or fail depending on environment, but should not panic
 		_ = ReadConfig()
@@ -18,6 +19,7 @@ func TestReadConfig_FunctionExists(t *testing.T) {
 
 func TestReadConfig_WithValidDirectory(t *testing.T) {
 	// Test that ReadConfig function can handle directory operations without hanging
+	t.Setenv("HOME", t.TempDir()) // keep the real ~/.onctl off viper's search path
 	assert.NotPanics(t, func() {
 		// ReadConfig may succeed or fail depending on environment, but should not panic
 		_ = ReadConfig()
