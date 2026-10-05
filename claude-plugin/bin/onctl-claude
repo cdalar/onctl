@@ -1,0 +1,527 @@
+#!/usr/bin/env bash
+# onctl-claude -- the Claude Code plugin's one helper. Remembers where
+# Bash commands go, and runs them there.
+#
+#   onctl-claude on [--mode session|project|exec] [--workspace sync|copy|git|none]
+#                    [box] [--size S] [--image I]
+#                                route Bash to a box (default: session, sync)
+#   onctl-claude off            back to local bash (destroys a session box)
+#   onctl-claude status         where Bash runs now
+#   onctl-claude state          the routing in effect, as JSON (no network)
+#   onctl-claude run <box> <timeout-s> <cwd> <base64-command> [workspace]
+#   onctl-claude exec <timeout-s> <cwd> <base64-command> [onctl create flags]
+#   onctl-claude end            (SessionEnd hook) destroy this session's box
+#
+# Modes:
+#   session  one box for this Claude Code session, destroyed when it ends
+#   project  one box for this project directory, kept across sessions
+#   exec     a fresh, disposable box for every command
+#
+# Workspaces (session and project boxes; the box gets the project at the
+# same absolute path it has here):
+#   sync     copy it there before every command and back after, so the
+#            box and Claude's own file tools always see the same files
+#   copy     copy it there once, when the box is turned on
+#   git      git clone its origin there and check out the local commit
+#   none     an empty directory
+# All but none go over ssh, through `onctl ssh-proxy -p boxes` as its
+# ProxyCommand (which also resumes a paused box), with a key of the
+# plugin's own, and leave .gitignore'd files alone in both directions.
+#
+# Boxes boot the claude-agent image unless --image says otherwise:
+# debian-slim plus git, rsync, jq, ripgrep and make, so neither a
+# workspace nor Claude's first command starts with an apt-get install.
+#
+# State lives in ~/.onctl/claude/, one JSON file per session
+# (sessions/<id>) and per project (projects/<hash of dir>). A session's
+# own routing wins over its project's. CLAUDE_SESSION_ID and
+# CLAUDE_PROJECT_DIR say which apply; the hooks and slash commands pass
+# them, since the Bash tool's environment has neither.
+set -euo pipefail
+
+state_dir="${HOME}/.onctl/claude"
+onctl_bin="${ONCTL_BIN:-onctl}"
+default_image="claude-agent"
+
+project_dir() {
+	printf '%s' "${CLAUDE_PROJECT_DIR:-$PWD}"
+}
+
+session_file() {
+	[[ -n "${CLAUDE_SESSION_ID:-}" ]] || return 1
+	printf '%s/sessions/%s' "$state_dir" "$CLAUDE_SESSION_ID"
+}
+
+project_file() {
+	printf '%s/projects/%s' "$state_dir" "$(project_dir | shasum -a 256 | cut -c1-16)"
+}
+
+# cmd_state prints the routing in effect -- {"mode","box","args"} -- or
+# nothing when Bash runs locally.
+cmd_state() {
+	local f
+	for f in "$(session_file || true)" "$(project_file)"; do
+		if [[ -n "$f" && -f "$f" ]]; then
+			cat "$f"
+			return 0
+		fi
+	done
+}
+
+box_state() {
+	"$onctl_bin" ls -p boxes -o json 2>/dev/null | jq -r --arg n "$1" '.[]? | select(.Name == $n) | .Status'
+}
+
+# ensure_running resumes a paused box (ssh-proxy would too, but this
+# says so, and reports a box that's gone).
+ensure_running() {
+	local box="$1" state
+	state="$(box_state "$box")"
+	case "$state" in
+	running) ;;
+	paused)
+		echo "onctl: resuming paused box $box..." >&2
+		"$onctl_bin" resume -p boxes -k "$key.pub" "$box" >&2
+		;;
+	"")
+		echo "onctl: box $box not found (onctl ls -p boxes); run /onctl:on again" >&2
+		return 1
+		;;
+	*)
+		echo "onctl: box $box is $state" >&2
+		;;
+	esac
+}
+
+self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+# The plugin's key, shared with onctl claude: onctl's, else the one
+# boxctl made (already authorized on boxctl's boxes).
+key="$state_dir/id_ed25519"
+[[ -f "$key" || ! -f "$HOME/.boxctl/claude/id_ed25519" ]] || key="$HOME/.boxctl/claude/id_ed25519"
+
+ensure_key() {
+	[[ -f "$key" ]] || { mkdir -p "$state_dir" && ssh-keygen -q -t ed25519 -N '' -C onctl-claude -f "$key"; }
+}
+
+sq() {
+	printf "'%s'" "${1//\'/\'\\\'\'}"
+}
+
+# opt drops a userConfig value that was never substituted, so an unset
+# option reads as empty rather than as its own placeholder.
+opt() {
+	# shellcheck disable=SC2016 # the literal placeholder text
+	case "$1" in
+	'${'*) ;;
+	*) printf '%s' "$1" ;;
+	esac
+}
+
+# box_ssh <box> [ssh args...] -- ssh to the box as root, through
+# `onctl ssh-proxy`. One master connection per box carries every call
+# after the first, so a sync costs a round trip, not a handshake;
+# keepalives let a master whose box was paused notice and exit.
+box_ssh() {
+	local box="$1"
+	shift
+	mkdir -p "$state_dir" # for the ControlPath socket
+	# -F /dev/null: none of the user's ssh config applies here, least of
+	# all macOS's SendEnv LC_*, which the box has no locales for.
+	ssh -F /dev/null -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes \
+		-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+		-o "ProxyCommand=$(sq "$onctl_bin") ssh-proxy -p boxes %h" \
+		-o ServerAliveInterval=5 -o ServerAliveCountMax=3 \
+		-o ControlMaster=auto -o "ControlPath=$state_dir/cm-%h" -o ControlPersist=10m \
+		"root@$box" "$@"
+}
+
+# stop_master closes box's master connection, if there is one.
+stop_master() {
+	ssh -F /dev/null -o "ControlPath=$state_dir/cm-%h" -O exit "root@$1" >/dev/null 2>&1 || true
+}
+
+# create_args turns the stored --size into onctl create's --type, one
+# argument per line.
+create_args() {
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--size | -s) printf '%s\n' --type "$2"; shift 2 ;;
+		--size=*) printf '%s\n' "--type=${1#--size=}"; shift ;;
+		*) printf '%s\n' "$1"; shift ;;
+		esac
+	done
+}
+
+# create_box creates box with the stored args, authorizing the plugin's
+# key. onctl create's progress goes to stderr: stdout may be a command's.
+create_box() {
+	local box="$1" a cargs=()
+	shift
+	ensure_key
+	while IFS= read -r a; do cargs+=("$a"); done < <(create_args "$@")
+	"$onctl_bin" create -p boxes -n "$box" -k "$key.pub" ${cargs[@]+"${cargs[@]}"} >&2
+}
+
+# ws_prepare authorizes the plugin's key on box and installs what the
+# workspace needs.
+ws_prepare() {
+	local box="$1" ws="$2" pkgs
+	ensure_key
+	# onctl ssh authorizes the key it's given (over the service's exec
+	# endpoint, the one way in that needs no key) before connecting.
+	"$onctl_bin" ssh -p boxes -k "$key" "$box" -- true >&2
+	case "$ws" in
+	git) pkgs="git" ;;
+	*) pkgs="rsync" ;;
+	esac
+	box_ssh "$box" "command -v $pkgs >/dev/null || { apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $pkgs >/dev/null; }" >&2
+}
+
+# ignore_rules prints the project's .gitignore files as rsync filter
+# rules. rsync could read them itself (--filter=':- .gitignore'), but
+# macOS's rsync is openrsync, which ignores those for --delete -- so a
+# sync back from the box would delete node_modules and the like here.
+# Git lets a later rule override an earlier one and rsync takes the first
+# match, so the rules come out deepest file first, last line first.
+ignore_rules() {
+	local dir f rel prefix line kind pat
+	dir="$(project_dir)"
+	{
+		if git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
+			git -C "$dir" ls-files --cached --others --exclude-standard -- .gitignore '**/.gitignore'
+		elif [[ -f "$dir/.gitignore" ]]; then
+			echo .gitignore
+		fi
+	} | awk -F/ '{ print NF "\t" $0 }' | sort -n | cut -f2- | while IFS= read -r f; do
+		rel="${f%.gitignore}"
+		prefix="/$rel"
+		while IFS= read -r line || [[ -n "$line" ]]; do
+			line="${line%$'\r'}"
+			[[ -n "$line" && "$line" != \#* ]] || continue
+			kind="-"
+			if [[ "$line" == !* ]]; then
+				kind="+" line="${line:1}"
+			fi
+			# A slash anywhere but the end anchors a pattern to its
+			# .gitignore's directory; otherwise it matches at any depth.
+			if [[ "${line%/}" == */* ]]; then
+				pat="$prefix${line#/}"
+				echo "$kind $pat"
+			elif [[ -z "$rel" ]]; then
+				echo "$kind $line"
+			else
+				echo "$kind $prefix$line"
+				echo "$kind $prefix**/$line"
+			fi
+		done <"$dir/$f"
+	done | sed '1!G;h;$!d'
+	echo "- .DS_Store"
+}
+
+rsync_box() { # rsync_box <box> <rsync args...>
+	local box="$1" rules rc=0
+	shift
+	rules="$(mktemp)"
+	ignore_rules >"$rules"
+	# --no-owner/--no-group: files on the box are root's, as git there
+	# insists; files here stay the user's.
+	rsync -az --no-owner --no-group --delete --exclude-from="$rules" -e "$(sq "$self") _ssh" "$@" || rc=$?
+	rm -f "$rules"
+	return "$rc"
+}
+
+# ws_push/ws_pull mirror the project between here and the box, deleting
+# what the other side no longer has -- but never .gitignore'd files (see
+# ignore_rules), so each side keeps its own build output and dependencies.
+ws_push() {
+	local box="$1" dir
+	dir="$(project_dir)"
+	rsync_box "$box" --rsync-path="mkdir -p $(sq "$dir") && rsync" "$dir/" "$box:$dir/"
+}
+
+ws_pull() {
+	local box="$1" dir
+	dir="$(project_dir)"
+	rsync_box "$box" "$box:$dir/" "$dir/"
+}
+
+# ws_clone clones the project's origin on the box and checks out the
+# local commit -- or the branch, if that commit isn't pushed. A GitHub
+# origin is cloned over https with the local `gh` token when there is
+# one: it goes in on ssh's stdin to a file the clone reads and deletes,
+# never onto a command line or into the clone's config. Anything else
+# clones as-is with the local ssh agent forwarded.
+ws_clone() {
+	local box="$1" dir url sha branch token="" helper=""
+	dir="$(project_dir)"
+	url="$(git -C "$dir" remote get-url origin 2>/dev/null)" || {
+		echo "onctl: $dir has no git origin to clone; use --workspace copy" >&2
+		return 1
+	}
+	sha="$(git -C "$dir" rev-parse HEAD)"
+	branch="$(git -C "$dir" rev-parse --abbrev-ref HEAD)"
+	case "$url" in
+	git@github.com:* | ssh://git@github.com/* | https://github.com/*)
+		if token="$(gh auth token 2>/dev/null)" && [[ -n "$token" ]]; then
+			url="https://github.com/$(sed -E 's#^(git@github\.com:|ssh://git@github\.com/|https://github\.com/)##' <<<"$url")"
+			helper="-c credential.helper= -c 'credential.helper=!f() { echo username=x-access-token; echo password=\$(cat ~/.boxctl-git-token); }; f'"
+		fi
+		;;
+	esac
+	printf '%s' "$token" | box_ssh "$box" -A "umask 077; cat >~/.boxctl-git-token
+trap 'rm -f ~/.boxctl-git-token' EXIT
+export GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=accept-new'
+[ -d $(sq "$dir/.git") ] || git $helper clone -q $(sq "$url") $(sq "$dir") || exit 1
+cd $(sq "$dir") && git $helper fetch -q origin
+git checkout -q $(sq "$sha") 2>/dev/null && { [ $(sq "$branch") = HEAD ] || git checkout -q -B $(sq "$branch"); } ||
+	{ echo 'onctl: local commit $sha is not pushed; checked out origin/$branch instead' >&2; git checkout -q $(sq "$branch"); }" >&2
+}
+
+# ws_setup gets the project onto a freshly turned-on box.
+ws_setup() {
+	local box="$1" ws="$2"
+	[[ "$ws" != none ]] || return 0
+	echo "Setting up the $ws workspace on $box..."
+	ws_prepare "$box" "$ws"
+	case "$ws" in
+	sync | copy) ws_push "$box" ;;
+	git) ws_clone "$box" ;;
+	esac
+}
+
+slug() {
+	tr -c 'a-zA-Z0-9-' '-' | tr '[:upper:]' '[:lower:]' | cut -c1-20 | sed 's/-*$//'
+}
+
+# destroy_session_box removes this session's routing, and its box if it
+# was a session box -- a session box never outlives its session.
+destroy_session_box() {
+	local f mode box
+	f="$(session_file)" || return 0
+	[[ -f "$f" ]] || return 0
+	mode="$(jq -r .mode "$f")" box="$(jq -r '.box // empty' "$f")"
+	rm -f "$f"
+	[[ -z "$box" ]] || stop_master "$box"
+	if [[ "$mode" == session && -n "$box" ]]; then
+		"$onctl_bin" destroy -p boxes "$box" --force >&2 || echo "onctl: couldn't destroy $box; onctl destroy -p boxes $box" >&2
+	fi
+}
+
+cmd_on() {
+	local mode=session ws=sync box="" args=() v
+	# A later flag wins, so the slash command can put the plugin's own
+	# options first and let the user's arguments override them; an empty
+	# value (an unset option) leaves the default alone.
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--mode | -m) v="$(opt "$2")"; mode="${v:-$mode}"; shift 2 ;;
+		--workspace | -w) v="$(opt "$2")"; ws="${v:-$ws}"; shift 2 ;;
+		-*=*) args+=("$1"); shift ;;
+		-*) v="$(opt "$2")"; [[ -z "$v" ]] || args+=("$1" "$v"); shift 2 ;;
+		*) box="$1"; shift ;;
+		esac
+	done
+	case "$ws" in
+	sync | copy | git | none) ;;
+	*) echo "unknown workspace $ws (sync, copy, git or none)" >&2; return 2 ;;
+	esac
+	# Stored with the routing, so exec mode's boxes get it too.
+	local has_image=0
+	for v in ${args[@]+"${args[@]}"}; do
+		case "$v" in --image | -i | --image=* | -i=*) has_image=1 ;; esac
+	done
+	[[ $has_image -eq 1 ]] || args+=(--image "$default_image")
+
+	local file
+	case "$mode" in
+	session)
+		file="$(session_file)" || { echo "session mode needs CLAUDE_SESSION_ID" >&2; return 1; }
+		[[ -n "$box" ]] || box="claude-${CLAUDE_SESSION_ID:0:8}"
+		;;
+	project)
+		file="$(project_file)"
+		[[ -n "$box" ]] || box="claude-$(basename "$(project_dir)" | slug)"
+		;;
+	exec)
+		file="$(session_file)" || file="$(project_file)"
+		[[ -z "$box" ]] || { echo "exec mode takes no box name: every command gets a fresh box" >&2; return 1; }
+		ws=none
+		;;
+	*)
+		echo "unknown mode $mode (session, project or exec)" >&2
+		return 2
+		;;
+	esac
+
+	# Turning on again replaces this session's routing, and a session box
+	# being replaced would have nobody left to destroy it.
+	if [[ "$(cmd_state | jq -r '.box // empty')" != "$box" || -z "$box" ]]; then
+		destroy_session_box
+	fi
+	# Project and exec routing for the project would otherwise shadow
+	# nothing and linger; session routing sits on top of it instead.
+	[[ "$mode" == session ]] || rm -f "$(project_file)"
+
+	if [[ -n "$box" ]]; then
+		local created=0
+		if [[ -z "$(box_state "$box")" ]]; then
+			echo "Creating box $box..."
+			create_box "$box" ${args[@]+"${args[@]}"}
+			created=1
+		else
+			ensure_running "$box"
+		fi
+		if ! ws_setup "$box" "$ws"; then
+			# Nothing is routed to a session box that failed to set up, so
+			# nothing would ever destroy it.
+			if [[ $created -eq 1 && "$mode" == session ]]; then
+				stop_master "$box"
+				"$onctl_bin" destroy -p boxes "$box" --force >/dev/null 2>&1 || true
+			fi
+			echo "onctl: couldn't set up the $ws workspace on $box" >&2
+			return 1
+		fi
+	fi
+
+	mkdir -p "$(dirname "$file")"
+	# args as a JSON array, built outside jq's own option parsing (it
+	# would take a --size of ours for one of its own).
+	{ [[ ${#args[@]} -eq 0 ]] || printf '%s\n' "${args[@]}"; } | jq -R . | jq -s \
+		--arg mode "$mode" --arg box "$box" --arg ws "$ws" \
+		'{mode: $mode, box: (if $box == "" then null else $box end), workspace: $ws, args: .}' >"$file"
+
+	case "$mode" in
+	session) echo "Bash commands in this session now run on box $box; it's destroyed when the session ends." ;;
+	project) echo "Bash commands in $(project_dir) now run on box $box, across sessions." ;;
+	exec) echo "Bash commands now each run in a fresh, disposable box (nothing persists between commands)." ;;
+	esac
+	case "$ws" in
+	sync) echo "$(project_dir) is synced to the box before every command and back after it." ;;
+	copy) echo "$(project_dir) was copied to the box once; later local edits aren't." ;;
+	git) echo "The box has a git clone of this project at $(project_dir); uncommitted local changes aren't there." ;;
+	none) [[ "$mode" == exec ]] || echo "Local files are not on the box; it starts in an empty $(project_dir)." ;;
+	esac
+}
+
+cmd_off() {
+	local state mode box f
+	state="$(cmd_state)"
+	if [[ -z "$state" ]]; then
+		echo "Bash commands already run locally."
+		return 0
+	fi
+	mode="$(jq -r .mode <<<"$state")" box="$(jq -r '.box // empty' <<<"$state")"
+	f="$(session_file || true)"
+	if [[ -n "$f" && -f "$f" ]]; then
+		destroy_session_box
+	else
+		rm -f "$(project_file)"
+		[[ -z "$box" ]] || stop_master "$box"
+	fi
+	case "$mode" in
+	session) echo "Bash commands run locally again. Destroyed session box $box." ;;
+	project) echo "Bash commands run locally again. Box $box is still there (onctl destroy -p boxes $box to destroy it)." ;;
+	*) echo "Bash commands run locally again." ;;
+	esac
+}
+
+cmd_status() {
+	local state mode box
+	state="$(cmd_state)"
+	if [[ -z "$state" ]]; then
+		echo "off: Bash commands run locally."
+		return 0
+	fi
+	mode="$(jq -r .mode <<<"$state")" box="$(jq -r '.box // empty' <<<"$state")"
+	case "$mode" in
+	exec) echo "on (exec): every Bash command runs in a fresh, disposable box." ;;
+	*) echo "on ($mode): Bash commands run on box $box ($(box_state "$box"))." ;;
+	esac
+}
+
+# remote_script wraps the user's command for a persistent box. Each exec
+# is a fresh, non-interactive shell, so the working directory is carried
+# over in a file on the box (written on exit, so `exit 3` keeps it too);
+# the first command starts in the same absolute path as the local
+# project, so paths Claude already knows mean the same thing on both sides.
+remote_script() {
+	local cwd="$1" b64="$2"
+	cat <<EOF
+__f=\$HOME/.claude-boxctl-cwd
+__d=\$(cat "\$__f" 2>/dev/null) || __d=$(sq "$cwd")
+mkdir -p "\$__d" && cd "\$__d" || exit 1
+trap 'pwd >"\$__f"' EXIT
+eval "\$(printf %s '$b64' | base64 -d)"
+EOF
+}
+
+cmd_run() {
+	local box="$1" timeout="$2" cwd="$3" b64="$4" ws="${5:-none}" out err rc
+	# Sync: the box gets Claude's latest edits first. If that fails the
+	# command doesn't run at all -- running it on stale files, then
+	# syncing the result back, could undo those edits.
+	if [[ "$ws" == sync ]] && ! ws_push "$box" 2>/dev/null; then
+		ensure_running "$box" && stop_master "$box"
+		ws_push "$box" || { echo "onctl: couldn't sync $(project_dir) to $box; command not run" >&2; return 1; }
+	fi
+	out="$(mktemp)" err="$(mktemp)"
+	for attempt in 1 2; do
+		rc=0
+		box_ssh "$box" "timeout ${timeout}s bash -c $(sq "$(remote_script "$cwd" "$b64")")" >"$out" 2>"$err" || rc=$?
+		# 255 with ssh's own complaint and no output: the connection, not
+		# the command, failed -- usually a master left from before the box
+		# was paused. Drop it and try once more.
+		if [[ $attempt -eq 1 && $rc -eq 255 && ! -s "$out" ]] &&
+			grep -qiE 'mux_client|connection (closed|reset|refused|timed out)|broken pipe|timeout' "$err"; then
+			stop_master "$box"
+			continue
+		fi
+		break
+	done
+	cat "$out"
+	# ssh's own complaints about a stale master connection, which it has
+	# already worked around, aren't the command's output.
+	grep -v '^mux_client_' "$err" >&2 || true
+	rm -f "$out" "$err"
+	[[ $rc -ne 124 ]] || echo "onctl: the command was stopped after ${timeout}s" >&2
+	if [[ "$ws" == sync ]] && ! ws_pull "$box"; then
+		echo "onctl: couldn't sync $(project_dir) back from $box" >&2
+		[[ $rc -ne 0 ]] || rc=1
+	fi
+	return "$rc"
+}
+
+# cmd_exec runs one command in a box of its own: created for it,
+# destroyed after.
+cmd_exec() {
+	local timeout="$1" cwd="$2" b64="$3" box rc=0
+	shift 3
+	# od reads exactly 4 bytes: a tr|head pipeline here would end in
+	# SIGPIPE, which pipefail turns into a failure.
+	box="claude-x-$(od -An -N4 -tx4 /dev/urandom | tr -d ' \n')"
+	create_box "$box" "$@" >/dev/null 2>&1 || {
+		echo "onctl: couldn't create a box for this command (onctl create -p boxes)" >&2
+		return 1
+	}
+	box_ssh "$box" "timeout ${timeout}s bash -c $(sq "mkdir -p $(sq "$cwd") && cd $(sq "$cwd") || exit 1
+eval \"\$(printf %s '$b64' | base64 -d)\"")" || rc=$?
+	stop_master "$box"
+	"$onctl_bin" destroy -p boxes "$box" --force >/dev/null 2>&1 || echo "onctl: couldn't destroy $box; onctl destroy -p boxes $box" >&2
+	[[ $rc -ne 124 ]] || echo "onctl: the command was stopped after ${timeout}s" >&2
+	return "$rc"
+}
+
+case "${1:-}" in
+on) shift; cmd_on "$@" ;;
+off) cmd_off ;;
+status) cmd_status ;;
+state) cmd_state ;;
+run) shift; cmd_run "$@" ;;
+exec) shift; cmd_exec "$@" ;;
+end) destroy_session_box ;;
+_ssh) shift; box_ssh "$@" ;; # rsync's -e: _ssh <box> <remote command...>
+*)
+	sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//' >&2
+	exit 2
+	;;
+esac

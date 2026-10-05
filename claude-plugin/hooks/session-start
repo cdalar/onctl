@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# SessionStart hook: the plugin's autostart setting. When it names a mode,
+# turn remote bash on for every new session without /onctl:on, and tell
+# Claude where its Bash commands will run. Never blocks a session: if the
+# box can't be had (not logged in, API down), the session starts with
+# local bash and the user is told why.
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+helper="$root/bin/onctl-claude"
+
+mode="${CLAUDE_PLUGIN_OPTION_AUTOSTART:-off}"
+[[ "$mode" != off && -n "$mode" ]] || exit 0
+
+input="$(cat)"
+CLAUDE_SESSION_ID="$(jq -r '.session_id // empty' <<<"$input")"
+export CLAUDE_SESSION_ID
+
+say() { # say <context for Claude> [message for the user]
+	jq -nc --arg ctx "$1" --arg msg "${2:-}" '{
+	  hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $ctx}
+	} + (if $msg == "" then {} else {systemMessage: $msg} end)'
+}
+
+# Resumed or compacted sessions, and projects already on a project box,
+# keep what they have; a /onctl:off earlier in this session isn't undone
+# by a compaction, since that leaves no state to find and source says so.
+if [[ -z "$("$helper" state)" && "$(jq -r '.source // "startup"' <<<"$input")" != compact ]]; then
+	args=(--mode "$mode" --workspace "${CLAUDE_PLUGIN_OPTION_WORKSPACE:-}")
+	[[ -z "${CLAUDE_PLUGIN_OPTION_SIZE:-}" ]] || args+=(--size "$CLAUDE_PLUGIN_OPTION_SIZE")
+	[[ -z "${CLAUDE_PLUGIN_OPTION_IMAGE:-}" ]] || args+=(--image "$CLAUDE_PLUGIN_OPTION_IMAGE")
+	if ! out="$("$helper" on "${args[@]}" 2>&1)"; then
+		say "onctl autostart failed, so Bash runs locally on the user's machine this session." \
+			"onctl: couldn't turn on remote bash ($(tail -n1 <<<"$out")); Bash runs locally. Try /onctl:on."
+		exit 0
+	fi
+fi
+
+status="$("$helper" status)"
+case "$status" in
+on*) say "onctl plugin: $status See the onctl-remote-bash skill for how files reach the box." "onctl: $status" ;;
+esac

@@ -1,0 +1,48 @@
+{
+  "name": "onctl",
+  "version": "1.0.0",
+  "description": "Run Claude Code's Bash commands on a box (onctl boxes microVM) instead of on your machine.",
+  "author": {
+    "name": "Cemal Y. Dalar"
+  },
+  "homepage": "https://boxctl.io",
+  "repository": "https://github.com/cdalar/onctl",
+  "userConfig": {
+    "autostart": {
+      "type": "string",
+      "title": "Auto-on at session start",
+      "description": "Turn remote bash on by itself whenever a session starts, without /onctl:on. session: a new box for each session, destroyed when it ends. project: the project's box, kept across sessions. exec: a fresh box per command. off: Bash stays local until you run /onctl:on.",
+      "default": "off",
+      "options": [
+        "off",
+        "session",
+        "project",
+        "exec"
+      ]
+    },
+    "workspace": {
+      "type": "string",
+      "title": "Workspace",
+      "description": "How the project gets onto a session or project box. sync: copied there before every command and back after, so the box and Claude's file edits always match. copy: copied once, when the box is turned on. git: git clone of its origin at the local commit. none: an empty directory. .gitignore'd files are never copied either way.",
+      "default": "sync",
+      "options": [
+        "sync",
+        "copy",
+        "git",
+        "none"
+      ]
+    },
+    "size": {
+      "type": "string",
+      "title": "Box size",
+      "description": "Size of boxes the plugin creates (onctl sizes -p boxes). Empty uses the service's default.",
+      "default": ""
+    },
+    "image": {
+      "type": "string",
+      "title": "Boot image",
+      "description": "Image of boxes the plugin creates (onctl images -p boxes). Empty uses claude-agent: debian-slim plus git, rsync, jq, ripgrep and make.",
+      "default": ""
+    }
+  }
+}

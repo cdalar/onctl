@@ -13,9 +13,14 @@
 >    (`/root/.boxctl`, `refs/boxctl/wip`, `BOXCTL_GH_SOCKET`) is unchanged.
 >    `--prompt` lost its `-p` shorthand, which is onctl's `--provider`.
 >
+> 4. The Claude Code plugin moved here (`claude-plugin/`, marketplace
+>    `cdalar/onctl`, `/onctl:on`...). Its helper drives `onctl` and reaches
+>    boxes with `onctl ssh-proxy` as ssh's ProxyCommand instead of a
+>    background port-forward; exec mode creates and destroys a box itself
+>    (onctl has no `exec`).
+>
 > Open questions 1, 2 and 5 were settled as proposed: provider ID `boxes`,
-> `onctl login`, `gorilla/websocket`. Steps 4 (the plugin) and 5 (retiring
-> boxctl) remain.
+> `onctl login`, `gorilla/websocket`. Step 5 (retiring boxctl) remains.
 
 ## Context
 

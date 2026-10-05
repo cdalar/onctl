@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# PreToolUse hook for Bash: when Bash is routed to a box (onctl-claude
+# on), rewrite the command to run there -- through `onctl-claude run` on
+# the session's or project's box, or `onctl-claude exec` in a fresh box.
+# Prints nothing -- leaving the call alone -- when Bash runs locally, or
+# for commands that must stay local.
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+helper="$root/bin/onctl-claude"
+
+input="$(cat)"
+CLAUDE_SESSION_ID="$(jq -r '.session_id // empty' <<<"$input")"
+export CLAUDE_SESSION_ID
+
+state="$("$helper" state)"
+[[ -n "$state" ]] || exit 0
+
+command="$(jq -r '.tool_input.command // empty' <<<"$input")"
+[[ -n "$command" ]] || exit 0
+
+# Stays local: onctl itself and this plugin's own helper (they drive the
+# box from here), and anything Claude explicitly marks with `# local`.
+case "$command" in
+"# local"* | onctl\ * | boxctl\ * | *onctl-claude*) exit 0 ;;
+esac
+
+# A command gets at most 5 minutes on the box. Give the local wrapper
+# headroom past that for the round trip (and, in exec mode, creating and
+# destroying the box), so Bash's own timeout never cuts off a result the
+# box already produced.
+local_ms="$(jq -r '.tool_input.timeout // 120000' <<<"$input")"
+remote_s=$((local_ms / 1000))
+((remote_s > 300)) && remote_s=300
+((remote_s < 5)) && remote_s=5
+wrapper_ms=$(((remote_s + 120) * 1000))
+((wrapper_ms > 600000)) && wrapper_ms=600000
+
+cwd="$(jq -r '.cwd // empty' <<<"$input")"
+cwd="${cwd:-$PWD}"
+b64="$(printf '%s' "$command" | base64 | tr -d '\n')"
+q() { printf "'%s'" "${1//\'/\'\\\'\'}"; }
+
+if [[ "$(jq -r .mode <<<"$state")" == exec ]]; then
+	wrapped="$(q "$helper") exec $remote_s $(q "$cwd") $b64"
+	while IFS= read -r arg; do
+		wrapped+=" $(q "$arg")"
+	done < <(jq -r '.args[]?' <<<"$state")
+else
+	wrapped="$(q "$helper") run $(q "$(jq -r .box <<<"$state")") $remote_s $(q "$cwd") $b64 $(jq -r '.workspace // "none"' <<<"$state")"
+fi
+
+jq -c --arg cmd "$wrapped" --argjson ms "$wrapper_ms" '{
+  hookSpecificOutput: {
+    hookEventName: "PreToolUse",
+    updatedInput: (.tool_input + {command: $cmd, timeout: $ms})
+  }
+}' <<<"$input"
