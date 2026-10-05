@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/cdalar/onctl/internal/providerboxes"
@@ -49,6 +50,7 @@ onctl reads it until you log in here.`,
 			return fmt.Errorf("saving the token: %w", err)
 		}
 		fmt.Println("Logged in. Try: onctl ls -p boxes")
+		printPluginHint()
 		return nil
 	},
 }
@@ -96,4 +98,19 @@ func init() {
 	loginCmd.Flags().StringVar(&loginAPIURL, "api-url", "", "boxes service URL (default "+providerboxes.DefaultAPIURL+")")
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(logoutCmd)
+}
+
+// printPluginHint suggests the Claude Code plugin to someone who has
+// Claude Code -- but not inside it, where the line would only be noise in
+// Claude's tool output. (Claude Code's own <claude-code-hint> install
+// prompt only works for plugins in Anthropic's official marketplaces.)
+func printPluginHint() {
+	if os.Getenv("CLAUDECODE") != "" {
+		return
+	}
+	if _, err := exec.LookPath("claude"); err != nil {
+		return
+	}
+	fmt.Println("\nUsing Claude Code? Have it run its Bash commands on a box:")
+	fmt.Println("  claude plugin marketplace add cdalar/onctl && claude plugin install onctl@onctl")
 }

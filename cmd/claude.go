@@ -99,7 +99,13 @@ logged to ~/.onctl/claude/github.log). Detached, it has none. For work
 that must reach GitHub while you're away, --github store keeps a token
 you paste on the box -- make it a fine-grained one for this repository.
 --github off gives it nothing. Your git user.name and user.email are set
-on the box either way.`,
+on the box either way.
+
+To keep Claude Code on this machine and send only its Bash commands to a
+box instead, there's a plugin:
+
+  claude plugin marketplace add cdalar/onctl
+  claude plugin install onctl@onctl`,
 	RunE: runClaude,
 }
 

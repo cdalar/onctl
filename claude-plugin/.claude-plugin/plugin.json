@@ -1,6 +1,5 @@
 {
   "name": "onctl",
-  "version": "1.0.0",
   "description": "Run Claude Code's Bash commands on a box (onctl boxes microVM) instead of on your machine.",
   "author": {
     "name": "Cemal Y. Dalar"

@@ -34,3 +34,11 @@ itself at every session start, and set the workspace, size and image.
 Coming from boxctl's plugin: it reuses boxctl's ssh key
 (`~/.boxctl/claude/id_ed25519`), so boxes either one set up work with
 both; uninstall `boxctl@boxctl` so only one routes Bash.
+
+## Releases
+
+`plugin.json` has no `version` on purpose: Claude Code then versions the
+plugin by git commit, so every change merged to `main` reaches users on
+their next `claude plugin update` (or automatically, with auto-update on
+for this marketplace). Validate with `claude plugin validate ./claude-plugin`
+-- `--strict` would flag the missing version.
