@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -61,9 +62,12 @@ const (
 
 func mapBoxesVM(b providerboxes.VM) Vm {
 	return Vm{
-		ID:        b.Name,
-		Name:      b.Name,
-		IP:        b.IP,
+		ID:   b.Name,
+		Name: b.Name,
+		// A box has no public address: its IP is private to its host, and
+		// it's reached through the service (DialVM, ssh-proxy).
+		IP:        "N/A",
+		PrivateIP: b.IP,
 		Type:      b.Size,
 		Image:     b.Image,
 		Status:    b.State,
@@ -158,6 +162,15 @@ func (p *ProviderBoxes) List() (VmList, error) {
 	for _, b := range boxes {
 		list.List = append(list.List, mapBoxesVM(b))
 	}
+	// The service returns boxes in no particular order; list them oldest
+	// first, as the cloud providers' APIs do.
+	sort.SliceStable(list.List, func(i, j int) bool {
+		a, b := list.List[i], list.List[j]
+		if !a.CreatedAt.Equal(b.CreatedAt) {
+			return a.CreatedAt.Before(b.CreatedAt)
+		}
+		return a.Name < b.Name
+	})
 	return list, nil
 }
 
