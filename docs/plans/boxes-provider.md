@@ -13,14 +13,19 @@
 >    (`/root/.boxctl`, `refs/boxctl/wip`, `BOXCTL_GH_SOCKET`) is unchanged.
 >    `--prompt` lost its `-p` shorthand, which is onctl's `--provider`.
 >
-> 4. The Claude Code plugin moved here (`claude-plugin/`, marketplace
->    `cdalar/onctl`, `/onctl:on`...). Its helper drives `onctl` and reaches
->    boxes with `onctl ssh-proxy` as ssh's ProxyCommand instead of a
->    background port-forward; exec mode creates and destroys a box itself
->    (onctl has no `exec`).
+>
+> Steps 4 and 5 are not happening:
+> 4. The Claude Code plugin was copied here as `onctl` and then removed
+>    again: it stays in `cdalar/boxctl` (`/boxctl:on`...), where it drives
+>    the boxctl CLI. One plugin is enough, and a second copy of its helper
+>    was only more to keep in step.
+> 5. boxctl isn't being retired. Its CLI and plugin continue next to
+>    `onctl -p boxes` and `onctl claude`.
 >
 > Open questions 1, 2 and 5 were settled as proposed: provider ID `boxes`,
-> `onctl login`, `gorilla/websocket`. Step 5 (retiring boxctl) remains.
+> `onctl login`, `gorilla/websocket`. The sections below on the plugin and
+> on retiring the boxctl names describe the original proposal, not what
+> was done.
 
 ## Context
 
