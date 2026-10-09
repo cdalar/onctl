@@ -120,6 +120,33 @@ curl -sLS https://onctl.sh/get-edge.sh | bash
 sudo install onctl /usr/local/bin/
 ```
 
+#### Tab completion
+
+The install scripts also set up tab completion for your shell (bash,
+zsh or fish): subcommands, flags, and the names of your own VMs, so
+`onctl ssh my-b<TAB>` finishes the name for you. Open a new terminal
+after installing to pick it up.
+
+It works by writing a completion script to your shell's per-user
+completion folder and, for bash and zsh, adding one line to `~/.bashrc`
+or `~/.zshrc` that loads it. To skip this, run the installer with
+`ONCTL_NO_COMPLETION=1`:
+
+```bash
+curl -sLS https://onctl.sh/get.sh | ONCTL_NO_COMPLETION=1 bash
+```
+
+To set it up by hand instead:
+
+```bash
+echo 'source <(onctl completion bash)' >> ~/.bashrc   # bash
+echo 'source <(onctl completion zsh)' >> ~/.zshrc     # zsh
+onctl completion fish > ~/.config/fish/completions/onctl.fish
+```
+
+VM names are looked up live from your cloud provider, so completing them
+needs an initialized `.onctl` directory and working credentials.
+
 ### Windows 
 
 - download windows binary from [releases page](https://github.com/cdalar/onctl/releases)

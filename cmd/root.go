@@ -50,6 +50,11 @@ var (
 			case "init", "version", "help", "import", "login", "logout", "__complete", "__completeNoDesc":
 				return nil
 			}
+			// `onctl completion <shell>` only prints a script; the install
+			// scripts (docs/static/get*.sh) run it before `onctl init`.
+			if cmd.Parent().Name() == "completion" {
+				return nil
+			}
 			// onctl claude runs on boxes: it needs the claude-agent image's
 			// tools and the boxes tunnel (docs/plans/boxes-provider.md).
 			if isClaudeCommand(cmd) {
