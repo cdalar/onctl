@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
@@ -104,4 +105,24 @@ func TestResolveAzureIdentifiers(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "azure.subscriptionId is required")
 	})
+}
+
+// The install scripts (docs/static/get*.sh) generate shell completion right
+// after downloading the binary, before the user has ever run `onctl init`.
+// So `onctl completion <shell>` must not require a .onctl directory, while
+// ordinary commands still must.
+func TestPersistentPreRunE_CompletionNeedsNoConfig(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("ONCTL_CLOUD", "hetzner")
+	t.Chdir(t.TempDir())
+
+	completion := &cobra.Command{Use: "completion"}
+	zsh := &cobra.Command{Use: "zsh"}
+	completion.AddCommand(zsh)
+	assert.NoError(t, rootCmd.PersistentPreRunE(zsh, nil))
+
+	other := &cobra.Command{Use: "other"}
+	ls := &cobra.Command{Use: "ls"}
+	other.AddCommand(ls)
+	assert.Error(t, rootCmd.PersistentPreRunE(ls, nil))
 }
