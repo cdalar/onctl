@@ -160,6 +160,16 @@ type NetworkManager interface {
 	CreateTap(tapName, bridge string) error
 	// DeleteTap removes a TAP device.
 	DeleteTap(tapName string) error
+	// ForgetNeighbor drops the host's ARP/neighbour cache entry for ip on
+	// bridge, if there is one. Deploy calls it for the address it just
+	// allocated: addresses are reused (lowest free one first) but each
+	// microVM gets its own MAC, so the cache can still map the address to
+	// the MAC of a microVM that is gone. The kernel trusts such a stale
+	// entry and only re-resolves after delay_first_probe_time (5s) plus
+	// ucast_solicit unicast probes (3 x 1s) -- 8s during which the new
+	// guest is up but unreachable from the host. A missing entry is not
+	// an error.
+	ForgetNeighbor(bridge, ip string) error
 }
 
 // RootfsPreparer creates a per-VM writable rootfs image from the configured
@@ -704,6 +714,11 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 		_ = p.Net.DeleteTap(tapDevice)
 		_ = os.RemoveAll(dir)
 		return Vm{}, err
+	}
+
+	// Best-effort: a leftover entry only delays the first connection.
+	if err := p.Net.ForgetNeighbor(bridge, ip); err != nil {
+		log.Println("[DEBUG] failed to drop stale neighbour entry for " + ip + " on " + bridge + ": " + err.Error())
 	}
 
 	kernelArgs := p.kernelArgs(ip, gateway, mask)
