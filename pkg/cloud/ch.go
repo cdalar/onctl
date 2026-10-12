@@ -493,6 +493,11 @@ func (p ProviderCH) Deploy(server Vm) (Vm, error) {
 		_ = os.RemoveAll(dir)
 		return Vm{}, err
 	}
+	// Best-effort: a leftover entry only delays the first connection (see
+	// NetworkManager.ForgetNeighbor).
+	if err := p.Net.ForgetNeighbor(bridge, ip); err != nil {
+		log.Println("[DEBUG] failed to drop stale neighbour entry for " + ip + " on " + bridge + ": " + err.Error())
+	}
 	mac := chMAC(server.Name)
 
 	var kernelArgs string

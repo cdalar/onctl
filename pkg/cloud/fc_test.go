@@ -111,6 +111,8 @@ type fakeNetworkManager struct {
 	bridges []string
 	taps    []string
 	deleted []string
+	// forgotten records ForgetNeighbor calls as "bridge|ip".
+	forgotten []string
 }
 
 func (f *fakeNetworkManager) EnsureBridge(bridge, _ string) error {
@@ -125,6 +127,11 @@ func (f *fakeNetworkManager) CreateTap(tapName, _ string) error {
 
 func (f *fakeNetworkManager) DeleteTap(tapName string) error {
 	f.deleted = append(f.deleted, tapName)
+	return nil
+}
+
+func (f *fakeNetworkManager) ForgetNeighbor(bridge, ip string) error {
+	f.forgotten = append(f.forgotten, bridge+"|"+ip)
 	return nil
 }
 
@@ -340,6 +347,9 @@ func TestProviderFC_Deploy(t *testing.T) {
 	assert.Equal(t, 1, proc.startCalls)
 	assert.Equal(t, []string{"fcbr0"}, netMgr.bridges)
 	assert.Equal(t, []string{fcTapName("test-vm")}, netMgr.taps)
+	// The address is reused across microVMs while the MAC is not, so a
+	// leftover neighbour entry for it must be dropped before boot.
+	assert.Equal(t, []string{"fcbr0|172.16.0.2"}, netMgr.forgotten)
 	assert.Len(t, rootfs.calls, 1)
 	assert.Equal(t, []string{"test-vm"}, rootfs.hostnames)
 

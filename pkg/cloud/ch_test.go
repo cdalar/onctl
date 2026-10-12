@@ -134,6 +134,7 @@ func TestProviderCH_Deploy(t *testing.T) {
 	assert.Equal(t, 1, proc.startCalls)
 	assert.Equal(t, []string{"chbr0"}, netMgr.bridges)
 	assert.Equal(t, []string{chTapName("test-vm")}, netMgr.taps)
+	assert.Equal(t, []string{"chbr0|172.17.0.2"}, netMgr.forgotten)
 	assert.Len(t, rootfs.calls, 1)
 	assert.Equal(t, []string{"test-vm"}, rootfs.hostnames)
 

@@ -431,6 +431,14 @@ func (LinuxNetworkManager) DeleteTap(tapName string) error {
 	return runIP("link", "delete", tapName)
 }
 
+func (LinuxNetworkManager) ForgetNeighbor(bridge, ip string) error {
+	out, err := exec.Command("ip", "neigh", "del", ip, "dev", bridge).CombinedOutput()
+	if err != nil && !strings.Contains(string(out), "No such file or directory") {
+		return fmt.Errorf("ip neigh del %s dev %s: %w: %s", ip, bridge, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 func linkExists(name string) bool {
 	return exec.Command("ip", "link", "show", name).Run() == nil
 }
