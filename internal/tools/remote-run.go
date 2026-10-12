@@ -379,13 +379,17 @@ func (r *Remote) CopyAndRunRemoteFile(config *CopyAndRunRemoteFileConfig) error 
 // same log the same way (tail --pid) while it is still running. The
 // session itself only tails that log until the script exits, then exits
 // with the script's own exit code.
+//
+// tail checks --pid once per sleep interval, which defaults to a full
+// second: without -s every apply file, however short, held its session
+// (and `onctl create`) for up to a second after it had finished.
 func applyCommand(dir, file, envVars string) string {
 	logFile := "output-" + file + ".log"
 	return "cd " + dir + " && chmod +x " + file + " && if [[ -f .env ]]; then set -o allexport; source .env; set +o allexport; fi && : > " + logFile + " || exit 1\n" +
 		"( " + envVars + "sudo -E ./" + file + " > " + logFile + " 2>&1; rc=$?; echo $rc > exit-code-" + file + "; exit $rc ) < /dev/null > /dev/null 2>&1 &\n" +
 		"pid=$!\n" +
 		"echo $pid > pid-" + file + "\n" +
-		"tail -n +1 -f --pid=$pid " + logFile + "\n" +
+		"tail -n +1 -f -s 0.1 --pid=$pid " + logFile + "\n" +
 		"wait $pid"
 }
 

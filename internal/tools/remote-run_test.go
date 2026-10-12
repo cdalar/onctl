@@ -115,3 +115,32 @@ func writeExecutable(t *testing.T, path, content string) {
 		t.Fatal(err)
 	}
 }
+
+// TestApplyCommandReturnsWhenScriptExits: the session follows the apply
+// file's log with `tail --pid`, which only checks the PID once per sleep
+// interval -- a full second by default. A 0.2s script must not hold its
+// session (and `onctl create`) for a second.
+func TestApplyCommandReturnsWhenScriptExits(t *testing.T) {
+	if err := exec.Command("tail", "--pid=1", "-n", "0", os.DevNull).Run(); err != nil {
+		t.Skip("needs GNU tail --pid:", err)
+	}
+	dir := t.TempDir()
+	bin := t.TempDir()
+	writeExecutable(t, filepath.Join(bin, "sudo"), "#!/bin/bash\n[ \"$1\" = -E ] && shift\nexec \"$@\"\n")
+	writeExecutable(t, filepath.Join(dir, "apply.sh"), "#!/bin/bash\nsleep 0.2\necho done\n")
+
+	cmd := exec.Command("bash", "-c", applyCommand(dir, "apply.sh", ""))
+	cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
+	start := time.Now()
+	out, err := cmd.Output()
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("apply command failed: %v", err)
+	}
+	if string(out) != "done\n" {
+		t.Errorf("output = %q, want the apply file's output", out)
+	}
+	if elapsed > 850*time.Millisecond {
+		t.Errorf("a 0.2s apply file held the session for %s", elapsed)
+	}
+}
