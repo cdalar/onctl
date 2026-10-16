@@ -210,6 +210,15 @@ func configureAndBoot(socketPath string, cfg cloud.FCVMConfig) error {
 		return fmt.Errorf("network-interfaces: %w", err)
 	}
 
+	if cfg.VsockPath != "" {
+		if err := fcRequest(client, http.MethodPut, "/vsock", map[string]any{
+			"guest_cid": cloud.FCGuestCID,
+			"uds_path":  cfg.VsockPath,
+		}); err != nil {
+			return fmt.Errorf("vsock: %w", err)
+		}
+	}
+
 	if err := fcRequest(client, http.MethodPut, "/machine-config", map[string]any{
 		"vcpu_count":   cfg.VCPUCount,
 		"mem_size_mib": cfg.MemSizeMib,

@@ -101,6 +101,44 @@ type FCVMConfig struct {
 	MemSizeMib int64
 	TapDevice  string
 	MacAddress string
+	// VsockPath, if set, gives the microVM a virtio-vsock device (guest
+	// CID FCGuestCID) whose host side is this Unix socket path: a guest
+	// connection to CID 2, port N arrives at VsockPath_N, where host
+	// software must be listening. Empty for no vsock device.
+	VsockPath string
+}
+
+// FCGuestCID is every microVM's vsock CID. Each vsock device is private to
+// its microVM (its host side is that VM's own VsockPath), so CIDs needn't
+// be unique on a host; 3 is the lowest a guest may have.
+const FCGuestCID = 3
+
+// fcVsockSocketMax is the longest Unix socket path Linux accepts
+// (sun_path is 108 bytes, NUL included).
+const fcVsockSocketMax = 107
+
+// fcVsockPath is the vsock socket path for a microVM in dir, or "" when
+// dir is too deep for it: the host listens on <path>_<port>, and a port is
+// up to 10 digits.
+func fcVsockPath(dir string) string {
+	path := filepath.Join(dir, "v.sock")
+	if len(path)+len("_4294967295") > fcVsockSocketMax {
+		log.Println("[DEBUG] no vsock device: " + path + " is too long for a Unix socket path")
+		return ""
+	}
+	return path
+}
+
+// removeStaleVsock removes a vsock socket left by a microVM's previous
+// firecracker process, which would otherwise refuse to bind it ("address
+// in use") on the next boot or snapshot restore.
+func removeStaleVsock(path string) {
+	if path == "" {
+		return
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		log.Println("[DEBUG] failed to remove stale vsock socket " + path + ": " + err.Error())
+	}
 }
 
 // FCProcess starts and stops firecracker VMM processes.
@@ -264,9 +302,14 @@ type fcVM struct {
 	CachePath string `json:"cachePath,omitempty"`
 	// CacheImage is the golden image CachePath was cloned from, and the
 	// target for MergeBack at Destroy time.
-	CacheImage string    `json:"cacheImage,omitempty"`
-	RootfsPath string    `json:"rootfsPath"`
-	CreatedAt  time.Time `json:"createdAt"`
+	CacheImage string `json:"cacheImage,omitempty"`
+	RootfsPath string `json:"rootfsPath"`
+	// VsockPath is the host side of this VM's vsock device (see
+	// FCVMConfig.VsockPath), part of its snapshot too -- empty for a VM
+	// without one, i.e. created before onctl added them, until a Restart
+	// gives it one.
+	VsockPath string    `json:"vsockPath,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
 	// SnapshotStatePath and SnapshotMemFilePath are the Firecracker
 	// snapshot files written by Pause, and consumed by Resume to restart
 	// the microVM. Empty unless Status is "paused". Both live under this
@@ -726,6 +769,7 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 	mac := fcMAC(server.Name)
 	socketPath := filepath.Join(dir, "fc.sock")
 	logFile := filepath.Join(dir, "fc.log")
+	vsockPath := fcVsockPath(dir)
 
 	pid, err := p.Process.Start(socketPath, FCVMConfig{
 		KernelImage: kernelImage,
@@ -736,6 +780,7 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 		MemSizeMib:  mem,
 		TapDevice:   tapDevice,
 		MacAddress:  mac,
+		VsockPath:   vsockPath,
 	}, logFile)
 	if err != nil {
 		_ = p.Net.DeleteTap(tapDevice)
@@ -759,6 +804,7 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 		Status:             fcStatusRunning,
 		KernelImage:        kernelImage,
 		RootfsPath:         rootfsPath,
+		VsockPath:          vsockPath,
 		CachePath:          cachePath,
 		CacheImage:         p.Config.CacheImage,
 		SSHPort:            sshPort,
@@ -979,6 +1025,9 @@ func (p ProviderFC) Resume(server Vm) (Vm, error) {
 	}
 
 	logFile := filepath.Join(p.vmDir(server.Name), "fc.log")
+	// The snapshot brings the vsock device back on the path it was taken
+	// with -- this VM's own, since vmDir moves with it.
+	removeStaleVsock(vm.VsockPath)
 	pid, err := p.Process.StartBare(vm.SocketPath, logFile)
 	if err != nil {
 		_ = p.Net.DeleteTap(tapDevice)
@@ -1097,6 +1146,12 @@ func (p ProviderFC) Restart(server Vm, opts RestartOptions) (Vm, error) {
 	if socketPath == "" {
 		socketPath = filepath.Join(p.vmDir(server.Name), "fc.sock")
 	}
+	// A cold boot configures every device afresh, so it's also how a VM
+	// created before vsock devices gets one.
+	if vm.VsockPath == "" {
+		vm.VsockPath = fcVsockPath(p.vmDir(server.Name))
+	}
+	removeStaleVsock(vm.VsockPath)
 
 	pid, err := p.Process.Start(socketPath, FCVMConfig{
 		KernelImage: kernelImage,
@@ -1107,6 +1162,7 @@ func (p ProviderFC) Restart(server Vm, opts RestartOptions) (Vm, error) {
 		MemSizeMib:  vm.MemSizeMib,
 		TapDevice:   tapDevice,
 		MacAddress:  mac,
+		VsockPath:   vm.VsockPath,
 	}, filepath.Join(p.vmDir(server.Name), "fc.log"))
 	if err != nil {
 		_ = p.Net.DeleteTap(tapDevice)
