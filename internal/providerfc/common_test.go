@@ -232,6 +232,26 @@ func TestConfigureAndBoot(t *testing.T) {
 	assert.Equal(t, []string{"/boot-source", "/drives/rootfs", "/network-interfaces/eth0", "/machine-config", "/actions"}, gotPaths)
 }
 
+func TestConfigureAndBoot_Vsock(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "api.sock")
+
+	var gotPaths []string
+	var vsock map[string]any
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		gotPaths = append(gotPaths, r.URL.Path)
+		if r.URL.Path == "/vsock" {
+			_ = json.NewDecoder(r.Body).Decode(&vsock)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	startUnixServer(t, sock, mux)
+
+	require.NoError(t, configureAndBoot(sock, cloud.FCVMConfig{VsockPath: "/vms/test/v.sock"}))
+	assert.Equal(t, []string{"/boot-source", "/drives/rootfs", "/network-interfaces/eth0", "/vsock", "/machine-config", "/actions"}, gotPaths)
+	assert.Equal(t, map[string]any{"guest_cid": float64(cloud.FCGuestCID), "uds_path": "/vms/test/v.sock"}, vsock)
+}
+
 func TestConfigureAndBoot_Error(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "api.sock")
 

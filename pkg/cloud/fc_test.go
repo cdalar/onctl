@@ -1027,3 +1027,70 @@ func FuzzAllocateFCIP(f *testing.F) {
 		assert.NotEqual(t, usedIP, ip, "allocated an address already in use")
 	})
 }
+
+// shortStateDir points p at a state directory short enough for vsock
+// socket paths: t.TempDir() on macOS is too deep for <vmdir>/v.sock_<port>
+// to fit in a Unix socket path, and fcVsockPath leaves the device out.
+func shortStateDir(t *testing.T, p *ProviderFC) {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "fcv")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	p.Config.StateDir = dir
+}
+
+func TestProviderFC_Deploy_Vsock(t *testing.T) {
+	p, proc, _, _, _ := newTestFCProvider(t)
+	shortStateDir(t, &p)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+
+	want := filepath.Join(p.vmDir("test-vm"), "v.sock")
+	require.Len(t, proc.startCfgs, 1)
+	assert.Equal(t, want, proc.startCfgs[0].VsockPath)
+	meta, err := loadFCMetadata(p.metadataPath("test-vm"))
+	require.NoError(t, err)
+	assert.Equal(t, want, meta.VsockPath, "recorded, for Resume and Restart")
+}
+
+func TestFCVsockPath_TooLong(t *testing.T) {
+	assert.Equal(t, "/opt/fc/vms/box/v.sock", fcVsockPath("/opt/fc/vms/box"))
+	assert.Empty(t, fcVsockPath("/"+strings.Repeat("d", 100)), "no room for <path>_<port> in a Unix socket path")
+}
+
+func TestProviderFC_Resume_RemovesStaleVsock(t *testing.T) {
+	p, _, api, _, _ := newTestFCProvider(t)
+	shortStateDir(t, &p)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	require.NoError(t, p.Pause(Vm{Name: "test-vm"}, true))
+	// The paused VM's firecracker process left its socket behind.
+	stale := filepath.Join(p.vmDir("test-vm"), "v.sock")
+	require.NoError(t, os.WriteFile(stale, nil, 0600))
+
+	_, err = p.Resume(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	assert.Len(t, api.loadCalls, 1)
+	assert.NoFileExists(t, stale, "the restored VMM binds it afresh")
+}
+
+func TestProviderFC_Restart_GivesOldVMVsock(t *testing.T) {
+	p, proc, _, _, _, _ := newTestFCProviderWithKernels(t)
+	shortStateDir(t, &p)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	// A VM created before vsock devices has none recorded.
+	meta, err := loadFCMetadata(p.metadataPath("test-vm"))
+	require.NoError(t, err)
+	meta.VsockPath = ""
+	require.NoError(t, saveFCMetadata(p.metadataPath("test-vm"), meta))
+
+	_, err = p.Restart(Vm{Name: "test-vm"}, RestartOptions{})
+	require.NoError(t, err)
+	want := filepath.Join(p.vmDir("test-vm"), "v.sock")
+	require.Len(t, proc.startCfgs, 2)
+	assert.Equal(t, want, proc.startCfgs[1].VsockPath)
+	after, err := loadFCMetadata(p.metadataPath("test-vm"))
+	require.NoError(t, err)
+	assert.Equal(t, want, after.VsockPath)
+}
