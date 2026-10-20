@@ -25,7 +25,10 @@ type fakeACRunner struct {
 	// ipAfterLists withholds addresses until `ls` has been called that many
 	// times, to exercise the IP poll.
 	ipAfterLists int
-	lists        int
+	// stopOnList, when non-zero, marks every running container stopped on
+	// that `ls` call, as if its init process had exited by then.
+	stopOnList int
+	lists      int
 }
 
 func (f *fakeACRunner) Run(args ...string) ([]byte, error) {
@@ -36,6 +39,14 @@ func (f *fakeACRunner) Run(args ...string) ([]byte, error) {
 	switch args[0] {
 	case "ls":
 		f.lists++
+		if f.lists == f.stopOnList {
+			for _, c := range f.containers {
+				if c["status"] == "running" {
+					c["status"] = "stopped"
+					c["networks"] = []any{}
+				}
+			}
+		}
 		// Hand out addresses to running containers once the poll has gone
 		// around enough times.
 		for _, c := range f.containers {
@@ -216,13 +227,10 @@ func TestAC_Deploy_Existing(t *testing.T) {
 // behind as a stopped sandbox a retried create would mistake for an existing
 // one.
 func TestAC_Deploy_BootstrapExitCleansUp(t *testing.T) {
-	f := &fakeACRunner{ipAfterLists: 1 << 30}
+	// The first ls is Deploy's existence check; the init process exits
+	// before the poll's third look.
+	f := &fakeACRunner{ipAfterLists: 1 << 30, stopOnList: 3}
 	p := newTestAC(t, f)
-	go func() {
-		// Simulate the init process exiting a moment after run.
-		time.Sleep(20 * time.Millisecond)
-		_ = f.setStatus("sb1", "stopped")
-	}()
 	_, err := p.Deploy(Vm{Name: "sb1"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "container logs sb1")
