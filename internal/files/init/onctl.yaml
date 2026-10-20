@@ -115,3 +115,18 @@ ch:
   vm:
     username: root                 # ssh user configured in the rootfs image (os=linux) or the local admin account (os=windows)
   # stateDir: /opt/ch              # default: /opt/ch
+
+# ---- Apple containers (ac) ----
+# Local sandboxes on a macOS 26+ host: each one is a lightweight Linux VM
+# run by Apple's `container` CLI (https://github.com/apple/container), no
+# cloud account needed. The image needs a shell; sshd is installed on first
+# boot if the image has none (apk/apt-get/dnf), so an image that ships one
+# boots fastest. Pause/resume are `container stop`/`start` (disk kept,
+# memory not).
+ac:
+  image: docker.io/library/ubuntu:24.04  # OCI image to run (or --image)
+  vcpuCount: 1
+  memSizeMib: 2048
+  binPath: container               # path to the container CLI
+  vm:
+    username: root                 # ssh user (created in the sandbox if missing)
