@@ -41,7 +41,7 @@ configured location. The default size is marked with *.`,
 // there's no list and where to find what --type takes instead.
 func sizesUnsupported(provider string) string {
 	switch provider {
-	case "fc", "ch":
+	case "fc", "ch", "ac":
 		return "The " + provider + " provider has no fixed sizes: set --vcpu and --memory on create."
 	case "static":
 		return "Imported (static) hosts already exist: there are no sizes to choose."

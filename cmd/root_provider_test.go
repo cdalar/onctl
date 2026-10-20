@@ -61,6 +61,7 @@ func TestEnsureProvider_KeepsExisting(t *testing.T) {
 func TestInitProvider_LocalProviders(t *testing.T) {
 	withViper(t, "fc.binPath", "/opt/bin/firecracker")
 	withViper(t, "ch.binPath", "/opt/bin/cloud-hypervisor")
+	withViper(t, "ac.binPath", "/opt/bin/container")
 
 	t.Run("fc", func(t *testing.T) {
 		withProvider(t, nil)
@@ -86,6 +87,15 @@ func TestInitProvider_LocalProviders(t *testing.T) {
 		assert.NotNil(t, ch.Rootfs)
 		assert.NotNil(t, ch.WindowsGuest)
 		assert.NotNil(t, ch.DHCP)
+	})
+
+	t.Run("ac", func(t *testing.T) {
+		withProvider(t, nil)
+		initProvider("ac")
+		ac, ok := provider.(*cloud.ProviderAC)
+		require.True(t, ok, "got %T", provider)
+		assert.Equal(t, "/opt/bin/container", ac.Config.BinPath, "ac config must come from viper")
+		assert.NotNil(t, ac.CLI)
 	})
 
 	t.Run("static", func(t *testing.T) {

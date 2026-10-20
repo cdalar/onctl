@@ -56,6 +56,9 @@ var (
 	flagCHRootfsImage string
 	flagCHBinary      string
 	flagCHOS          string
+	// Apple container-specific flag bound to ac.binPath (see init below).
+	// --vcpu/--memory/--username/--image are shared with fc/ch above.
+	flagACBinary string
 	// GCP-specific flag bound to gcp.project (see init below). This replaces
 	// the placeholder in onctl.yaml's gcp.project (the one GCP setting with
 	// no static default; it's account-specific).
@@ -191,6 +194,15 @@ func init() {
 	_ = viper.BindPFlag("ch.memSizeMib", createCmd.Flags().Lookup("memory"))
 	_ = viper.BindPFlag("ch.vm.username", createCmd.Flags().Lookup("username"))
 
+	// Apple containers (ac), bound to the ac.* keys read by
+	// providerac.GetConfig. --image is the OCI image to run (the generic
+	// flag, like boxes); only the CLI path is ac's own.
+	createCmd.Flags().StringVar(&flagACBinary, "ac-binary", "container", "Apple container: path to the container CLI")
+	_ = viper.BindPFlag("ac.binPath", createCmd.Flags().Lookup("ac-binary"))
+	_ = viper.BindPFlag("ac.vcpuCount", createCmd.Flags().Lookup("vcpu"))
+	_ = viper.BindPFlag("ac.memSizeMib", createCmd.Flags().Lookup("memory"))
+	_ = viper.BindPFlag("ac.vm.username", createCmd.Flags().Lookup("username"))
+
 	// Register create command at root level for convenience
 	rootCmd.AddCommand(createCmd)
 	createCmd.SetUsageTemplate(createCmd.UsageTemplate() + `
@@ -227,8 +239,8 @@ var createCmd = &cobra.Command{
 				viper.Set("aws.vm.image", opt.Vm.Image)
 			}
 		}
-		if opt.Vm.Image != "" && cloudProvider != "hetzner" && cloudProvider != "aws" && cloudProvider != "ovh" && cloudProvider != "boxes" {
-			log.Fatalf("--image flag is only supported for the hetzner, aws, ovh and boxes providers (current provider: %s)", cloudProvider)
+		if opt.Vm.Image != "" && cloudProvider != "hetzner" && cloudProvider != "aws" && cloudProvider != "ovh" && cloudProvider != "boxes" && cloudProvider != "ac" {
+			log.Fatalf("--image flag is only supported for the hetzner, aws, ovh, boxes and ac providers (current provider: %s)", cloudProvider)
 		}
 		if cloudProvider == "boxes" {
 			if opt.Domain != "" {
@@ -361,7 +373,7 @@ var createCmd = &cobra.Command{
 			}
 		}
 
-		if cloudProvider != "fc" && cloudProvider != "ch" && cloudProvider != "boxes" {
+		if cloudProvider != "fc" && cloudProvider != "ch" && cloudProvider != "ac" && cloudProvider != "boxes" {
 			s.Suffix = " Waiting for VM to be ready..."
 			s.Restart()
 			remote.WaitForCloudInit(viper.GetString("vm.cloud-init.timeout"))
