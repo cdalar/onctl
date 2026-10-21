@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -78,6 +79,13 @@ copies the project there -- the same absolute path, .git and uncommitted
 changes included, .gitignore'd files left out -- installs Claude Code and
 your Claude configuration, and starts Claude in it.
 
+The box is a hosted one (-p boxes, the default) or a VM of any other
+provider: onctl -p hetzner claude creates claude-<project> on Hetzner
+the way onctl create does (--size and --image are the provider's type
+and image; unset, its onctl.yaml defaults), reaches it over ssh with your
+key, installs tmux, git and Claude Code, and from there on it's the same.
+A VM is paused and resumed with onctl pause/resume, not on its own.
+
 Claude runs in tmux, so it keeps going when you detach (Ctrl-b d) or the
 connection drops; run onctl claude again to come back to it. The box's
 copy of the project is the one Claude works on: later runs don't copy it
@@ -88,6 +96,7 @@ box.
   onctl claude --prompt "fix the flaky auth test"
   onctl claude --detach --prompt "..."   # start it, don't attach
   onctl claude -- --model opus           # arguments for claude itself
+  onctl -p hetzner claude                # the same, on your own Hetzner VM
 
 The first time, log Claude in on the box with /login: it prints a URL to
 open here and a code to paste back. That login stays on the box.
@@ -99,7 +108,9 @@ logged to ~/.onctl/claude/github.log). Detached, it has none. For work
 that must reach GitHub while you're away, --github store keeps a token
 you paste on the box -- make it a fine-grained one for this repository.
 --github off gives it nothing. Your git user.name and user.email are set
-on the box either way.`,
+on the box either way. Forwarding needs the box image's helpers, so on
+another provider's VM the default is off; store works there once gh is
+installed on it.`,
 	RunE: runClaude,
 }
 
@@ -111,15 +122,15 @@ func init() {
 	claudeCmd.PersistentFlags().BoolVar(&claudeOwnBox, "own-box", false, "with --task: give the task a box of its own (claude-<project>-<task>) instead of a worktree")
 	claudeCmd.Flags().StringVar(&claudeAuth, "claude-auth", claudeAuthAuto, "how Claude on the box logs in: auto (the token onctl claude login saved, else /login), token, login or api-key")
 	_ = claudeCmd.RegisterFlagCompletionFunc("claude-auth", cobra.FixedCompletions([]string{claudeAuthAuto, claudeAuthToken, claudeAuthLogin, claudeAuthAPIKey}, cobra.ShellCompDirectiveNoFileComp))
-	claudeCmd.Flags().StringVarP(&claudeSize, "size", "s", claudeDefaultSize, "size of a box created for this")
+	claudeCmd.Flags().StringVarP(&claudeSize, "size", "s", claudeDefaultSize, "size of a box created for this (another provider: its VM type; default its onctl.yaml setting)")
 	_ = claudeCmd.RegisterFlagCompletionFunc("size", completeSizes)
-	claudeCmd.Flags().StringVarP(&claudeImage, "image", "i", claudeDefaultImage, "image of a box created for this")
+	claudeCmd.Flags().StringVarP(&claudeImage, "image", "i", claudeDefaultImage, "image of a box created for this (another provider: its VM image; default its onctl.yaml setting)")
 	// No -p shorthand: in onctl that is the global --provider.
 	claudeCmd.Flags().StringVar(&claudePrompt, "prompt", "", "first message for a newly started Claude")
 	claudeCmd.Flags().BoolVarP(&claudeDetach, "detach", "d", false, "start Claude on the box without attaching to it")
 	claudeCmd.Flags().StringVar(&claudeGitHub, "github", githubForward, "GitHub credentials for the box: forward (lent while attached), store (a token kept on the box) or off")
 	_ = claudeCmd.RegisterFlagCompletionFunc("github", cobra.FixedCompletions([]string{githubForward, githubStore, githubOff}, cobra.ShellCompDirectiveNoFileComp))
-	claudeCmd.Flags().DurationVar(&claudeIdle, "idle-ttl", claudeDefaultIdleTTL, "pause the box after this long unused, 10m to 720h (set on a new box, or on an existing one when given)")
+	claudeCmd.Flags().DurationVar(&claudeIdle, "idle-ttl", claudeDefaultIdleTTL, "pause the box after this long unused, 10m to 720h (set on a new box, or on an existing one when given; boxes only)")
 	rootCmd.AddCommand(claudeCmd)
 }
 
@@ -129,6 +140,25 @@ func runClaude(cmd *cobra.Command, args []string) error {
 	case githubForward, githubStore, githubOff:
 	default:
 		return fmt.Errorf("--github must be %s, %s or %s", githubForward, githubStore, githubOff)
+	}
+	if !onBoxes() {
+		// The box image's credential helper and gh wrapper do the
+		// forwarding; a VM has neither.
+		if claudeGitHub == githubForward {
+			if cmd.Flags().Changed("github") {
+				return fmt.Errorf("--github forward needs the box image's helpers; on %s use --github store or off", cloudProvider)
+			}
+			claudeGitHub = githubOff
+			fmt.Fprintf(os.Stderr, "Claude on %s gets no GitHub credentials (--github store keeps a token there).\n", cloudProvider)
+		}
+		// The flag defaults are box image and size names; a VM takes the
+		// provider's own defaults unless told otherwise.
+		if !cmd.Flags().Changed("size") {
+			claudeSize = ""
+		}
+		if !cmd.Flags().Changed("image") {
+			claudeImage = ""
+		}
 	}
 	if err := resolveTask(); err != nil {
 		return err
@@ -157,6 +187,11 @@ func runClaude(cmd *cobra.Command, args []string) error {
 	defer t.box.close()
 	dir, name, box := t.dir, t.name, t.box
 
+	// First: everything after this needs git on the box, and a VM made
+	// from a plain image has none.
+	if err := box.run(ctx, claudeSetupScript, nil); err != nil {
+		return fmt.Errorf("installing Claude Code on %s: %w", name, err)
+	}
 	if t.needsCopy {
 		if err := copyProject(ctx, box, dir); err != nil {
 			return err
@@ -187,9 +222,6 @@ func runClaude(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
-	if err := box.run(ctx, claudeSetupScript, nil); err != nil {
-		return fmt.Errorf("installing Claude Code on %s: %w", name, err)
-	}
 	if err := box.run(ctx, claudeStateScript([]string{sess.dir}, localClaudeTheme(), apiKey), nil); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: couldn't skip Claude's first-run setup on %s: %v\n", name, err)
 	}
@@ -199,7 +231,7 @@ func runClaude(cmd *cobra.Command, args []string) error {
 	running := box.run(ctx, "tmux has-session -t ="+sess.tmux+" 2>/dev/null", nil) == nil
 	if claudeHandoff != "" {
 		if running {
-			return fmt.Errorf("a Claude session is already running there -- attach with %s and quit it, then hand off again", sess.attachHint(name))
+			return fmt.Errorf("a Claude session is already running there -- attach with %s and quit it, then hand off again", attachHint(sess, name))
 		}
 		if err := copyTranscript(ctx, box, sess.dir, transcript, claudeHandoff); err != nil {
 			return err
@@ -225,10 +257,20 @@ func runClaude(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("starting Claude on %s: %w", name, err)
 			}
 		}
-		fmt.Fprintf(os.Stderr, "Claude is running on %s; attach with: %s\n", name, sess.attachHint(name))
+		fmt.Fprintf(os.Stderr, "Claude is running on %s; attach with: %s\n", name, attachHint(sess, name))
 		return nil
 	}
 	return attachClaude(ctx, box, sess, sess.tmuxCommand(line, false))
+}
+
+// attachHint is the command that comes back to this session, naming the
+// provider when it isn't the default.
+func attachHint(sess taskSession, box string) string {
+	hint := sess.attachHint(box)
+	if onBoxes() {
+		return hint
+	}
+	return "onctl -p " + cloudProvider + " " + strings.TrimPrefix(hint, "onctl ")
 }
 
 // resolveTask checks --task and --own-box, and turns --own-box into the
@@ -308,6 +350,33 @@ func openClaudeBox(ctx context.Context, create, setTTL bool) (*claudeTarget, err
 	if name == "" {
 		name = claudeBoxName(dir)
 	}
+	var box *boxSSH
+	if onBoxes() {
+		box, err = connectClaudeBox(ctx, name, create, setTTL)
+	} else {
+		if setTTL {
+			fmt.Fprintf(os.Stderr, "warning: --idle-ttl is for boxes; %s VMs aren't paused on their own\n", cloudProvider)
+		}
+		box, _, err = connectClaudeVM(ctx, name, create)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := box.run(ctx, "true", nil); err != nil {
+		box.close()
+		return nil, fmt.Errorf("can't ssh into %s: %w", name, err)
+	}
+	needsCopy, err := checkProject(ctx, box, dir)
+	if err != nil {
+		box.close()
+		return nil, err
+	}
+	return &claudeTarget{dir: dir, name: name, box: box, needsCopy: needsCopy}, nil
+}
+
+// connectClaudeBox is openClaudeBox's boxes half: the box resumed or
+// created, with its idle TTL set, and onctl's key authorized on it.
+func connectClaudeBox(ctx context.Context, name string, create, setTTL bool) (*boxSSH, error) {
 	c := newClient()
 	created, err := ensureClaudeBox(ctx, c, name, create)
 	if err != nil {
@@ -325,20 +394,7 @@ func openClaudeBox(ctx context.Context, create, setTTL bool) (*claudeTarget, err
 	if err := authorizeKey(ctx, c, name, key); err != nil {
 		return nil, err
 	}
-	box, err := newBoxSSH(name, key)
-	if err != nil {
-		return nil, err
-	}
-	if err := box.run(ctx, "true", nil); err != nil {
-		box.close()
-		return nil, fmt.Errorf("can't ssh into %s: %w", name, err)
-	}
-	needsCopy, err := checkProject(ctx, box, dir)
-	if err != nil {
-		box.close()
-		return nil, err
-	}
-	return &claudeTarget{dir: dir, name: name, box: box, needsCopy: needsCopy}, nil
+	return newBoxSSH(name, key)
 }
 
 // checkProject reports whether dir still has to be copied to the box,
@@ -383,10 +439,15 @@ func markProject(ctx context.Context, box *boxSSH, dir string) error {
 
 // claudeSetupScript makes sure the box can run Claude in tmux. On the
 // claude-agent image only the Claude Code install does anything, once;
-// other images get tmux from apt.
+// other images (a cloud VM's) get tmux, git and curl from apt -- after
+// cloud-init is done with apt, on a VM that was just created.
 const claudeSetupScript = `set -e
 export PATH="$HOME/.local/bin:$PATH"
-command -v tmux >/dev/null || { echo "Installing tmux..." >&2; apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmux >/dev/null; }
+missing=""; for t in tmux git curl; do command -v $t >/dev/null || missing="$missing $t"; done
+if [ -n "$missing" ]; then
+  ! command -v cloud-init >/dev/null || cloud-init status --wait >/dev/null 2>&1 || true
+  echo "Installing$missing..." >&2; apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $missing >/dev/null
+fi
 command -v claude >/dev/null || { echo "Installing Claude Code..." >&2; ` + claudeInstall + ` >&2; }`
 
 // projectDir is the git repository's top level, or the directory itself
@@ -507,7 +568,11 @@ func authorizeKey(ctx context.Context, c *providerboxes.Client, name, key string
 // handshake.
 type boxSSH struct {
 	name string
-	args []string // everything before the remote command
+	// user, host and port are the ssh destination; host is the box's
+	// name (reached through the proxy) or a VM's address.
+	user, host string
+	port       int
+	args       []string // everything before the remote command
 }
 
 func newBoxSSH(name, key string) (*boxSSH, error) {
@@ -519,7 +584,7 @@ func newBoxSSH(name, key string) (*boxSSH, error) {
 		return nil, errors.New("onctl claude needs ssh on this machine")
 	}
 	control := filepath.Join(filepath.Dir(key), "cm-%C")
-	return &boxSSH{name: name, args: []string{
+	return &boxSSH{name: name, user: "root", host: name, port: 22, args: []string{
 		// None of the user's ssh config applies -- least of all macOS's
 		// SendEnv LC_*, which the box has no locales for.
 		"-F", "/dev/null",
@@ -533,6 +598,46 @@ func newBoxSSH(name, key string) (*boxSSH, error) {
 		"-o", "ControlMaster=auto", "-o", "ControlPath=" + control, "-o", "ControlPersist=60s",
 		"root@" + name,
 	}}, nil
+}
+
+// newVMSSH is ssh to a VM at its own address, as user, with the key
+// onctl created it with: the same options as a box's, less the proxy.
+func newVMSSH(name, user, host string, port int, key string) (*boxSSH, error) {
+	if _, err := exec.LookPath("ssh"); err != nil {
+		return nil, errors.New("onctl claude needs ssh on this machine")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	control := filepath.Join(home, ".onctl", "claude", "cm-%C")
+	if err := os.MkdirAll(filepath.Dir(control), 0o700); err != nil {
+		return nil, err
+	}
+	return &boxSSH{name: name, user: user, host: host, port: port, args: []string{
+		"-F", "/dev/null",
+		"-i", key, "-o", "IdentitiesOnly=yes",
+		// A VM onctl made has host keys nothing here has seen; a resumed
+		// Hetzner VM has new ones at the same address.
+		"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
+		"-o", "ServerAliveInterval=30",
+		"-o", "ControlMaster=auto", "-o", "ControlPath=" + control, "-o", "ControlPersist=60s",
+		"-p", strconv.Itoa(port),
+		user + "@" + host,
+	}}, nil
+}
+
+// remoteURL is dir on the box as a git remote URL. A box's host is
+// <name>.box, which the ssh config the README suggests resolves through
+// the proxy too; a VM's is its address.
+func (b *boxSSH) remoteURL(dir string) string {
+	if b.host == b.name {
+		return boxRemoteURL(b.name, dir)
+	}
+	if b.port == 22 {
+		return b.user + "@" + b.host + ":" + dir
+	}
+	return fmt.Sprintf("ssh://%s@%s:%d%s", b.user, b.host, b.port, dir)
 }
 
 // run runs a command on the box, with stdin from in (nil for none) and

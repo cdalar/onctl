@@ -181,7 +181,7 @@ func boxRemoteURL(name, dir string) string {
 
 // ensureRemote adds the box remote, or points it at this box.
 func (g *claudeGitTarget) ensureRemote(ctx context.Context) error {
-	want := boxRemoteURL(g.name, g.dir)
+	want := g.box.remoteURL(g.dir)
 	out, err := exec.CommandContext(ctx, "git", "-C", g.dir, "remote", "get-url", boxRemote).Output()
 	switch {
 	case err != nil:
