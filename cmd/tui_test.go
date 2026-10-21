@@ -312,6 +312,13 @@ func TestTUIListAndKeys(t *testing.T) {
 	if m.dialog != nil || hasAction(cmd) != nil {
 		t.Errorf("n: dialog=%v", m.dialog)
 	}
+	// So does enter: destroy's own prompt is [y/N], and a VM is not
+	// something to lose to a reflex.
+	m, _ = press(t, m, "ctrl+d")
+	m, cmd = press(t, m, "enter")
+	if m.dialog != nil || hasAction(cmd) != nil {
+		t.Errorf("enter: dialog=%v", m.dialog)
+	}
 	// y sends it.
 	m, _ = press(t, m, "ctrl+d")
 	m, cmd = press(t, m, "y")
@@ -395,6 +402,28 @@ func TestTUIListAndKeys(t *testing.T) {
 	if m.top().view != sizesView || !strings.Contains(m.View(), "Sizes[2]") || !strings.Contains(m.View(), "16 GiB") {
 		t.Errorf(":sizes: view:\n%s", m.View())
 	}
+	// A sorts by ARCH (R is taken by refresh). A tick refreshes the VMs
+	// only -- the catalog was listed when the view opened and is a
+	// handful of API calls on some providers -- and R lists it again.
+	m, _ = press(t, m, "A")
+	if m.top().sortCol != 4 {
+		t.Errorf("A: sortCol=%d, want ARCH (4)", m.top().sortCol)
+	}
+	next, _ = m.Update(tuiTickMsg(time.Now()))
+	m = next.(tuiModel)
+	if m.loading["sizes"] || !m.loading["vms"] {
+		t.Errorf("tick: loading=%v, want vms only", m.loading)
+	}
+	next, _ = m.Update(tuiListMsg{resource: "vms", vms: m.vms})
+	m = next.(tuiModel)
+	m, _ = press(t, m, "R")
+	if !m.loading["sizes"] || !m.loading["vms"] {
+		t.Errorf("R: loading=%v, want sizes and vms", m.loading)
+	}
+	next, _ = m.Update(tuiListMsg{resource: "vms", vms: m.vms})
+	m = next.(tuiModel)
+	next, _ = m.Update(tuiListMsg{resource: "sizes", sizes: m.sizes})
+	m = next.(tuiModel)
 	m, _ = press(t, m, ":")
 	m = typeIn(t, m, "vms web")
 	m, _ = press(t, m, "enter")
@@ -425,10 +454,22 @@ func TestTUIListAndKeys(t *testing.T) {
 func TestTUIListError(t *testing.T) {
 	tuiFlashFor = time.Millisecond
 	m := newTUI(nil)
-	next, _ := m.Update(tuiListMsg{resource: "images", err: errors.New("no api token")})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = next.(tuiModel)
-	if !m.flashErr || m.flash != "listing images: no api token" || m.loaded["images"] {
-		t.Errorf("flash=%q loaded=%v", m.flash, m.loaded)
+	m.pages = []page{{kind: pageTable, view: imagesView, sortCol: -1}}
+	next, _ = m.Update(tuiListMsg{resource: "images", err: errors.New("no api token")})
+	m = next.(tuiModel)
+	// The flash says so now, and the table says so after the flash is
+	// gone: a failed listing is not "Loading…" for ever.
+	if !m.flashErr || m.flash != "listing images: no api token" || !m.loaded["images"] ||
+		!strings.Contains(m.View(), "Listing images failed: no api token") {
+		t.Errorf("flash=%q loaded=%v view:\n%s", m.flash, m.loaded, m.View())
+	}
+	// A listing that works clears it.
+	next, _ = m.Update(tuiListMsg{resource: "images", images: []cloud.CloudImage{{Name: "debian-12"}}})
+	m = next.(tuiModel)
+	if m.listErr["images"] != nil || strings.Contains(m.View(), "failed") || !strings.Contains(m.View(), "debian-12") {
+		t.Errorf("after a good listing: listErr=%v view:\n%s", m.listErr, m.View())
 	}
 	next, _ = m.Update(tuiListMsg{resource: "vms", vms: []cloud.Vm{{Name: "web", Status: "running"}}, err: errors.New("snapshots: 403")})
 	m = next.(tuiModel)
@@ -447,6 +488,14 @@ func TestTUIChildDone(t *testing.T) {
 	m = next.(tuiModel)
 	if !m.flashErr || m.flash != "ssh web: vm web not found" {
 		t.Errorf("flash = %q", m.flash)
+	}
+	// A non-zero status with nothing on stderr is the remote shell's
+	// (`onctl ssh` exits with it), not a connection that failed.
+	m.flash = ""
+	next, _ = m.Update(tuiChildDoneMsg{verb: "ssh", name: "web", err: errors.New("exit status 1")})
+	m = next.(tuiModel)
+	if m.flash != "" {
+		t.Errorf("flash = %q, want none", m.flash)
 	}
 	next, _ = m.Update(tuiChildDoneMsg{verb: "create", name: "", err: errors.New("exit status 1")})
 	m = next.(tuiModel)

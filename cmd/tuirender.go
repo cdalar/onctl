@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -209,6 +210,7 @@ func (m tuiModel) infoBlock() []string {
 	for name, verb := range m.pending {
 		busy = append(busy, presentTense(verb)+" "+name)
 	}
+	sort.Strings(busy) // a map's order would shuffle them every spinner frame
 	status := refreshed
 	if len(busy) > 0 {
 		status = m.spin.View() + " " + strings.Join(busy, ", ")
@@ -329,7 +331,9 @@ func (m tuiModel) table(w, inner int) (string, []string) {
 	title += k9s.count.Render(fmt.Sprintf("[%d]", len(rows)))
 	if len(rows) == 0 {
 		msg := t.view.empty
-		if !m.loaded[t.view.resource] {
+		if err := m.listErr[t.view.resource]; err != nil {
+			msg = fmt.Sprintf("Listing %s failed: %v. R retries.", t.view.resource, err)
+		} else if !m.loaded[t.view.resource] {
 			msg = "Loading…"
 		} else if m.filter.Value() != "" {
 			msg = "No rows match the filter."

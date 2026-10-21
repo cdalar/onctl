@@ -125,7 +125,8 @@ func (m tuiModel) handleFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m tuiModel) handleDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	d := m.dialog
 	m.dialog = nil
-	if s := msg.String(); s == "y" || s == "Y" || msg.Type == tea.KeyEnter {
+	// y alone says yes, as in destroy's own [y/N]: enter is no.
+	if s := msg.String(); s == "y" || s == "Y" {
 		return d.yes(m)
 	}
 	return m, nil
@@ -185,7 +186,7 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Quit
 	case "R", "ctrl+r", "f5":
-		return m, m.refresh()
+		return m, m.refreshAll()
 	case "0", "1", "2":
 		if t.view == vmsView {
 			m.stateFilter = stateFilter(key[0] - '0')
@@ -318,7 +319,7 @@ func (m *tuiModel) pushHelp() {
 		{"/text", "filter the rows; esc clears"},
 		{"j/k ↑/↓", "move; ctrl-f/ctrl-b page; g/G top/bottom"},
 		{"shift+letter", "sort by that column (again: the other way)"},
-		{"esc", "back to the previous page"}, {"R", "refresh now (also every " + tuiRefreshEvery.String() + ")"},
+		{"esc", "back to the previous page"}, {"R", "refresh now (the VMs also every " + tuiRefreshEvery.String() + ")"},
 	}
 	for _, g := range general {
 		lines = append(lines, fmt.Sprintf("  %-14s %s", g[0], g[1]))

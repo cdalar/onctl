@@ -143,7 +143,7 @@ var sizesView = &tableView{
 	aliases:  []string{"size", "sz", "types", "type"},
 	title:    "Sizes",
 	resource: "sizes",
-	columns:  []column{{"NAME", 'N'}, {"VCPU", 'V'}, {"MEMORY", 'M'}, {"DISK", 'D'}, {"ARCH", 'R'}, {"PRICE/HOUR", 'H'}, {"PRICE/MONTH", 'P'}, {"DEFAULT", 0}},
+	columns:  []column{{"NAME", 'N'}, {"VCPU", 'V'}, {"MEMORY", 'M'}, {"DISK", 'D'}, {"ARCH", 'A'}, {"PRICE/HOUR", 'H'}, {"PRICE/MONTH", 'P'}, {"DEFAULT", 0}},
 	stateCol: -1,
 	empty:    "No sizes available.",
 	hotkeys:  []hotkey{{"c", "create VM of this size"}},

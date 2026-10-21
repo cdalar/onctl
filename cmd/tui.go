@@ -155,8 +155,9 @@ type tuiModel struct {
 	vms     []cloud.Vm // every VM, running then paused, as sortVMs orders them
 	images  []cloud.CloudImage
 	sizes   []cloud.CloudSize
-	loaded  map[string]bool // resources listed at least once
-	loading map[string]bool // listings in flight
+	loaded  map[string]bool  // resources listed at least once
+	loading map[string]bool  // listings in flight
+	listErr map[string]error // why a resource's last listing failed
 
 	pages       []page // the navigation stack; the last is shown
 	stateFilter stateFilter
@@ -193,6 +194,7 @@ func newTUI(p cloud.CloudProviderInterface) tuiModel {
 		p:           p,
 		loaded:      map[string]bool{},
 		loading:     map[string]bool{},
+		listErr:     map[string]error{},
 		pages:       []page{{kind: pageTable, view: vmsView, sortCol: -1}},
 		stateFilter: showAllVMs,
 		filter:      f,
@@ -264,9 +266,16 @@ func tuiListSizes(p cloud.CloudProviderInterface) ([]cloud.CloudSize, error) {
 	return lister.ListSizes()
 }
 
-// refresh lists the VMs (the header and most pages need them) and the
-// top page's resource when it's another.
+// refresh lists the VMs (the header and most pages need them). The
+// catalogs (images, sizes) are listed when their view opens and on R,
+// not on every tick: they hardly change, and some providers list them
+// through several API calls.
 func (m *tuiModel) refresh() tea.Cmd {
+	return tea.Batch(m.list("vms"), m.spinIfBusy())
+}
+
+// refreshAll is R: the VMs and the top page's catalog too.
+func (m *tuiModel) refreshAll() tea.Cmd {
 	cmds := []tea.Cmd{m.list("vms")}
 	if t := m.top(); t.kind == pageTable && t.view.resource != "vms" {
 		cmds = append(cmds, m.list(t.view.resource))
@@ -337,16 +346,20 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tuiListMsg:
 		delete(m.loading, msg.resource)
+		// Listed, even when it failed: the table then says why it is
+		// empty (the flash goes away) instead of "Loading…" for ever.
+		m.loaded[msg.resource] = true
+		delete(m.listErr, msg.resource)
 		var cmd tea.Cmd
 		if msg.err != nil {
 			cmd = m.fail("listing %s: %v", msg.resource, msg.err)
+			m.listErr[msg.resource] = msg.err
 			// One of List/ListPaused failing still leaves the other's
 			// VMs worth showing; the catalogs are all or nothing.
 			if msg.resource != "vms" || len(msg.vms) == 0 {
 				return m, cmd
 			}
 		}
-		m.loaded[msg.resource] = true
 		switch msg.resource {
 		case "vms":
 			m.vms = msg.vms
@@ -388,6 +401,12 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// what it printed), not exec's "exit status 1".
 			reason := lastLine(msg.stderr)
 			reason = strings.TrimPrefix(reason, "Error: ")
+			if reason == "" && msg.verb == "ssh" {
+				// `onctl ssh` exits with the remote shell's status; a
+				// non-zero one with nothing said is the shell's, not
+				// a connection that failed.
+				return m, m.refresh()
+			}
 			if reason == "" {
 				reason = msg.err.Error()
 			}
