@@ -46,9 +46,6 @@ func taskDir(project, task string) string { return project + "@" + task }
 // attachHint is the command that comes back to this session.
 func (s taskSession) attachHint(box string) string {
 	hint := "onctl claude --box " + box
-	if cloudProvider != "" && cloudProvider != "boxes" {
-		hint = "onctl -p " + cloudProvider + " claude --box " + box
-	}
 	if s.task != "" {
 		hint += " --task " + s.task
 	}

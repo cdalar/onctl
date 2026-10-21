@@ -231,7 +231,7 @@ func runClaude(cmd *cobra.Command, args []string) error {
 	running := box.run(ctx, "tmux has-session -t ="+sess.tmux+" 2>/dev/null", nil) == nil
 	if claudeHandoff != "" {
 		if running {
-			return fmt.Errorf("a Claude session is already running there -- attach with %s and quit it, then hand off again", sess.attachHint(name))
+			return fmt.Errorf("a Claude session is already running there -- attach with %s and quit it, then hand off again", attachHint(sess, name))
 		}
 		if err := copyTranscript(ctx, box, sess.dir, transcript, claudeHandoff); err != nil {
 			return err
@@ -257,10 +257,20 @@ func runClaude(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("starting Claude on %s: %w", name, err)
 			}
 		}
-		fmt.Fprintf(os.Stderr, "Claude is running on %s; attach with: %s\n", name, sess.attachHint(name))
+		fmt.Fprintf(os.Stderr, "Claude is running on %s; attach with: %s\n", name, attachHint(sess, name))
 		return nil
 	}
 	return attachClaude(ctx, box, sess, sess.tmuxCommand(line, false))
+}
+
+// attachHint is the command that comes back to this session, naming the
+// provider when it isn't the default.
+func attachHint(sess taskSession, box string) string {
+	hint := sess.attachHint(box)
+	if onBoxes() {
+		return hint
+	}
+	return "onctl -p " + cloudProvider + " " + strings.TrimPrefix(hint, "onctl ")
 }
 
 // resolveTask checks --task and --own-box, and turns --own-box into the
