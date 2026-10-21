@@ -11,6 +11,10 @@ import (
 )
 
 func TestTaskSession(t *testing.T) {
+	// The hint names the provider only off boxes; other tests leave
+	// cloudProvider set, so pin the default here.
+	defer func(p string) { cloudProvider = p }(cloudProvider)
+	cloudProvider = ""
 	main := newTaskSession("/w/app", "")
 	if main.dir != "/w/app" || main.tmux != "claude" || main.ghSocket != boxGitHubSocket {
 		t.Errorf("main: %+v", main)
