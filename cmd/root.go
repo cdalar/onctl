@@ -56,12 +56,9 @@ var (
 			if cmd.Parent().Name() == "completion" {
 				return nil
 			}
-			// onctl claude runs on boxes: it needs the claude-agent image's
-			// tools and the boxes tunnel (docs/plans/boxes-provider.md).
-			if isClaudeCommand(cmd) {
-				if providerFlag != "" && providerFlag != "boxes" {
-					return fmt.Errorf("onctl claude runs on boxes only (for now), not %s", providerFlag)
-				}
+			// onctl claude defaults to boxes, which need nothing set up;
+			// -p runs it on a VM of another provider (cmd/claudevm.go).
+			if isClaudeCommand(cmd) && providerFlag == "" {
 				providerFlag = "boxes"
 			}
 			if providerFlag != "" {

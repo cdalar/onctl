@@ -39,7 +39,7 @@ func claudeList(ctx context.Context) error {
 	if main == "" {
 		main = claudeBoxName(dir)
 	}
-	vms, err := newClient().List(ctx)
+	vms, err := listClaudeVMs(ctx)
 	if err != nil {
 		return err
 	}
@@ -47,21 +47,21 @@ func claudeList(ctx context.Context) error {
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(tw, "TASK\tBRANCH\tCLAUDE\tACTIVE\tBOX")
 	// The project's box first, then the --own-box tasks' boxes.
-	sort.SliceStable(vms, func(i, j int) bool { return vms[i].Name == main && vms[j].Name != main })
+	sort.SliceStable(vms, func(i, j int) bool { return vms[i].name == main && vms[j].name != main })
 	rows := 0
 	for _, vm := range vms {
 		switch {
-		case vm.Name == main && vm.State == "running":
+		case vm.name == main && vm.state == "running":
 			n, err := listBoxSessions(ctx, tw, dir)
 			if err != nil {
 				return err
 			}
 			rows += n
-		case vm.Name == main:
-			_, _ = fmt.Fprintf(tw, "(all)\t-\t-\t-\t%s (%s)\n", vm.Name, vm.State)
+		case vm.name == main:
+			_, _ = fmt.Fprintf(tw, "(all)\t-\t-\t-\t%s (%s)\n", vm.name, vm.state)
 			rows++
-		case strings.HasPrefix(vm.Name, main+"-"):
-			_, _ = fmt.Fprintf(tw, "%s\t-\t-\t-\t%s (own box, %s)\n", strings.TrimPrefix(vm.Name, main+"-"), vm.Name, vm.State)
+		case strings.HasPrefix(vm.name, main+"-"):
+			_, _ = fmt.Fprintf(tw, "%s\t-\t-\t-\t%s (own box, %s)\n", strings.TrimPrefix(vm.name, main+"-"), vm.name, vm.state)
 			rows++
 		}
 	}
