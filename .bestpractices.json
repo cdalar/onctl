@@ -79,7 +79,7 @@
   "crypto_random_status": "Met",
   "crypto_random_justification": "onctl does not generate cryptographic keys or nonces itself; those are produced inside Go's crypto libraries using crypto/rand. math/rand is only used for a non-secret VM name suffix.",
   "delivery_mitm_status": "Met",
-  "delivery_mitm_justification": "Releases are distributed over HTTPS (GitHub Releases, Homebrew tap, https://onctl.sh/get.sh), and release checksums are GPG-signed.",
+  "delivery_mitm_justification": "Releases are distributed over HTTPS (GitHub Releases, https://onctl.sh/get.sh), and release checksums are GPG-signed.",
   "delivery_unsigned_status": "Met",
   "delivery_unsigned_justification": "Checksums are published over HTTPS together with a GPG signature (checksums.txt.sig); nothing is retrieved over plain HTTP.",
   "no_leaked_credentials_status": "Met",

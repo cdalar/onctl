@@ -85,27 +85,7 @@ Imported hosts only support `ssh`/`ls`/`destroy` — `destroy` just forgets the 
 
 ## Installation
 
-### MacOS
-
-```zsh
-brew install cdalar/tap/onctl
-```
-
-#### Dev build (latest `main`)
-
-To install or update `onctl-dev`, a build of the latest `main` branch (installed alongside the regular `onctl`):
-
-```zsh
-./scripts/install-dev.sh
-```
-
-Or directly via Homebrew:
-
-```zsh
-brew install --HEAD --fetch-HEAD cdalar/tap/onctl-dev
-```
-
-### Linux
+### macOS and Linux
 
 ```bash
 curl -sLS https://onctl.sh/get.sh | bash
@@ -114,7 +94,7 @@ sudo install onctl /usr/local/bin/
 
 #### Edge build (latest `main`, Linux and macOS)
 
-To install or update to the `edge` build, an unsigned binary rebuilt from the tip of `main` on every push (no Windows build):
+To install or update to the `edge` build, a binary rebuilt from the tip of `main` on every push (no Windows build):
 
 ```bash
 curl -sLS https://onctl.sh/get-edge.sh | bash
