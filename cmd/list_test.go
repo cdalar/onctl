@@ -73,3 +73,17 @@ func TestListCmd_PausedRowRenders(t *testing.T) {
 	tmpl := "CLOUD\tID\tNAME\tLOCATION\tTYPE\tPUBLIC IP\tPRIVATE IP\tSTATE\tAGE\n{{range .List}}{{.Provider}}\t{{.ID}}\t{{.Name}}\t{{.Location}}\t{{.Type}}\t{{.IP}}\t{{.PrivateIP}}\t{{.Status}}\t{{durationFromCreatedAt .CreatedAt}}\n{{end}}"
 	assert.NotPanics(t, func() { TabWriter(paused, tmpl) })
 }
+
+// TestListVMs_SnapshotHiddenWhileServerExists: mid pause/resume Hetzner has
+// both the server and its snapshot, so List and ListPaused both return the
+// name; the server is the current record and must be the only row.
+func TestListVMs_SnapshotHiddenWhileServerExists(t *testing.T) {
+	p := &tuiFakeProvider{
+		vms:    []cloud.Vm{{Name: "api", Status: "initializing"}, {Name: "db", Status: "stopped"}},
+		paused: []cloud.Vm{{Name: "api", Status: "paused"}, {Name: "web", Status: "paused"}},
+	}
+	running, paused, err := listVMs(p)
+	assert.NoError(t, err)
+	assert.Equal(t, []cloud.Vm{{Name: "api", Status: "initializing"}}, running.List)
+	assert.Equal(t, []cloud.Vm{{Name: "db", Status: "stopped"}, {Name: "web", Status: "paused"}}, paused.List)
+}
