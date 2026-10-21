@@ -88,17 +88,17 @@ Imported hosts only support `ssh`/`ls`/`destroy` — `destroy` just forgets the 
 ### macOS and Linux
 
 ```bash
-curl -sLS https://onctl.sh/get.sh | bash
-sudo install onctl /usr/local/bin/
+curl -fsSL https://onctl.sh/get.sh | bash
 ```
+
+The installer downloads the release for your OS and architecture, verifies it against the release checksums, installs `onctl` to `~/.local/bin` (override with `ONCTL_INSTALL_DIR`), and adds that directory to your PATH in `~/.bashrc`, `~/.zshrc` or fish's config if it isn't there already. No sudo. Open a new terminal afterwards. To install a specific version, set `ONCTL_VERSION=v0.1.34`. Windows users can grab `onctl-windows-amd64.zip` from the [releases page](https://github.com/cdalar/onctl/releases).
 
 #### Edge build (latest `main`, Linux and macOS)
 
 To install or update to the `edge` build, a binary rebuilt from the tip of `main` on every push (no Windows build):
 
 ```bash
-curl -sLS https://onctl.sh/get-edge.sh | bash
-sudo install onctl /usr/local/bin/
+curl -fsSL https://onctl.sh/get-edge.sh | bash
 ```
 
 #### Tab completion
@@ -114,7 +114,7 @@ or `~/.zshrc` that loads it. To skip this, run the installer with
 `ONCTL_NO_COMPLETION=1`:
 
 ```bash
-curl -sLS https://onctl.sh/get.sh | ONCTL_NO_COMPLETION=1 bash
+curl -fsSL https://onctl.sh/get.sh | ONCTL_NO_COMPLETION=1 bash
 ```
 
 To set it up by hand instead:
