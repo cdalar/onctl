@@ -13,8 +13,8 @@ on:
 jobs:
   run:
     name: Lint
-    runs-on: onctl-2
-    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: true
 

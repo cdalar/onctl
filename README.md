@@ -70,6 +70,11 @@ Welcome to Ubuntu 22.04.3 LTS (GNU/Linux 5.15.0-89-generic x86_64)
 root@onctl-test:~# 
 ```
 
+Or browse and manage your VMs in a k9s-style terminal UI: `s` opens a shell, `c` creates, `p`/`r` pause and resume, `ctrl-d` destroys, `:images` and `:sizes` show what the provider offers, `?` lists every key.
+```
+❯ onctl tui
+```
+
 ## Import an existing server
 
 Already have a server onctl didn't create — a Hetzner auction/dedicated box (these live on Hetzner's Robot API, a different product from Hetzner Cloud, so the `hetzner` provider can never see them), or any other reachable host? Register it so `ssh`/`ls` work against it too:

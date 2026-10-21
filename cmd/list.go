@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -35,31 +36,18 @@ var listCmd = &cobra.Command{
 			serverList cloud.VmList
 			err        error
 		)
-		serverList, err = provider.List()
-		if err != nil {
-			log.Println(err)
-		}
-		log.Println("[DEBUG] VM List: ", serverList)
-
 		var pausedList cloud.VmList
-		if output != "puppet" && output != "ansible" {
-			pausedList, err = provider.ListPaused()
+		if output == "puppet" || output == "ansible" {
+			serverList, err = provider.List()
 			if err != nil {
 				log.Println(err)
 			}
-			log.Println("[DEBUG] Paused List: ", pausedList)
-
-			// Partition any stopped VMs out of serverList into pausedList so all
-			// providers show the split running/paused view, not just Hetzner.
-			var running cloud.VmList
-			for _, vm := range serverList.List {
-				if isPausedStatus(vm.Status) {
-					pausedList.List = append(pausedList.List, vm)
-				} else {
-					running.List = append(running.List, vm)
-				}
+			log.Println("[DEBUG] VM List: ", serverList)
+		} else {
+			serverList, pausedList, err = listVMs(provider)
+			if err != nil {
+				log.Println(err)
 			}
-			serverList = running
 		}
 
 		switch output {
@@ -133,6 +121,26 @@ var listCmd = &cobra.Command{
 		}
 
 	},
+}
+
+// listVMs is what `onctl ls` and `onctl tui` show: the provider's VMs split
+// into running and paused -- ListPaused's, plus any stopped VMs List
+// returned, so all providers show the split, not just Hetzner. A failed
+// call is reported through err; what the other call returned is still
+// handed back.
+func listVMs(p cloud.CloudProviderInterface) (running, paused cloud.VmList, err error) {
+	all, listErr := p.List()
+	log.Println("[DEBUG] VM List: ", all)
+	paused, pausedErr := p.ListPaused()
+	log.Println("[DEBUG] Paused List: ", paused)
+	for _, vm := range all.List {
+		if isPausedStatus(vm.Status) {
+			paused.List = append(paused.List, vm)
+		} else {
+			running.List = append(running.List, vm)
+		}
+	}
+	return running, paused, errors.Join(listErr, pausedErr)
 }
 
 // isPausedStatus reports whether a VM status means stopped/paused rather than
