@@ -14,7 +14,7 @@ permissions:
 jobs:
   test-deploy:
     name: Test deployment
-    runs-on: onctl-2
+    runs-on: ubuntu-latest
     defaults:
         run:
             shell: bash
