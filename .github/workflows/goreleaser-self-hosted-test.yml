@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   goreleaser:
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: onctl-2
     permissions:
       contents: write
       packages: write
@@ -42,6 +42,8 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --timeout 120m --clean --skip=publish
+          # --parallelism=1: onctl-2 can't build all targets at once without
+          # OOM-killing the compiler (see edge.yml); one target at a time.
+          args: release --timeout 120m --clean --skip=publish --parallelism=1
         env:
           GITHUB_TOKEN: ${{ secrets.GORELEASER_GH_TOKEN }}

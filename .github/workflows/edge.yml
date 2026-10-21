@@ -25,8 +25,7 @@ name: edge
 # (github.com/cdalar/onctl/releases/tag/edge) instead of a growing pile
 # of timestamped ones.
 #
-# Runs on a plain GH-hosted ubuntu-latest runner, not the self-hosted
-# macOS/ARM64 one goreleaser.yml uses.
+# Runs on the self-hosted onctl-2 runner, like goreleaser.yml.
 
 on:
   push:
