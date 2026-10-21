@@ -33,13 +33,7 @@ initialize project. this will create a `.onctl` directory. check configuration f
 onctl environment initialized
 ```
 
-### Mac OS
-
-```zsh
-brew install cdalar/tap/onctl
-```
-
-### Linux
+### macOS and Linux
 
 ```bash
 # install the latest release
@@ -49,7 +43,7 @@ sudo install onctl /usr/local/bin/
 
 #### Edge build (latest `main`, Linux and macOS)
 
-To install or update to the `edge` build, an unsigned binary rebuilt from the tip of `main` on every push (no Windows build):
+To install or update to the `edge` build, a binary rebuilt from the tip of `main` on every push (no Windows build):
 
 ```bash
 # install the latest main (edge build)

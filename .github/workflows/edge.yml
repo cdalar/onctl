@@ -3,7 +3,7 @@ name: edge
 # Publishes an unsigned "edge" build of onctl from the tip of main on
 # every push -- a Linux binary carrying whatever just landed (e.g.
 # #1074's per-VM guest hostname fix), for hosts like aimax to pick up
-# without waiting for a tagged, GPG-signed, Apple-notarized release
+# without waiting for a tagged, GPG-signed release
 # (goreleaser.yml's job, which this doesn't touch or replace). Named
 # "edge" (Alpine Linux's term for its own continuously-updated rolling
 # branch, and Docker's :edge tag convention) rather than "nightly" --
@@ -17,8 +17,8 @@ name: edge
 # goreleaser-pro) + commented-out GORELEASER_KEY confirm this repo is on
 # the free tier. So this uses the OSS `--snapshot` flag instead (builds
 # unversioned artifacts, skips all publishing/validation) against a
-# dedicated .goreleaser.edge.yml (includes Linux and macOS, no quill signing,
-# no homebrew tap publish, none of which apply here),
+# dedicated .goreleaser.edge.yml (includes Linux and macOS, no GPG
+# signing, which doesn't apply here),
 # then this workflow publishes the result itself: deletes and recreates a
 # single rolling `edge` prerelease/tag on every run, so there's always
 # exactly one, always-current release at a fixed URL
@@ -26,9 +26,7 @@ name: edge
 # of timestamped ones.
 #
 # Runs on a plain GH-hosted ubuntu-latest runner, not the self-hosted
-# macOS/ARM64 one goreleaser.yml uses -- that one exists specifically for
-# the macOS build's sign-and-notarize step, which this workflow never
-# builds at all.
+# macOS/ARM64 one goreleaser.yml uses.
 
 on:
   push:
