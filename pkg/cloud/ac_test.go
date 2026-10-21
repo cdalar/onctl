@@ -443,3 +443,19 @@ func TestAC_Bootstrap(t *testing.T) {
 	assert.Contains(t, acBootstrap, "dnf install -y -q openssh-server sudo")
 	assert.Contains(t, acBootstrap, "|| ! command -v sudo", "an image that ships sshd but not sudo must still get sudo")
 }
+
+// TestAC_ParseContainers_StatusObject: container CLI 1.6 moved the state
+// and the networks under a "status" object; onctl must read either schema.
+func TestAC_ParseContainers_StatusObject(t *testing.T) {
+	list, err := parseACContainers([]byte(`[
+	  {"configuration":{"id":"a","labels":{"onctl.managed":"true"},"resources":{"cpus":4,"memoryInBytes":1073741824},"image":{"reference":"img:1"}},"status":{"networks":[{"hostname":"a","ipv4Address":"192.168.64.3/24","network":"default"}],"startedDate":"2026-10-21T13:13:32Z","state":"running"}},
+	  {"configuration":{"id":"b","labels":{},"resources":{},"image":{}},"status":{"networks":[],"state":"stopped"}}
+	]`))
+	assert.NoError(t, err)
+	if assert.Len(t, list, 2) {
+		assert.Equal(t, "running", list[0].Status)
+		assert.Equal(t, "192.168.64.3", list[0].ip())
+		assert.Equal(t, "stopped", list[1].Status)
+		assert.Equal(t, "", list[1].ip())
+	}
+}

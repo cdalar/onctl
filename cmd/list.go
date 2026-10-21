@@ -131,13 +131,23 @@ var listCmd = &cobra.Command{
 func listVMs(p cloud.CloudProviderInterface) (running, paused cloud.VmList, err error) {
 	all, listErr := p.List()
 	log.Println("[DEBUG] VM List: ", all)
-	paused, pausedErr := p.ListPaused()
-	log.Println("[DEBUG] Paused List: ", paused)
+	snapshots, pausedErr := p.ListPaused()
+	log.Println("[DEBUG] Paused List: ", snapshots)
+	live := map[string]bool{}
 	for _, vm := range all.List {
+		live[vm.Name] = true
 		if isPausedStatus(vm.Status) {
 			paused.List = append(paused.List, vm)
 		} else {
 			running.List = append(running.List, vm)
+		}
+	}
+	// Mid pause/resume the server and its snapshot coexist (Hetzner
+	// snapshots before deleting, and creates before deleting the
+	// snapshot); the server is the current record, so skip its snapshot.
+	for _, vm := range snapshots.List {
+		if !live[vm.Name] {
+			paused.List = append(paused.List, vm)
 		}
 	}
 	return running, paused, errors.Join(listErr, pausedErr)

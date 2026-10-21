@@ -131,24 +131,62 @@ const (
 // acContainer is the part of `container ls/inspect --format json` output
 // onctl reads.
 type acContainer struct {
-	Status        string `json:"status"`
-	Configuration struct {
-		ID        string            `json:"id"`
-		Labels    map[string]string `json:"labels"`
-		Resources struct {
-			CPUs          int64 `json:"cpus"`
-			MemoryInBytes int64 `json:"memoryInBytes"`
-		} `json:"resources"`
-		Image struct {
-			Reference string `json:"reference"`
-		} `json:"image"`
-	} `json:"configuration"`
-	Networks []struct {
-		// Address is the container's address in CIDR notation. The CLI
-		// has called it both names across releases.
-		Address     string `json:"address"`
-		IPv4Address string `json:"ipv4Address"`
-	} `json:"networks"`
+	Status        string
+	Configuration acConfiguration
+	Networks      []acNetwork
+}
+
+type acConfiguration struct {
+	ID        string            `json:"id"`
+	Labels    map[string]string `json:"labels"`
+	Resources struct {
+		CPUs          int64 `json:"cpus"`
+		MemoryInBytes int64 `json:"memoryInBytes"`
+	} `json:"resources"`
+	Image struct {
+		Reference string `json:"reference"`
+	} `json:"image"`
+}
+
+type acNetwork struct {
+	// Address is the container's address in CIDR notation. The CLI
+	// has called it both names across releases.
+	Address     string `json:"address"`
+	IPv4Address string `json:"ipv4Address"`
+}
+
+// UnmarshalJSON accepts both CLI schemas: up to 1.5 "status" is a string
+// and "networks" a top-level list; from 1.6 "status" is an object holding
+// "state" and the "networks" list.
+func (c *acContainer) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Status        json.RawMessage `json:"status"`
+		Configuration acConfiguration `json:"configuration"`
+		Networks      []acNetwork     `json:"networks"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	c.Configuration = raw.Configuration
+	c.Networks = raw.Networks
+	if len(raw.Status) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(raw.Status, &c.Status); err == nil {
+		return nil
+	}
+	var status struct {
+		State    string      `json:"state"`
+		Networks []acNetwork `json:"networks"`
+	}
+	if err := json.Unmarshal(raw.Status, &status); err != nil {
+		return fmt.Errorf("status: %w", err)
+	}
+	c.Status = status.State
+	if len(c.Networks) == 0 {
+		c.Networks = status.Networks
+	}
+	return nil
 }
 
 // ip returns the container's IPv4 address, or "" while it has none (stopped,
