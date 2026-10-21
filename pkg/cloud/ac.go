@@ -51,21 +51,28 @@ const (
 // acBootstrap is the container's init process: it puts an sshd in front of
 // whatever image the sandbox was made from, so `onctl ssh` and the apply/
 // upload steps work the same as on every other provider. An image without
-// sshd gets one installed on first boot (apk, apt-get or dnf); an image that
-// ships one boots in a moment. The ssh user gets the public key from the
-// environment, and is created if the image doesn't have it. The container's
-// filesystem survives stop/start, so a later Resume re-runs this on an
+// sshd or sudo gets them installed on first boot (apk, apt-get or dnf); an
+// image that ships both boots in a moment. sudo is needed because the
+// apply step (tools.applyCommand) runs every script through `sudo -E`, as
+// the shipped action scripts expect; stock OCI images don't have it. On
+// alpine the same step also needs bash and GNU tail (`--pid`), which
+// busybox lacks. The container's own hostname goes into /etc/hosts, or
+// every sudo call warns "unable to resolve host". The ssh user gets the
+// public key from the environment,
+// and is created if the image doesn't have it. The container's filesystem
+// survives stop/start, so a later Resume re-runs this on an
 // already-provisioned image and just starts sshd again.
 const acBootstrap = `set -e
 user="${ONCTL_SSH_USER:-root}"
-if ! command -v sshd >/dev/null 2>&1; then
-  if command -v apk >/dev/null 2>&1; then apk add --no-cache openssh >/dev/null
-  elif command -v apt-get >/dev/null 2>&1; then export DEBIAN_FRONTEND=noninteractive; apt-get update -qq >/dev/null && apt-get install -y -qq openssh-server >/dev/null
-  elif command -v dnf >/dev/null 2>&1; then dnf install -y -q openssh-server >/dev/null
-  else echo "onctl: image has no sshd and no apk/apt-get/dnf to install one" >&2; exit 1
+if ! command -v sshd >/dev/null 2>&1 || ! command -v sudo >/dev/null 2>&1; then
+  if command -v apk >/dev/null 2>&1; then apk add --no-cache openssh sudo bash coreutils >/dev/null
+  elif command -v apt-get >/dev/null 2>&1; then export DEBIAN_FRONTEND=noninteractive; apt-get update -qq >/dev/null && apt-get install -y -qq openssh-server sudo >/dev/null
+  elif command -v dnf >/dev/null 2>&1; then dnf install -y -q openssh-server sudo >/dev/null
+  else echo "onctl: image has no sshd/sudo and no apk/apt-get/dnf to install them" >&2; exit 1
   fi
 fi
 ssh-keygen -A >/dev/null 2>&1 || true
+h=$(hostname 2>/dev/null) && [ -n "$h" ] && ! grep -q " $h$" /etc/hosts 2>/dev/null && echo "127.0.1.1 $h" >> /etc/hosts || true
 mkdir -p /run/sshd
 if [ "$user" = root ]; then
   home=/root
@@ -242,9 +249,11 @@ func (p ProviderAC) waitForIP(name string) (acContainer, error) {
 			return acContainer{}, fmt.Errorf("container %q disappeared while starting", name)
 		}
 		if c.Status == acStatusStopped {
-			// The init process exited (acBootstrap failed, most likely:
-			// its output is in the container's logs), or someone stopped it.
-			return acContainer{}, fmt.Errorf("container %q exited while starting; see `container logs %s`", name, name)
+			// The init process exited (acBootstrap failed, most likely), or
+			// someone stopped it. Read its output now: Deploy removes the
+			// container right after, so the logs are gone by the time the
+			// user could look.
+			return acContainer{}, fmt.Errorf("container %q exited while starting%s", name, p.logsTail(name))
 		}
 		if c.ip() != "" {
 			return *c, nil
@@ -254,6 +263,24 @@ func (p ProviderAC) waitForIP(name string) (acContainer, error) {
 		}
 		time.Sleep(interval)
 	}
+}
+
+// logsTail returns the last lines of the container's output, formatted to
+// follow an error message, or "" if there are none to be had.
+func (p ProviderAC) logsTail(name string) string {
+	out, err := p.CLI.Run("logs", name)
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) == 1 && lines[0] == "" {
+		return ""
+	}
+	const keep = 20
+	if len(lines) > keep {
+		lines = lines[len(lines)-keep:]
+	}
+	return ":\n  " + strings.Join(lines, "\n  ")
 }
 
 // Deploy creates and starts a new sandbox. If one with the same name already

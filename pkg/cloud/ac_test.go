@@ -29,6 +29,8 @@ type fakeACRunner struct {
 	// that `ls` call, as if its init process had exited by then.
 	stopOnList int
 	lists      int
+	// logs is what `container logs` prints for any container.
+	logs string
 }
 
 func (f *fakeACRunner) Run(args ...string) ([]byte, error) {
@@ -94,6 +96,8 @@ func (f *fakeACRunner) Run(args ...string) ([]byte, error) {
 		return nil, f.setStatus(args[1], "stopped")
 	case "start":
 		return nil, f.setStatus(args[1], "running")
+	case "logs":
+		return []byte(f.logs), nil
 	case "rm":
 		for i, c := range f.containers {
 			if c["configuration"].(map[string]any)["id"] == args[1] {
@@ -229,13 +233,25 @@ func TestAC_Deploy_Existing(t *testing.T) {
 func TestAC_Deploy_BootstrapExitCleansUp(t *testing.T) {
 	// The first ls is Deploy's existence check; the init process exits
 	// before the poll's third look.
+	f := &fakeACRunner{ipAfterLists: 1 << 30, stopOnList: 3, logs: "apk: fetch failed\nonctl: image has no sshd\n"}
+	p := newTestAC(t, f)
+	_, err := p.Deploy(Vm{Name: "sb1"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exited while starting")
+	// The container is removed below, so the error itself must carry the
+	// output the user would otherwise read with `container logs`.
+	assert.Contains(t, err.Error(), "onctl: image has no sshd")
+	assert.Len(t, f.callsTo("rm"), 1)
+	assert.Empty(t, f.containers)
+}
+
+// The exit error stays readable when the container printed nothing.
+func TestAC_Deploy_BootstrapExitNoLogs(t *testing.T) {
 	f := &fakeACRunner{ipAfterLists: 1 << 30, stopOnList: 3}
 	p := newTestAC(t, f)
 	_, err := p.Deploy(Vm{Name: "sb1"})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "container logs sb1")
-	assert.Len(t, f.callsTo("rm"), 1)
-	assert.Empty(t, f.containers)
+	assert.Equal(t, `container "sb1" exited while starting`, err.Error())
 }
 
 func TestAC_Deploy_IPTimeoutCleansUp(t *testing.T) {
@@ -419,4 +435,11 @@ func TestAC_Bootstrap(t *testing.T) {
 	for _, bashism := range []string{"[[", "function ", "$(( ", "pipefail"} {
 		assert.NotContains(t, acBootstrap, bashism)
 	}
+	// The apply step runs scripts through `sudo -E` and tails their log with
+	// GNU `tail --pid`; stock images have neither, so every package manager
+	// branch must install sudo, and alpine (busybox) bash and coreutils too.
+	assert.Contains(t, acBootstrap, "apk add --no-cache openssh sudo bash coreutils")
+	assert.Contains(t, acBootstrap, "apt-get install -y -qq openssh-server sudo")
+	assert.Contains(t, acBootstrap, "dnf install -y -q openssh-server sudo")
+	assert.Contains(t, acBootstrap, "|| ! command -v sudo", "an image that ships sshd but not sudo must still get sudo")
 }
