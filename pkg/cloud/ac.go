@@ -393,7 +393,13 @@ func (p ProviderAC) Destroy(server Vm) error {
 	}
 	if c.Status != acStatusStopped {
 		if _, err := p.CLI.Run("stop", server.Name); err != nil {
-			return fmt.Errorf("failed to stop container %q: %w", server.Name, err)
+			// `container stop` sometimes reports an internalError for a
+			// container it did stop. Believe the container's state, not
+			// the exit code, before giving up on the delete.
+			again, findErr := p.find(server.Name)
+			if findErr != nil || again == nil || again.Status != acStatusStopped {
+				return fmt.Errorf("failed to stop container %q: %w", server.Name, err)
+			}
 		}
 	}
 	if _, err := p.CLI.Run("rm", server.Name); err != nil {
