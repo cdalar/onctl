@@ -59,13 +59,8 @@ var (
 			if isClaudeCommand(cmd) {
 				providerFlag = claudeProvider(providerFlag, os.Getenv("ONCTL_CLOUD"))
 			}
-			if providerFlag != "" {
-				if !tools.Contains(cloudProviderList, providerFlag) {
-					return fmt.Errorf("unsupported provider %q; use one of: %s", providerFlag, strings.Join(cloudProviderList, ", "))
-				}
-				if err := os.Setenv("ONCTL_CLOUD", providerFlag); err != nil {
-					return err
-				}
+			if err := applyProviderFlag(); err != nil {
+				return err
 			}
 			if err := initState(); err != nil {
 				return err
@@ -227,14 +222,31 @@ func isClaudeCommand(cmd *cobra.Command) bool {
 	return false
 }
 
+// applyProviderFlag makes -p/--provider win over ONCTL_CLOUD, which is what
+// checkCloudProvider reads.
+func applyProviderFlag() error {
+	if providerFlag == "" {
+		return nil
+	}
+	if !tools.Contains(cloudProviderList, providerFlag) {
+		return fmt.Errorf("unsupported provider %q; use one of: %s", providerFlag, strings.Join(cloudProviderList, ", "))
+	}
+	return os.Setenv("ONCTL_CLOUD", providerFlag)
+}
+
 // ensureProvider builds the provider client if it hasn't been already.
 // Cobra's shell-completion machinery (`__complete`) resolves
 // ValidArgsFunction without running PersistentPreRunE
 // (https://github.com/spf13/cobra/issues/1291), so completion functions that
 // call provider.List() (destroy, ssh) must invoke this themselves, or they'd
-// dereference a nil provider.
+// dereference a nil provider. Cobra does parse flags first, so -p is applied
+// here too: `onctl -p ac destroy <TAB>` must list ac's VMs, not ONCTL_CLOUD's.
 func ensureProvider() {
 	if provider != nil {
+		return
+	}
+	if err := applyProviderFlag(); err != nil {
+		log.Println("[DEBUG] completion: " + err.Error())
 		return
 	}
 	if err := initState(); err != nil {
