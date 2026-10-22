@@ -56,6 +56,28 @@ func TestEnsureProvider_KeepsExisting(t *testing.T) {
 	assert.Same(t, existing, provider)
 }
 
+// Cobra parses -p before resolving completions but skips PersistentPreRunE,
+// so ensureProvider must apply the flag itself: `onctl -p ac destroy <TAB>`
+// used to complete ONCTL_CLOUD's VMs (or exit "No Cloud Provider Set").
+func TestEnsureProvider_HonorsProviderFlag(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("ONCTL_CLOUD", "static")
+	t.Chdir(t.TempDir())
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".onctl"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".onctl", "onctl.yaml"), []byte("ac:\n"), 0o644))
+	withProvider(t, nil)
+	origFlag, origCloud := providerFlag, cloudProvider
+	t.Cleanup(func() { providerFlag, cloudProvider = origFlag, origCloud })
+	providerFlag = "ac"
+
+	ensureProvider()
+
+	assert.Equal(t, "ac", cloudProvider)
+	_, ok := provider.(*cloud.ProviderAC)
+	assert.True(t, ok, "got %T, want the -p provider, not ONCTL_CLOUD's", provider)
+}
+
 // The local providers (fc, ch, static) need no credentials, so their
 // construction can be checked without network access.
 func TestInitProvider_LocalProviders(t *testing.T) {
