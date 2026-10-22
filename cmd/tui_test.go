@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"errors"
+	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -507,6 +509,20 @@ func TestTUIChildDone(t *testing.T) {
 	if m.flashErr || m.flash != "created my-vm" {
 		t.Errorf("flash = %q", m.flash)
 	}
+	// `onctl claude` exits with the attach's status, like ssh: quiet
+	// when nothing was said, its own last word otherwise.
+	m.flash = ""
+	next, _ = m.Update(tuiChildDoneMsg{verb: "claude", name: "claude-app", err: errors.New("exit status 1")})
+	m = next.(tuiModel)
+	if m.flash != "" {
+		t.Errorf("flash = %q, want none", m.flash)
+	}
+	next, _ = m.Update(tuiChildDoneMsg{verb: "claude", name: "claude-app", err: errors.New("exit status 1"),
+		stderr: "Error: claude-app holds /x, not /y -- run onctl claude from there, or pick another box with --box\n"})
+	m = next.(tuiModel)
+	if !m.flashErr || !strings.HasPrefix(m.flash, "claude on claude-app: claude-app holds /x") {
+		t.Errorf("flash = %q", m.flash)
+	}
 }
 
 // The children land on the same cloud and account as the tui: the
@@ -526,6 +542,131 @@ func TestTUIChildArgs(t *testing.T) {
 	got = strings.Join(createArgs("", "debian-12", ""), " ")
 	if got != "create --image debian-12 --provider gcp --project my-proj" {
 		t.Errorf("create args = %q", got)
+	}
+	// a / :claude <vm> is `onctl claude --box <vm>` on the same cloud.
+	got = strings.Join(claudeArgs("web"), " ")
+	if got != "claude --box web --provider gcp --project my-proj" {
+		t.Errorf("claude args = %q", got)
+	}
+}
+
+// a and :claude hand the terminal to `onctl claude --box <vm>`; with
+// no VM named, the box is the project's own (claude-<dir>), as the CLI
+// would pick -- a child process, never a provider call from here.
+func TestTUIClaudeKeys(t *testing.T) {
+	tuiFlashFor = time.Millisecond
+	withCloudProvider(t, "hetzner")
+	f := tuiFixture()
+	m := listed(t, f, 140, 40)
+	if !strings.Contains(m.View(), "<a>") || !strings.Contains(m.View(), "claude") {
+		t.Errorf("header lacks the a/claude hotkey:\n%s", m.View())
+	}
+	m, _ = press(t, m, "G") // old-paused: onctl claude resumes it itself
+	m, cmd := press(t, m, "a")
+	if cmd == nil || m.flash != "" {
+		t.Errorf("a: cmd=%v flash=%q", cmd, m.flash)
+	}
+	m, _ = press(t, m, ":")
+	m = typeIn(t, m, "claude")
+	m, cmd = press(t, m, "enter")
+	if cmd == nil || m.flash != "" {
+		t.Errorf(":claude: cmd=%v flash=%q", cmd, m.flash)
+	}
+	if len(f.calls) != 0 {
+		t.Errorf("provider saw %v, want nothing", f.calls)
+	}
+}
+
+// :provider switches clouds the way k9s's :ctx switches clusters: a
+// name is checked here, the current one is a no-op, and a switch quits
+// the tui for tuiCmd to start it again on the other provider; without
+// a name, the providers view lists them and enter picks one.
+func TestTUIProviderSwitch(t *testing.T) {
+	tuiFlashFor = time.Millisecond
+	withCloudProvider(t, "hetzner")
+	m := listed(t, tuiFixture(), 120, 40)
+	run := func(m tuiModel, line string) (tuiModel, tea.Cmd) {
+		m, _ = press(t, m, ":")
+		m = typeIn(t, m, line)
+		return press(t, m, "enter")
+	}
+	m, _ = run(m, "provider nope")
+	if !m.flashErr || !strings.Contains(m.flash, "unknown provider") || m.switchTo != "" {
+		t.Errorf(":provider nope: flash=%q switchTo=%q", m.flash, m.switchTo)
+	}
+	m, _ = run(m, "provider hetzner")
+	if m.flashErr || m.flash != "already on hetzner" || m.switchTo != "" {
+		t.Errorf(":provider hetzner: flash=%q switchTo=%q", m.flash, m.switchTo)
+	}
+	m, cmd := run(m, "provider aws")
+	if m.switchTo != "aws" || cmd == nil {
+		t.Fatalf(":provider aws: switchTo=%q cmd=%v", m.switchTo, cmd)
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Error(":provider aws didn't quit")
+	}
+
+	m = listed(t, tuiFixture(), 120, 40)
+	m, cmd = run(m, "provider")
+	if cmd != nil && len(runCmd(cmd)) != 0 {
+		t.Errorf(":provider listed something: %v", runCmd(cmd))
+	}
+	if m.top().view != providersView || keys(m.rows()) != strings.Join(cloudProviderList, " ") {
+		t.Errorf(":provider: view=%v rows=%q", m.top().view, keys(m.rows()))
+	}
+	if view := m.View(); !strings.Contains(view, "Providers["+strconv.Itoa(len(cloudProviderList))+"]") || !strings.Contains(view, "hetzner  *") {
+		t.Errorf(":provider view:\n%s", view)
+	}
+	m, _ = press(t, m, "j")
+	m, _ = press(t, m, "j") // azure
+	m, cmd = press(t, m, "enter")
+	if m.switchTo != "azure" || cmd == nil {
+		t.Errorf("enter on azure: switchTo=%q cmd=%v", m.switchTo, cmd)
+	}
+	// The tui's next run says how it went.
+	m = newTUI(tuiFixture())
+	m.startFlash, m.startFlashErr = "switching to azure: no config", true
+	var flashed bool
+	for _, msg := range runCmd(m.Init()) {
+		if fm, ok := msg.(tuiFlashMsg); ok {
+			next, _ := m.Update(fm)
+			m = next.(tuiModel)
+			flashed = true
+		}
+	}
+	if !flashed || !m.flashErr || m.flash != "switching to azure: no config" {
+		t.Errorf("start flash: flashed=%v flash=%q", flashed, m.flash)
+	}
+}
+
+// A switch whose config can't be loaded leaves the provider the tui
+// had, in the global and in ONCTL_CLOUD (which the children read), so
+// the tui comes back on it with the reason.
+func TestTUISwitchProviderRestores(t *testing.T) {
+	withCloudProvider(t, "hetzner")
+	origConfig := flagConfigFile
+	flagConfigFile = t.TempDir() + "/missing.yaml"
+	t.Cleanup(func() { flagConfigFile = origConfig })
+
+	if err := switchProvider("nope"); err == nil || !strings.Contains(err.Error(), "unsupported provider") {
+		t.Errorf("switchProvider(nope) = %v", err)
+	}
+	t.Setenv("ONCTL_CLOUD", "hetzner")
+	err := switchProvider("aws")
+	if err == nil || !strings.Contains(err.Error(), "switching to aws") || !strings.Contains(err.Error(), "missing.yaml") {
+		t.Errorf("switchProvider(aws) = %v", err)
+	}
+	if cloudProvider != "hetzner" || os.Getenv("ONCTL_CLOUD") != "hetzner" {
+		t.Errorf("after a failed switch: cloudProvider=%q ONCTL_CLOUD=%q", cloudProvider, os.Getenv("ONCTL_CLOUD"))
+	}
+	if err := os.Unsetenv("ONCTL_CLOUD"); err != nil {
+		t.Fatal(err)
+	}
+	if err := switchProvider("aws"); err == nil {
+		t.Error("switchProvider(aws) with no config succeeded")
+	}
+	if _, set := os.LookupEnv("ONCTL_CLOUD"); set || cloudProvider != "hetzner" {
+		t.Errorf("after a failed switch from no ONCTL_CLOUD: set=%v cloudProvider=%q", set, cloudProvider)
 	}
 }
 
