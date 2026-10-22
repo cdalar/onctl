@@ -52,6 +52,13 @@
   min-height: 1.75em;
 }
 
+/* A screenshot in place of typed lines: the image already carries the
+   terminal's own background and padding, so the frame adds none. */
+.screen {
+  background: #0e0f12;
+  line-height: 0;
+}
+
 .dim {
   color: rgba(215, 217, 220, 0.55);
 }
