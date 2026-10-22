@@ -5,6 +5,7 @@ import Heading from '@theme/Heading';
 import TerminalWindow from '@site/src/components/TerminalWindow';
 import ConfigPanel from '@site/src/components/ConfigPanel';
 import Lifecycle from '@site/src/components/Lifecycle';
+import Tui from '@site/src/components/Tui';
 
 import styles from './index.module.css';
 
@@ -77,6 +78,7 @@ export default function Home(): ReactNode {
       <main>
         <ConfigPanel />
         <Lifecycle />
+        <Tui />
       </main>
     </Layout>
   );

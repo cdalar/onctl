@@ -1,0 +1,28 @@
+.section {
+  padding: 4rem 0 5rem;
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.text {
+  max-width: 40rem;
+  margin-bottom: 2.25rem;
+}
+
+.text p {
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.6;
+}
+
+.text code {
+  font-size: 0.85em;
+}
+
+.screenshot {
+  min-width: 0;
+}
+
+.screenshot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
