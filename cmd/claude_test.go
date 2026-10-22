@@ -215,3 +215,23 @@ func TestIsClaudeCommand(t *testing.T) {
 		t.Error("ssh and the root aren't claude commands")
 	}
 }
+
+// ONCTL_CLOUD alone must pick the provider for onctl claude: the boxes
+// default is for when nothing is chosen, not an override of the env var.
+func TestClaudeProvider(t *testing.T) {
+	if got := claudeProvider("", ""); got != "boxes" {
+		t.Errorf("nothing set: got %q, want boxes", got)
+	}
+	if got := claudeProvider("hetzner", ""); got != "hetzner" {
+		t.Errorf("-p hetzner: got %q", got)
+	}
+	// ONCTL_CLOUD=ac: the flag stays empty, so checkCloudProvider reads
+	// the env var and the Apple container provider is used, not boxes.
+	if got := claudeProvider("", "ac"); got != "" {
+		t.Errorf("ONCTL_CLOUD=ac: got %q, want the flag left empty", got)
+	}
+	// -p wins over ONCTL_CLOUD, as it does for every other command.
+	if got := claudeProvider("boxes", "ac"); got != "boxes" {
+		t.Errorf("-p boxes with ONCTL_CLOUD=ac: got %q", got)
+	}
+}
