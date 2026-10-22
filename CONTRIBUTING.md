@@ -39,6 +39,6 @@ Pull requests are merged once the required CI checks (build, tests, lint,
   should keep its logic behind interfaces so the logic itself stays testable.
 - **Dependencies:** `go.mod` and `go.sum` must be tidy (`go mod tidy`).
 - **License:** contributions are accepted under the project's
-  [AGPL-3.0 license](LICENSE).
+  [Apache-2.0 license](LICENSE).
 - **Conduct:** participation is governed by the
   [Code of Conduct](CODE_OF_CONDUCT.md).
