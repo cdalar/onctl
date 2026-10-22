@@ -56,10 +56,8 @@ var (
 			if cmd.Parent().Name() == "completion" {
 				return nil
 			}
-			// onctl claude defaults to boxes, which need nothing set up;
-			// -p runs it on a VM of another provider (cmd/claudevm.go).
-			if isClaudeCommand(cmd) && providerFlag == "" {
-				providerFlag = "boxes"
+			if isClaudeCommand(cmd) {
+				providerFlag = claudeProvider(providerFlag, os.Getenv("ONCTL_CLOUD"))
 			}
 			if providerFlag != "" {
 				if !tools.Contains(cloudProviderList, providerFlag) {
@@ -204,6 +202,18 @@ func resolveAzureIdentifiers() error {
 		}
 	}
 	return nil
+}
+
+// claudeProvider is the provider flag for onctl claude: boxes, which need
+// nothing set up, when neither -p nor ONCTL_CLOUD picks one. Either of
+// those runs Claude on a VM of that provider instead (cmd/claudevm.go);
+// ONCTL_CLOUD=ac onctl claude stays on this machine, in an Apple
+// container, and never touches the boxes service.
+func claudeProvider(flag, env string) string {
+	if flag == "" && env == "" {
+		return "boxes"
+	}
+	return flag
 }
 
 // isClaudeCommand reports whether cmd is onctl claude or one of its
