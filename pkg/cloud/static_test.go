@@ -129,3 +129,20 @@ func TestProviderStatic_UnsupportedOperations(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Empty(t, paused.List)
 }
+
+// GetHost is what ssh/port-forward use to connect, so it must hand back
+// the imported user, port and key verbatim, and fail (not default) for a
+// name that was never imported.
+func TestProviderStatic_GetHost(t *testing.T) {
+	p := newTestStaticProvider(t)
+	assert.NoError(t, p.SaveInventory(StaticInventory{Hosts: []StaticHost{
+		{Name: "box2", IP: "5.6.7.8", Username: "ubuntu", SSHPort: 2222, PrivateKey: "/tmp/key"},
+	}}))
+
+	h, err := p.GetHost("box2")
+	assert.NoError(t, err)
+	assert.Equal(t, StaticHost{Name: "box2", IP: "5.6.7.8", Username: "ubuntu", SSHPort: 2222, PrivateKey: "/tmp/key"}, h)
+
+	_, err = p.GetHost("nope")
+	assert.ErrorContains(t, err, "nope")
+}

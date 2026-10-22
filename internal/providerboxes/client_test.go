@@ -151,3 +151,48 @@ func TestDialPortRefused(t *testing.T) {
 		t.Fatalf("a refused upgrade should carry the server's reason, got %v", err)
 	}
 }
+
+// Each box action must hit the route the service exposes for it, with the
+// box name escaped, and decode the box the service answers with.
+func TestClientBoxActions(t *testing.T) {
+	var gotMethod, gotPath string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath, gotBody = r.Method, r.URL.EscapedPath(), nil
+		if r.ContentLength != 0 {
+			_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		}
+		switch r.URL.Path {
+		case "/api/images":
+			_ = json.NewEncoder(w).Encode([]Image{{Name: "ubuntu"}})
+		case "/api/sizes":
+			_ = json.NewEncoder(w).Encode([]Size{{Name: "small", Default: true}})
+		default:
+			_ = json.NewEncoder(w).Encode(VM{Name: "a b", State: "paused"})
+		}
+	}))
+	defer srv.Close()
+	c, ctx := New(srv.URL, "tok"), context.Background()
+
+	vm, err := c.Pause(ctx, "a b")
+	if err != nil || vm.State != "paused" || gotMethod != http.MethodPost || gotPath != "/api/vms/a%20b/pause" {
+		t.Fatalf("Pause: %v %s %s %+v", err, gotMethod, gotPath, vm)
+	}
+	if _, err := c.Resume(ctx, "a b"); err != nil || gotMethod != http.MethodPost || gotPath != "/api/vms/a%20b/resume" {
+		t.Fatalf("Resume: %v %s %s", err, gotMethod, gotPath)
+	}
+	if err := c.Destroy(ctx, "a b"); err != nil || gotMethod != http.MethodDelete || gotPath != "/api/vms/a%20b" {
+		t.Fatalf("Destroy: %v %s %s", err, gotMethod, gotPath)
+	}
+	if _, err := c.SetIdleTTL(ctx, "a b", 10*time.Minute); err != nil || gotMethod != http.MethodPut || gotPath != "/api/vms/a%20b/idle-ttl" || gotBody["idle_ttl_seconds"] != float64(600) {
+		t.Fatalf("SetIdleTTL: %v %s %s %v", err, gotMethod, gotPath, gotBody)
+	}
+	images, err := c.ListImages(ctx)
+	if err != nil || len(images) != 1 || images[0].Name != "ubuntu" || gotMethod != http.MethodGet {
+		t.Fatalf("ListImages: %v %+v %s", err, images, gotMethod)
+	}
+	sizes, err := c.ListSizes(ctx)
+	if err != nil || len(sizes) != 1 || !sizes[0].Default || gotPath != "/api/sizes" {
+		t.Fatalf("ListSizes: %v %+v %s", err, sizes, gotPath)
+	}
+}
