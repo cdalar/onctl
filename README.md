@@ -70,7 +70,7 @@ Welcome to Ubuntu 22.04.3 LTS (GNU/Linux 5.15.0-89-generic x86_64)
 root@onctl-test:~# 
 ```
 
-Or browse and manage your VMs in a k9s-style terminal UI: `s` opens a shell, `c` creates, `p`/`r` pause and resume, `ctrl-d` destroys, `:images` and `:sizes` show what the provider offers, `?` lists every key.
+Or browse and manage your VMs in a k9s-style terminal UI: `s` opens a shell, `a` runs Claude Code on the VM (`onctl claude`), `c` creates, `p`/`r` pause and resume, `ctrl-d` destroys, `:images` and `:sizes` show what the provider offers, `:provider` switches clouds, `?` lists every key.
 ```
 ❯ onctl tui
 ```

@@ -236,7 +236,7 @@ func (m tuiModel) hotkeyBlock(width int) []string {
 	}
 	keys := append([]hotkey{}, v.hotkeys...)
 	if t.kind == pageText {
-		keys = []hotkey{{"j/k", "scroll"}, {"g/G", "top/bottom"}, {"y", "json"}, {"s", "shell"}}
+		keys = []hotkey{{"j/k", "scroll"}, {"g/G", "top/bottom"}, {"y", "json"}, {"s", "shell"}, {"a", "claude"}}
 	}
 	keys = append(keys, commonHotkeys...)
 	// Column width from the widest entry.

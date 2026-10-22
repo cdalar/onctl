@@ -50,7 +50,7 @@ type tableView struct {
 	name     string   // the `:name` that opens it, and its crumb
 	aliases  []string // other `:names`
 	title    string   // the table's title: "VMs"
-	resource string   // the listing it needs: vms, images, sizes
+	resource string   // the listing it needs: vms, images, sizes; "" for none
 	columns  []column
 	rows     func(m *tuiModel) []tableRow
 	hotkeys  []hotkey // the view's own, before the common ones
@@ -63,7 +63,7 @@ var commonHotkeys = []hotkey{
 	{":", "command"}, {"/", "filter"}, {"?", "help"}, {"esc", "back"}, {"ctrl-c", "quit"},
 }
 
-var tuiViews = []*tableView{vmsView, imagesView, sizesView}
+var tuiViews = []*tableView{vmsView, imagesView, sizesView, providersView}
 
 // findView is the view `:name` means, nil for none.
 func findView(name string) *tableView {
@@ -92,7 +92,7 @@ var vmsView = &tableView{
 	stateCol: 1,
 	empty:    "No VMs yet. Press c to create one.",
 	hotkeys: []hotkey{
-		{"s", "shell"}, {"d", "describe"}, {"y", "json"}, {"c", "create"},
+		{"s", "shell"}, {"a", "claude"}, {"d", "describe"}, {"y", "json"}, {"c", "create"},
 		{"p", "pause"}, {"r", "resume"}, {"ctrl-d", "destroy"},
 		{"0", "all"}, {"1", "running"}, {"2", "paused"},
 	},
@@ -169,6 +169,30 @@ var sizesView = &tableView{
 				cells:    []string{s.Name, vcpu, mem, disk, orDash(s.Arch), orDash(s.HourlyPrice), orDash(s.MonthlyPrice), def},
 				sortKeys: []string{"", fmt.Sprintf("%06d", s.VCPU), fmt.Sprintf("%08d", s.MemoryMiB), fmt.Sprintf("%08d", s.DiskGiB), "", "", "", ""},
 			})
+		}
+		return rows
+	},
+}
+
+// providersView is `:provider` with no name (k9s's `:ctx`): the clouds
+// onctl knows, the current one marked; enter switches to the row's.
+var providersView = &tableView{
+	name:     "providers",
+	aliases:  []string{"provider", "ctx", "cloud", "clouds"},
+	title:    "Providers",
+	resource: "",
+	columns:  []column{{"NAME", 'N'}, {"CURRENT", 0}},
+	stateCol: -1,
+	empty:    "No providers.",
+	hotkeys:  []hotkey{{"enter", "switch to provider"}},
+	rows: func(m *tuiModel) []tableRow {
+		var rows []tableRow
+		for _, name := range cloudProviderList {
+			current := ""
+			if name == cloudProvider {
+				current = "*"
+			}
+			rows = append(rows, tableRow{key: name, cells: []string{name, current}})
 		}
 		return rows
 	},

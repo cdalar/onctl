@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cdalar/onctl/internal/tools"
 	"github.com/cdalar/onctl/pkg/cloud"
 	bspinner "github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -25,9 +26,10 @@ import (
 // into with esc to come back; breadcrumbs and flash messages at the
 // bottom. It is a front end to the provider calls the subcommands make
 // -- List/ListPaused, Pause, Resume, Destroy, ListImages, ListSizes --
-// and runs `onctl ssh` and `onctl create` as child processes for a
-// terminal and a new VM, so nothing here changes how those commands
-// behave.
+// and runs `onctl ssh`, `onctl create` and `onctl claude` as child
+// processes for a terminal, a new VM and Claude Code on a VM, so nothing
+// here changes how those commands behave. `:provider` switches clouds
+// like k9s's `:ctx`: the tui restarts on the other provider.
 
 var tuiCmd = &cobra.Command{
 	Use:   "tui",
@@ -35,10 +37,13 @@ var tuiCmd = &cobra.Command{
 	Long: `Opens a live, full-screen view of your VMs, laid out like k9s.
 
   :vms :images :sizes   switch view (also :q, :help, :create)
+  :provider [name]      switch cloud provider (a list to pick from without a name)
+  :claude [vm]          run Claude Code on a VM (onctl claude --box vm; the project's box without one)
   /text        filter the rows; esc clears
   j/k, arrows  move; g/G top/bottom; shift+letter sorts by that column
   enter, d     describe the VM; y its JSON
   s            open a terminal on the VM (onctl ssh)
+  a            run Claude Code on the VM (onctl claude --box vm)
   c            create a VM (name, image and type are asked; runs onctl create)
   p / r        pause / resume
   ctrl-d       destroy the VM (asks first)
@@ -49,11 +54,60 @@ var tuiCmd = &cobra.Command{
 		if !term.IsTerminal(int(os.Stdout.Fd())) || !term.IsTerminal(int(os.Stdin.Fd())) {
 			return fmt.Errorf("onctl tui needs a terminal; use `onctl ls` on a pipe")
 		}
-		restore := quietLogs()
-		defer restore()
-		_, err := tea.NewProgram(newTUI(provider), tea.WithAltScreen()).Run()
-		return err
+		var flash string
+		var flashErr bool
+		for {
+			m := newTUI(provider)
+			m.startFlash, m.startFlashErr = flash, flashErr
+			restore := quietLogs()
+			final, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
+			restore()
+			if err != nil {
+				return err
+			}
+			name := final.(tuiModel).switchTo
+			if name == "" {
+				return nil
+			}
+			// `:provider name` quit the tui to switch: it starts again
+			// on the other provider, or on this one with the reason it
+			// couldn't.
+			flash, flashErr = "switched to "+name, false
+			if err := switchProvider(name); err != nil {
+				flash, flashErr = err.Error(), true
+			}
+		}
 	},
+}
+
+// switchProvider makes name the provider the tui and its children use,
+// as `onctl -p name tui` would have: ONCTL_CLOUD, the config and the
+// client are redone. A config that can't be loaded leaves the current
+// provider in place. It runs between two runs of the tui, with the
+// screen and the logs back to normal, because a provider's client
+// exits the process when its credentials are missing (hetzner without
+// HCLOUD_TOKEN, boxes without onctl login) -- as `onctl -p name tui`
+// does, with the same message.
+func switchProvider(name string) error {
+	if !tools.Contains(cloudProviderList, name) {
+		return fmt.Errorf("unsupported provider %q; use one of: %s", name, strings.Join(cloudProviderList, ", "))
+	}
+	prev := cloudProvider
+	prevEnv, hadEnv := os.LookupEnv("ONCTL_CLOUD")
+	if err := os.Setenv("ONCTL_CLOUD", name); err != nil {
+		return err
+	}
+	if err := initState(); err != nil {
+		cloudProvider = prev
+		if hadEnv {
+			_ = os.Setenv("ONCTL_CLOUD", prevEnv)
+		} else {
+			_ = os.Unsetenv("ONCTL_CLOUD")
+		}
+		return fmt.Errorf("switching to %s: %w", name, err)
+	}
+	initProvider(name)
+	return nil
 }
 
 func init() {
@@ -105,14 +159,18 @@ type (
 		err        error
 		result     string // what to flash on success, "" for the default
 	}
-	tuiChildDoneMsg struct { // `onctl ssh`/`onctl create` exited
-		verb   string // ssh, create
+	tuiChildDoneMsg struct { // `onctl ssh`/`onctl create`/`onctl claude` exited
+		verb   string // ssh, create, claude
 		name   string
 		err    error
 		stderr string
 	}
 	tuiFlashGoneMsg int
-	tuiTickMsg      time.Time
+	tuiFlashMsg     struct { // something to flash (the start flash)
+		text  string
+		isErr bool
+	}
+	tuiTickMsg time.Time
 )
 
 // pageKind is what a page of the navigation stack shows.
@@ -174,6 +232,13 @@ type tuiModel struct {
 	flash    string
 	flashErr bool
 	flashID  int
+	// startFlash is flashed when the tui starts: how a provider switch
+	// went, since it runs between two runs of the tui.
+	startFlash    string
+	startFlashErr bool
+	// switchTo is the provider `:provider` asked for; set, the tui
+	// quits and tuiCmd starts it again on that provider.
+	switchTo string
 
 	width, height int
 	refreshedAt   time.Time
@@ -186,7 +251,7 @@ func newTUI(p cloud.CloudProviderInterface) tuiModel {
 	f.CharLimit = 80
 	cmd := textinput.New()
 	cmd.Prompt = ""
-	cmd.Placeholder = "vms, images, sizes, create, help, q"
+	cmd.Placeholder = "vms, images, sizes, create, claude, provider, help, q"
 	cmd.CharLimit = 80
 	sp := bspinner.New(bspinner.WithSpinner(bspinner.Spinner{Frames: tuiSpinnerFrames, FPS: 80 * time.Millisecond}))
 	sp.Style = k9s.logo
@@ -207,7 +272,12 @@ func newTUI(p cloud.CloudProviderInterface) tuiModel {
 var tuiSpinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 func (m tuiModel) Init() tea.Cmd {
-	return tea.Batch(m.list("vms"), m.tick(), m.spin.Tick)
+	cmds := []tea.Cmd{m.list("vms"), m.tick(), m.spin.Tick}
+	if m.startFlash != "" {
+		flash := tuiFlashMsg{text: m.startFlash, isErr: m.startFlashErr}
+		cmds = append(cmds, func() tea.Msg { return flash })
+	}
+	return tea.Batch(cmds...)
 }
 
 // top is the page shown.
@@ -223,9 +293,10 @@ func (m *tuiModel) pop() {
 	}
 }
 
-// list fetches one resource.
+// list fetches one resource; "" (a view made of what's known) is
+// nothing to fetch.
 func (m *tuiModel) list(resource string) tea.Cmd {
-	if m.loading[resource] {
+	if resource == "" || m.loading[resource] {
 		return nil
 	}
 	m.loading[resource] = true
@@ -344,6 +415,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case tuiFlashMsg:
+		return m, m.setFlash(msg.text, msg.isErr)
+
 	case tuiListMsg:
 		delete(m.loading, msg.resource)
 		// Listed, even when it failed: the table then says why it is
@@ -396,21 +470,26 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if what == "" {
 			what = "a VM"
 		}
+		verb := msg.verb
+		if verb == "claude" {
+			verb = "claude on"
+		}
 		if msg.err != nil {
 			// The command's own last word (the alternate screen hides
 			// what it printed), not exec's "exit status 1".
 			reason := lastLine(msg.stderr)
 			reason = strings.TrimPrefix(reason, "Error: ")
-			if reason == "" && msg.verb == "ssh" {
-				// `onctl ssh` exits with the remote shell's status; a
-				// non-zero one with nothing said is the shell's, not
-				// a connection that failed.
+			if reason == "" && (msg.verb == "ssh" || msg.verb == "claude") {
+				// `onctl ssh` exits with the remote shell's status, and
+				// `onctl claude` with the attach's; a non-zero one with
+				// nothing said is the remote's, not a connection that
+				// failed.
 				return m, m.refresh()
 			}
 			if reason == "" {
 				reason = msg.err.Error()
 			}
-			return m, tea.Batch(m.fail("%s %s: %s", msg.verb, what, reason), m.refresh())
+			return m, tea.Batch(m.fail("%s %s: %s", verb, what, reason), m.refresh())
 		}
 		if msg.verb == "create" {
 			return m, tea.Batch(m.say("created %s", what), m.refresh())

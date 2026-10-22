@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/cdalar/onctl/internal/tools"
 	"github.com/cdalar/onctl/pkg/cloud"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/pflag"
@@ -70,7 +71,8 @@ func (m tuiModel) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// runCommand is a `:` command: a view's name, q, help, create or ssh.
+// runCommand is a `:` command: a view's name, q, help, create, ssh,
+// claude or provider.
 func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 	words := strings.Fields(strings.TrimPrefix(strings.TrimSpace(line), ":"))
 	if len(words) == 0 {
@@ -89,6 +91,16 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 			return m, m.fail("usage: :ssh <vm>")
 		}
 		return m.ssh(words[1])
+	case "claude":
+		if len(words) > 1 {
+			return m.claude(words[1])
+		}
+		return m.claude("")
+	case "provider", "ctx", "cloud":
+		if len(words) > 1 {
+			return m.switchProvider(words[1])
+		}
+		return m, m.openView(providersView)
 	}
 	if v := findView(words[0]); v != nil {
 		cmd := m.openView(v)
@@ -98,7 +110,7 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	}
-	return m, m.fail("unknown command %q (try :vms, :images, :sizes, :help, :q)", words[0])
+	return m, m.fail("unknown command %q (try :vms, :images, :sizes, :provider, :claude, :help, :q)", words[0])
 }
 
 // --- the / filter ---------------------------------------------------------
@@ -205,6 +217,12 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.openCreate("", "")
 	case "enter", "d":
+		if t.view == providersView {
+			if r := m.currentRow(); r != nil {
+				return m.switchProvider(r.key)
+			}
+			return m, nil
+		}
 		return m.describe()
 	case "y":
 		return m.showJSON()
@@ -238,6 +256,8 @@ func (m tuiModel) handleVMKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "s":
 		return m.ssh(vm.Name)
+	case "a":
+		return m.claude(vm.Name)
 	case "p":
 		// pause.go: the name is all the providers need.
 		name := vm.Name
@@ -315,6 +335,8 @@ func (m *tuiModel) pushHelp() {
 	general := [][2]string{
 		{":<view>", "switch view: vms, images, sizes (`:vms web` filters too)"},
 		{":create", "create a VM"}, {":ssh <vm>", "open a terminal on a VM"},
+		{":claude [vm]", "run Claude Code on a VM (the project's box without one)"},
+		{":provider [name]", "switch cloud provider (a list to pick from without a name)"},
 		{":help", "this page"}, {":q", "quit (ctrl-c too)"},
 		{"/text", "filter the rows; esc clears"},
 		{"j/k ↑/↓", "move; ctrl-f/ctrl-b page; g/G top/bottom"},
@@ -322,7 +344,7 @@ func (m *tuiModel) pushHelp() {
 		{"esc", "back to the previous page"}, {"R", "refresh now (the VMs also every " + tuiRefreshEvery.String() + ")"},
 	}
 	for _, g := range general {
-		lines = append(lines, fmt.Sprintf("  %-14s %s", g[0], g[1]))
+		lines = append(lines, fmt.Sprintf("  %-18s %s", g[0], g[1]))
 	}
 	lines = append(lines, "", v.title, "")
 	for _, h := range v.hotkeys {
@@ -339,7 +361,8 @@ func (m *tuiModel) pushHelp() {
 	}
 	if v == vmsView {
 		lines = append(lines, "", "VMs",
-			"  s shell runs `onctl ssh <vm>`; c runs `onctl create` in the foreground with what the form asks;",
+			"  s shell runs `onctl ssh <vm>`; a runs `onctl claude --box <vm>` (Claude Code on the VM, with this directory's project);",
+			"  c runs `onctl create` in the foreground with what the form asks;",
 			"  p is `onctl pause` (a snapshot, then the server is deleted, on Hetzner); r is `onctl resume`;",
 			"  ctrl-d is `onctl destroy`, and asks first.")
 	}
@@ -452,6 +475,41 @@ func (m tuiModel) ssh(name string) (tea.Model, tea.Cmd) {
 		return m, m.fail("%s is %s; press r to resume it first", name, vm.Status)
 	}
 	return m.runChild("ssh", name, tuiChildArgs("ssh", name))
+}
+
+// claude hands the terminal to `onctl claude`: on the VM named name
+// (--box), or, with none, on the project's own box, created if need
+// be. As on the command line, the project is the directory the tui
+// was started in. A paused VM is resumed by onctl claude itself.
+func (m tuiModel) claude(name string) (tea.Model, tea.Cmd) {
+	if name == "" {
+		dir, err := projectDir()
+		if err != nil {
+			return m, m.fail("claude: %v", err)
+		}
+		name = claudeBoxName(dir)
+	}
+	return m.runChild("claude", name, claudeArgs(name))
+}
+
+// claudeArgs is the `onctl claude` command line for the box named name.
+func claudeArgs(name string) []string {
+	return tuiChildArgs("claude", "--box", name)
+}
+
+// switchProvider is `:provider name`: the tui quits, and tuiCmd starts
+// it again on that provider (see switchProvider in tui.go for why it
+// isn't done in place).
+func (m tuiModel) switchProvider(name string) (tea.Model, tea.Cmd) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if !tools.Contains(cloudProviderList, name) {
+		return m, m.fail("unknown provider %q (one of %s)", name, strings.Join(cloudProviderList, ", "))
+	}
+	if name == cloudProvider {
+		return m, m.say("already on %s", name)
+	}
+	m.switchTo = name
+	return m, tea.Quit
 }
 
 // runChild runs this binary again with args in the foreground (the
