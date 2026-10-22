@@ -374,6 +374,25 @@ func TestAC_Destroy_StopFails(t *testing.T) {
 	assert.Empty(t, f.callsTo("rm"), "must not try to delete a container it couldn't stop")
 }
 
+// `container stop` can exit non-zero ("internalError: stop failed for one or
+// more containers") for a container it did stop. Destroy must then go on
+// and delete it rather than leave a stopped sandbox behind.
+func TestAC_Destroy_StopFailsButStopped(t *testing.T) {
+	f := &fakeACRunner{}
+	p := newTestAC(t, f)
+	_, err := p.Deploy(Vm{Name: "sb1"})
+	require.NoError(t, err)
+	f.calls, f.lists = nil, 0
+	f.failOn = map[string]error{"stop": errors.New("internalError")}
+	// Destroy lists once before the stop and once after; the container
+	// reads stopped on that second look.
+	f.stopOnList = 2
+	require.NoError(t, p.Destroy(Vm{Name: "sb1"}))
+	assert.Equal(t, [][]string{{"stop", "sb1"}}, f.callsTo("stop"))
+	assert.Equal(t, [][]string{{"rm", "sb1"}}, f.callsTo("rm"))
+	assert.Empty(t, f.containers)
+}
+
 // The CLI's JSON has carried the address under two names across releases;
 // both must work, and a container with no network yet has no IP.
 func TestAC_ParseContainers_Address(t *testing.T) {
