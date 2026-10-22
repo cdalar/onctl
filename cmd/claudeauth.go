@@ -28,9 +28,6 @@ import (
 const (
 	claudeTokenService = "onctl-claude-oauth-token"
 	claudeTokenFile    = "oauth-token" // in ~/.onctl/claude, off macOS
-	// boxctl saved the token under this name; it's still read, so nobody
-	// has to log in again.
-	legacyClaudeTokenService = "boxctl-claude-oauth-token"
 )
 
 var claudeTokenPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{20,512}$`)
@@ -124,27 +121,22 @@ func loadClaudeToken() (string, error) {
 		return t, nil
 	}
 	if runtime.GOOS == "darwin" {
-		for _, service := range []string{claudeTokenService, legacyClaudeTokenService} {
-			out, err := exec.Command("security", "find-generic-password", "-s", service, "-a", tokenAccount(), "-w").Output()
-			if err == nil {
-				return strings.TrimSpace(string(out)), nil
-			}
+		out, err := exec.Command("security", "find-generic-password", "-s", claudeTokenService, "-a", tokenAccount(), "-w").Output()
+		if err == nil {
+			return strings.TrimSpace(string(out)), nil
 		}
 		// Not in the Keychain: fall through to the file, which is where a
 		// Keychain that refused the write sent it.
 	}
-	paths, err := claudeTokenPaths()
+	p, err := claudeTokenPath()
 	if err != nil {
 		return "", err
 	}
-	for _, p := range paths {
-		data, err := os.ReadFile(p)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		return strings.TrimSpace(string(data)), err
+	data, err := os.ReadFile(p)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
 	}
-	return "", nil
+	return strings.TrimSpace(string(data)), err
 }
 
 // saveClaudeToken stores token and says where.
@@ -174,41 +166,24 @@ func saveClaudeToken(token string) (string, error) {
 	return "in " + p, nil
 }
 
-// removeClaudeToken forgets the token everywhere it's read from --
-// boxctl's places included, or logging out wouldn't.
+// removeClaudeToken forgets the token where it's read from: the Keychain
+// and the file.
 func removeClaudeToken() {
 	if runtime.GOOS == "darwin" {
-		for _, service := range []string{claudeTokenService, legacyClaudeTokenService} {
-			_ = exec.Command("security", "delete-generic-password", "-s", service, "-a", tokenAccount()).Run()
-		}
+		_ = exec.Command("security", "delete-generic-password", "-s", claudeTokenService, "-a", tokenAccount()).Run()
 	}
-	if paths, err := claudeTokenPaths(); err == nil {
-		for _, p := range paths {
-			_ = os.Remove(p)
-		}
+	if p, err := claudeTokenPath(); err == nil {
+		_ = os.Remove(p)
 	}
 }
 
-// claudeTokenPath is where the token file is written.
+// claudeTokenPath is the token file, ~/.onctl/claude/oauth-token.
 func claudeTokenPath() (string, error) {
-	paths, err := claudeTokenPaths()
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return paths[0], nil
-}
-
-// claudeTokenPaths are where the token file is read from: onctl's, then
-// boxctl's.
-func claudeTokenPaths() ([]string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-	return []string{
-		filepath.Join(home, ".onctl", "claude", claudeTokenFile),
-		filepath.Join(home, ".boxctl", "claude", claudeTokenFile),
-	}, nil
+	return filepath.Join(home, ".onctl", "claude", claudeTokenFile), nil
 }
 
 // tokenAccount is the Keychain account the token is filed under: this

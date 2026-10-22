@@ -34,14 +34,14 @@ func TestLoadCredentials(t *testing.T) {
 		t.Fatalf("no token anywhere: got %v", err)
 	}
 
-	// boxctl's saved token works without logging in again.
-	writeJSON(t, filepath.Join(dir, ".boxctl", "config.json"), `{"api_url":"https://legacy","token":"old"}`)
+	// The saved file is read back, with its API URL.
+	writeJSON(t, filepath.Join(dir, ".onctl", "boxes.json"), `{"api_url":"https://saved","token":"old"}`)
 	c, err := LoadCredentials("")
-	if err != nil || c.Token != "old" || c.APIURL != "https://legacy" {
-		t.Fatalf("legacy: %+v %v", c, err)
+	if err != nil || c.Token != "old" || c.APIURL != "https://saved" {
+		t.Fatalf("saved file: %+v %v", c, err)
 	}
 
-	// onctl's own file wins over boxctl's.
+	// Logging in replaces it.
 	if err := SaveCredentials(&Credentials{Token: "new"}); err != nil {
 		t.Fatal(err)
 	}
@@ -65,12 +65,15 @@ func TestLoadCredentials(t *testing.T) {
 		t.Fatalf("env: %+v", c)
 	}
 
-	// Logging out removes onctl's file only.
+	// Logging out leaves no token. boxctl's own ~/.boxctl/config.json is
+	// never read -- onctl's credentials are its own -- so it doesn't stand
+	// in for the removed one.
 	t.Setenv(TokenEnv, "")
+	writeJSON(t, filepath.Join(dir, ".boxctl", "config.json"), `{"token":"boxctl"}`)
 	if err := ClearCredentials(); err != nil {
 		t.Fatal(err)
 	}
-	if c, _ := LoadCredentials(""); c.Token != "old" {
-		t.Fatalf("after logout boxctl's own token should remain usable: %+v", c)
+	if _, err := LoadCredentials(""); !errors.Is(err, ErrNotLoggedIn) {
+		t.Fatalf("after logout, with only boxctl's file present: got %v, want not logged in", err)
 	}
 }

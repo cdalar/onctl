@@ -33,15 +33,6 @@ func CredentialsPath() (string, error) {
 	return filepath.Join(h, ".onctl", "boxes.json"), nil
 }
 
-// legacyPath is boxctl's own ~/.boxctl/config.json, the same shape.
-func legacyPath() (string, error) {
-	h, err := home()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(h, ".boxctl", "config.json"), nil
-}
-
 func readCredentials(path string) (*Credentials, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -55,30 +46,23 @@ func readCredentials(path string) (*Credentials, error) {
 }
 
 // LoadCredentials finds the token: $ONCTL_BOXES_TOKEN, then
-// ~/.onctl/boxes.json, then boxctl's ~/.boxctl/config.json (so a boxctl
-// user needn't log in again). apiURL, when set (boxes.apiURL in
-// onctl.yaml), wins over the saved one; DefaultAPIURL is the fallback.
+// ~/.onctl/boxes.json. apiURL, when set (boxes.apiURL in onctl.yaml),
+// wins over the saved one; DefaultAPIURL is the fallback.
 func LoadCredentials(apiURL string) (*Credentials, error) {
 	creds := &Credentials{}
 	if tok := os.Getenv(TokenEnv); tok != "" {
 		creds.Token = tok
 	} else {
-		for _, pathFn := range []func() (string, error){CredentialsPath, legacyPath} {
-			p, err := pathFn()
-			if err != nil {
-				return nil, err
-			}
-			c, err := readCredentials(p)
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			if err != nil {
-				return nil, err
-			}
-			if c.Token != "" {
-				creds = c
-				break
-			}
+		p, err := CredentialsPath()
+		if err != nil {
+			return nil, err
+		}
+		c, err := readCredentials(p)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		if c != nil {
+			creds = c
 		}
 	}
 	if creds.Token == "" {

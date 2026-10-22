@@ -161,14 +161,11 @@ func (s *tokenServer) close() (given, refused int) {
 
 // storeGitHubToken logs a token in to gh on the box and makes gh git's
 // credential helper there, for --github store. The token comes from
-// ONCTL_GITHUB_TOKEN (or boxctl's BOXCTL_GITHUB_TOKEN), or is asked for -- never from `gh auth token`,
+// ONCTL_GITHUB_TOKEN, or is asked for -- never from `gh auth token`,
 // which usually reaches every repository you can, and would then sit on
 // the box for as long as it exists.
 func storeGitHubToken(ctx context.Context, box *boxSSH, repo string) error {
 	token := strings.TrimSpace(os.Getenv("ONCTL_GITHUB_TOKEN"))
-	if token == "" {
-		token = strings.TrimSpace(os.Getenv("BOXCTL_GITHUB_TOKEN")) // boxctl's name for it
-	}
 	if token == "" {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
 			return errors.New("--github store needs a token: set ONCTL_GITHUB_TOKEN")
