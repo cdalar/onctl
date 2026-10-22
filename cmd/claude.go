@@ -517,8 +517,7 @@ func ensureClaudeBox(ctx context.Context, c *providerboxes.Client, name string, 
 }
 
 // ensureClaudeKey returns the private key onctl uses for boxes it runs
-// Claude on -- the Claude Code plugin's key, so either tool can reach a
-// box the other set up -- generating it the first time.
+// Claude on, ~/.onctl/claude/id_ed25519, generating it the first time.
 func ensureClaudeKey() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -527,11 +526,6 @@ func ensureClaudeKey() (string, error) {
 	key := filepath.Join(home, ".onctl", "claude", "id_ed25519")
 	if _, err := os.Stat(key); err == nil {
 		return key, nil
-	}
-	// onctl's key, if it made one: already authorized on its boxes, and
-	// the one the Claude Code plugin uses.
-	if legacy := filepath.Join(home, ".boxctl", "claude", "id_ed25519"); fileExists(legacy) {
-		return legacy, nil
 	}
 	if err := os.MkdirAll(filepath.Dir(key), 0o700); err != nil {
 		return "", err
@@ -744,9 +738,4 @@ func ensureRunning(ctx context.Context, c *providerboxes.Client, name string, ti
 		return err
 	}
 	return fmt.Errorf("no box named %s", name)
-}
-
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }

@@ -26,10 +26,7 @@ var loginCmd = &cobra.Command{
 
 The token is read from a hidden prompt, or from stdin when piped. It's
 checked against the service before it's saved. $` + providerboxes.TokenEnv + `
-overrides the saved token without logging in, for CI.
-
-If you used boxctl, its saved token (~/.boxctl/config.json) already works:
-onctl reads it until you log in here.`,
+overrides the saved token without logging in, for CI.`,
 	Example: `  onctl login
   pbpaste | onctl login`,
 	Args: cobra.NoArgs,
