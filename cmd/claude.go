@@ -35,8 +35,8 @@ import (
 const (
 	claudeDefaultImage = "claude-agent"
 	claudeDefaultSize  = "medium"
-	// claudeSession is the tmux session Claude runs in on the box: one
-	// per box, so a second `onctl claude` attaches to it.
+	// claudeSession is the session Claude runs in on the box (in tmux, or
+	// herdr): one per box, so a second `onctl claude` attaches to it.
 	claudeSession = "claude"
 	// claudeInstall is Anthropic's installer, run on first use rather than
 	// baking Claude Code into the image (which would redistribute it). It
@@ -88,15 +88,20 @@ key, installs tmux, git and Claude Code, and from there on it's the same.
 A VM is paused and resumed with onctl pause/resume, not on its own.
 
 Claude runs in tmux, so it keeps going when you detach (Ctrl-b d) or the
-connection drops; run onctl claude again to come back to it. The box's
-copy of the project is the one Claude works on: later runs don't copy it
-again, and nothing is synced back -- Claude commits and pushes from the
-box.
+connection drops; run onctl claude again to come back to it. --mux herdr
+runs it in herdr (herdr.dev) instead: a terminal workspace manager made
+for coding agents that shows every task on the box in one window, each
+marked working, blocked or idle; Ctrl-b q detaches. ONCTL_MUX=herdr makes
+it the default, and a box keeps using whichever its sessions were started
+in. The box's copy of the project is the one Claude works on: later runs
+don't copy it again, and nothing is synced back -- Claude commits and
+pushes from the box.
 
   onctl claude                           # create or reattach
   onctl claude --prompt "fix the flaky auth test"
   onctl claude --detach --prompt "..."   # start it, don't attach
   onctl claude -- --model opus           # arguments for claude itself
+  onctl claude --mux herdr               # in herdr instead of tmux
   onctl -p hetzner claude                # the same, on your own Hetzner VM
   onctl claude --repo owner/name         # no project here: a box with the repo cloned, on a new branch
 
@@ -139,11 +144,16 @@ func init() {
 	claudeCmd.Flags().StringVar(&claudeGitHub, "github", githubForward, "GitHub credentials for the box: forward (lent while attached), store (a token kept on the box) or off")
 	_ = claudeCmd.RegisterFlagCompletionFunc("github", cobra.FixedCompletions([]string{githubForward, githubStore, githubOff}, cobra.ShellCompDirectiveNoFileComp))
 	claudeCmd.Flags().DurationVar(&claudeIdle, "idle-ttl", claudeDefaultIdleTTL, "pause the box after this long unused, 10m to 720h (set on a new box, or on an existing one when given; boxes only)")
+	claudeCmd.PersistentFlags().StringVar(&muxArg, "mux", defaultMux(), "what keeps Claude running on the box between attaches: tmux, or herdr (herdr.dev, installed on the box the first time). "+muxEnv+" sets the default; a box keeps the one its sessions started in")
+	_ = claudeCmd.RegisterFlagCompletionFunc("mux", cobra.FixedCompletions([]string{"tmux", "herdr"}, cobra.ShellCompDirectiveNoFileComp))
 	rootCmd.AddCommand(claudeCmd)
 }
 
 func runClaude(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
+	if err := resolveMux(cmd); err != nil {
+		return err
+	}
 	switch claudeGitHub {
 	case githubForward, githubStore, githubOff:
 	default:
@@ -200,7 +210,7 @@ func runClaude(cmd *cobra.Command, args []string) error {
 
 	// First: everything after this needs git on the box, and a VM made
 	// from a plain image has none.
-	if err := box.run(ctx, claudeSetupScript, nil); err != nil {
+	if err := box.run(ctx, claudeSetupScript(), nil); err != nil {
 		return fmt.Errorf("installing Claude Code on %s: %w", name, err)
 	}
 	if t.needsCopy {
@@ -237,9 +247,7 @@ func runClaude(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "warning: couldn't skip Claude's first-run setup on %s: %v\n", name, err)
 	}
 
-	// =name: exact. A bare -t name falls back to a prefix match, so "claude"
-	// would find "claude-auth" and take the main session for running.
-	running := box.run(ctx, "tmux has-session -t ="+sess.tmux+" 2>/dev/null", nil) == nil
+	running := sessionRunning(ctx, box, sess)
 	if claudeHandoff != "" {
 		if running {
 			return fmt.Errorf("a Claude session is already running there -- attach with %s and quit it, then hand off again", attachHint(sess, name))
@@ -272,14 +280,30 @@ func startSession(ctx context.Context, box *boxSSH, name string, sess taskSessio
 	line := sess.commandLine(claudePrompt, args)
 	if claudeDetach {
 		if !running {
-			if err := box.run(ctx, sess.tmuxCommand(line, true), nil); err != nil {
+			if err := box.run(ctx, mux.start(sess, line, true), nil); err != nil {
 				return fmt.Errorf("starting Claude on %s: %w", name, err)
 			}
 		}
 		fmt.Fprintf(os.Stderr, "Claude is running on %s; attach with: %s\n", name, hint)
 		return nil
 	}
-	return attachClaude(ctx, box, sess, sess.tmuxCommand(line, false))
+	return attachClaude(ctx, box, sess, mux.start(sess, line, false))
+}
+
+// resolveMux makes --mux's multiplexer the running command's.
+func resolveMux(cmd *cobra.Command) error {
+	m, err := muxNamed(muxArg)
+	if err != nil {
+		return err
+	}
+	mux, muxExplicit = m, cmd.Flags().Changed("mux")
+	return nil
+}
+
+// sessionRunning reports whether sess's Claude is running on the box, in
+// its multiplexer.
+func sessionRunning(ctx context.Context, box *boxSSH, sess taskSession) bool {
+	return box.run(ctx, mux.running(sess), nil) == nil
 }
 
 // attachHint is the command that comes back to this session, naming the
@@ -385,12 +409,39 @@ func openClaudeBox(ctx context.Context, create, setTTL bool) (*claudeTarget, err
 		box.close()
 		return nil, fmt.Errorf("can't ssh into %s: %w", name, err)
 	}
-	needsCopy, err := checkProject(ctx, box, dir)
+	needsCopy, boxMux, err := checkProject(ctx, box, dir)
 	if err != nil {
 		box.close()
 		return nil, err
 	}
+	if err := useBoxMux(ctx, box, dir, boxMux); err != nil {
+		box.close()
+		return nil, err
+	}
 	return &claudeTarget{dir: dir, name: name, box: box, needsCopy: needsCopy}, nil
+}
+
+// useBoxMux makes the box's multiplexer -- the one its sessions were
+// started in, recorded on it by mux.start -- the run's, unless --mux was
+// given: then a session running in the other one is refused, rather than
+// started again beside it. A box with no record (nothing started yet, or
+// from before the record) takes --mux or its default.
+func useBoxMux(ctx context.Context, box *boxSSH, dir, name string) error {
+	if name == "" || name == mux.name() {
+		return nil
+	}
+	other, err := muxNamed(name)
+	if err != nil {
+		return nil // a newer onctl's: nothing this one can do with it
+	}
+	if !muxExplicit {
+		mux = other
+		return nil
+	}
+	if box.run(ctx, other.running(newTaskSession(dir, claudeTask)), nil) == nil {
+		return fmt.Errorf("Claude is running in %s on %s -- attach with --mux %s, or quit it first", name, box.name, name)
+	}
+	return nil
 }
 
 // connectClaudeBox is openClaudeBox's boxes half: the box resumed or
@@ -417,33 +468,42 @@ func connectClaudeBox(ctx context.Context, name string, create, setTTL bool) (*b
 }
 
 // checkProject reports whether dir still has to be copied to the box,
-// refusing a box that holds a different project. A box from before the
-// marker existed is taken to hold whichever project it has at dir.
-func checkProject(ctx context.Context, box *boxSSH, dir string) (needsCopy bool, err error) {
+// refusing a box that holds a different project, and the multiplexer
+// the box's sessions run in ("" if none has started). A box from before
+// the marker existed is taken to hold whichever project it has at dir.
+func checkProject(ctx context.Context, box *boxSSH, dir string) (needsCopy bool, boxMux string, err error) {
 	out, err := box.output(ctx, projectCheckScript(dir))
-	switch status := strings.TrimSpace(string(out)); {
+	status, boxMux := parseProjectCheck(string(out))
+	switch {
 	case err != nil:
-		return false, fmt.Errorf("checking %s's project: %w", box.name, err)
+		return false, "", fmt.Errorf("checking %s's project: %w", box.name, err)
 	case status == "copy":
-		return true, nil
+		return true, boxMux, nil
 	case status == "ok":
-		return false, nil
+		return false, boxMux, nil
 	case strings.HasPrefix(status, "other "):
 		other := strings.TrimPrefix(status, "other ")
-		return false, fmt.Errorf("%s holds %s, not %s -- run onctl claude from there, or pick another box with --box", box.name, other, dir)
+		return false, "", fmt.Errorf("%s holds %s, not %s -- run onctl claude from there, or pick another box with --box", box.name, other, dir)
 	default:
-		return false, fmt.Errorf("checking %s's project: unexpected %q", box.name, status)
+		return false, "", fmt.Errorf("checking %s's project: unexpected %q", box.name, status)
 	}
+}
+
+// parseProjectCheck splits projectCheckScript's output: the project's
+// status on the first line, the box's multiplexer on the second.
+func parseProjectCheck(out string) (status, boxMux string) {
+	status, boxMux, _ = strings.Cut(strings.TrimSpace(out), "\n")
+	return strings.TrimSpace(status), strings.TrimSpace(boxMux)
 }
 
 func projectCheckScript(dir string) string { return projectCheckScriptAt(projectMarker, dir) }
 
 func projectCheckScriptAt(marker, dir string) string {
 	d := shellQuote(dir)
-	return `m=` + shellQuote(marker) + `
-if [ -s "$m" ] && [ "$(cat "$m")" != ` + d + ` ]; then printf 'other %s' "$(cat "$m")"; exit 0; fi
-if [ -e ` + d + ` ]; then mkdir -p "$(dirname "$m")" && printf '%s' ` + d + ` >"$m"; echo ok; exit 0; fi
-echo copy`
+	return `m=` + shellQuote(marker) + `; s=copy
+if [ -s "$m" ] && [ "$(cat "$m")" != ` + d + ` ]; then s="other $(cat "$m")"
+elif [ -e ` + d + ` ]; then mkdir -p "$(dirname "$m")" && printf '%s' ` + d + ` >"$m"; s=ok; fi
+printf '%s\n' "$s"; cat ` + shellQuote(muxMarker) + ` 2>/dev/null || true`
 }
 
 // markProject records dir as the box's project, and lets onctl claude
@@ -456,18 +516,22 @@ func markProject(ctx context.Context, box *boxSSH, dir string) error {
 [ ! -d `+d+`/.git ] || git -C `+d+` config receive.denyCurrentBranch updateInstead`, nil)
 }
 
-// claudeSetupScript makes sure the box can run Claude in tmux. On the
-// claude-agent image only the Claude Code install does anything, once;
-// other images (a cloud VM's) get tmux, git and curl from apt -- after
-// cloud-init is done with apt, on a VM that was just created.
-const claudeSetupScript = `set -e
+// claudeSetupScript makes sure the box can run Claude in its multiplexer.
+// On the claude-agent image only the Claude Code install (and herdr's,
+// with --mux herdr) does anything, once; other images (a cloud VM's) get
+// tmux, git and curl from apt -- after cloud-init is done with apt, on a
+// VM that was just created -- and the multiplexer its own way (mux.setup).
+func claudeSetupScript() string {
+	return `set -e
 export PATH="$HOME/.local/bin:$PATH"
 missing=""; for t in tmux git curl; do command -v $t >/dev/null || missing="$missing $t"; done
 if [ -n "$missing" ]; then
   ! command -v cloud-init >/dev/null || cloud-init status --wait >/dev/null 2>&1 || true
   echo "Installing$missing..." >&2; apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $missing >/dev/null
 fi
+` + mux.setup() + `
 command -v claude >/dev/null || { echo "Installing Claude Code..." >&2; ` + claudeInstall + ` >&2; }`
+}
 
 // projectDir is the git repository's top level, or the directory itself
 // outside one, for --project or else the current directory -- the

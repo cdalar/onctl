@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -18,8 +17,8 @@ var claudeLsCmd = &cobra.Command{
 	Short: "List this project's Claude sessions: the main one and its tasks",
 	Long: `Lists the Claude sessions working on this project: the main checkout and
 each --task worktree on the project's box (with its branch, whether
-Claude is running there, and when it last showed activity), plus the
-boxes of --own-box tasks.`,
+Claude is running there, and when it last showed activity -- or, in
+herdr, what it's doing), plus the boxes of --own-box tasks.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		return claudeList(cmd.Context())
@@ -83,22 +82,13 @@ func listBoxSessions(ctx context.Context, tw *tabwriter.Writer, dir string) (int
 	if t.needsCopy {
 		return 0, nil
 	}
-	out, err := t.box.output(ctx, "git -C "+shellQuote(dir)+" worktree list --porcelain 2>/dev/null; echo '--tmux--'; tmux ls -F '#{session_name} #{session_activity}' 2>/dev/null || true")
+	out, err := t.box.output(ctx, "git -C "+shellQuote(dir)+" worktree list --porcelain 2>/dev/null; echo '--sessions--'; "+mux.list())
 	if err != nil {
 		return 0, err
 	}
-	porcelain, sessions, _ := strings.Cut(string(out), "--tmux--")
+	porcelain, sessions, _ := strings.Cut(string(out), "--sessions--")
 	branches := worktreeBranches(porcelain)
-	activity := map[string]int64{}
-	for _, line := range strings.Split(sessions, "\n") {
-		name, at, ok := strings.Cut(strings.TrimSpace(line), " ")
-		if !ok {
-			continue
-		}
-		if n, err := strconv.ParseInt(at, 10, 64); err == nil {
-			activity[name] = n
-		}
-	}
+	activity := mux.parseList(sessions)
 	worktrees := parseWorktrees(porcelain, dir)
 	sort.SliceStable(worktrees, func(i, j int) bool { return worktrees[i].task < worktrees[j].task })
 	for _, w := range worktrees {
@@ -108,8 +98,8 @@ func listBoxSessions(ctx context.Context, tw *tabwriter.Writer, dir string) (int
 			task = "(main)"
 		}
 		state, active := "stopped", "-"
-		if at, ok := activity[s.tmux]; ok {
-			state, active = "running", ago(time.Unix(at, 0))
+		if a, ok := activity[s.name]; ok {
+			state, active = "running", a
 		}
 		branch := branches[w.dir]
 		if branch == "" {
