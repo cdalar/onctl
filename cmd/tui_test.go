@@ -645,6 +645,51 @@ func TestTUIProviderSwitch(t *testing.T) {
 // A switch whose config can't be loaded leaves the provider the tui
 // had, in the global and in ONCTL_CLOUD (which the children read), so
 // the tui comes back on it with the reason.
+// Tab at the `:` prompt completes the command: a unique prefix fills in
+// (the point: `:pro` means providers, not a typo to retype), several
+// candidates grow to their shared prefix and are flashed, and an argument
+// is left alone.
+func TestTUICommandComplete(t *testing.T) {
+	tuiFlashFor = time.Millisecond
+	m := listed(t, tuiFixture(), 120, 40)
+	m, _ = press(t, m, ":")
+	m = typeIn(t, m, "pro")
+	m, _ = press(t, m, "tab")
+	if got := m.command.Value(); got != "providers " {
+		t.Errorf(":pro<tab> = %q, want %q", got, "providers ")
+	}
+	m, _ = press(t, m, "esc")
+
+	m, _ = press(t, m, ":")
+	m = typeIn(t, m, "S")
+	m, _ = press(t, m, "tab")
+	if got := m.command.Value(); got != "s" {
+		t.Errorf(":S<tab> = %q, want the shared prefix %q", got, "s")
+	}
+	if m.flashErr || !strings.Contains(m.flash, "sizes") || !strings.Contains(m.flash, "ssh") {
+		t.Errorf(":S<tab> flash=%q, want the candidates", m.flash)
+	}
+	m, _ = press(t, m, "esc")
+
+	m, _ = press(t, m, ":")
+	m = typeIn(t, m, "ssh we")
+	m, _ = press(t, m, "tab")
+	if got := m.command.Value(); got != "ssh we" {
+		t.Errorf(":ssh we<tab> = %q, want it unchanged", got)
+	}
+	m, _ = press(t, m, "esc")
+
+	// The completed word runs as typed: `:providers hetzner` switches
+	// like `:provider hetzner`, so completion needs one spelling only.
+	withCloudProvider(t, "hetzner")
+	m, _ = press(t, m, ":")
+	m = typeIn(t, m, "providers nope")
+	m, _ = press(t, m, "enter")
+	if !m.flashErr || !strings.Contains(m.flash, "unknown provider") {
+		t.Errorf(":providers nope: flash=%q", m.flash)
+	}
+}
+
 func TestTUISwitchProviderRestores(t *testing.T) {
 	withCloudProvider(t, "hetzner")
 	origConfig := flagConfigFile

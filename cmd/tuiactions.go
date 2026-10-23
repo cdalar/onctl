@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 
 	"github.com/cdalar/onctl/internal/tools"
@@ -65,10 +66,58 @@ func (m tuiModel) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		line := m.command.Value()
 		m.command.SetValue("")
 		return m.runCommand(line)
+	case tea.KeyTab:
+		return m.completeCommand()
 	}
 	var cmd tea.Cmd
 	m.command, cmd = m.command.Update(msg)
 	return m, cmd
+}
+
+// tuiCommands is what tab completes at the `:` prompt: the views' names
+// and the other commands. Aliases (`:vm`, `:ctx`) are typed out.
+func tuiCommands() []string {
+	names := []string{"create", "ssh", "claude", "help", "q"}
+	for _, v := range tuiViews {
+		names = append(names, v.name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// completeCommand is tab at the `:` prompt: the first word grows to the
+// one command it starts (`:pro` -> `:providers `), or to what the several
+// it starts share, flashing them to pick from (`:s` -> sizes, ssh). Once
+// the command has an argument, tab does nothing.
+func (m tuiModel) completeCommand() (tea.Model, tea.Cmd) {
+	line := m.command.Value()
+	if strings.ContainsAny(line, " \t") {
+		return m, nil
+	}
+	word := strings.ToLower(line)
+	var matches []string
+	for _, c := range tuiCommands() {
+		if strings.HasPrefix(c, word) {
+			matches = append(matches, c)
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return m, nil
+	case 1:
+		m.command.SetValue(matches[0] + " ")
+		m.command.CursorEnd()
+		return m, nil
+	}
+	prefix := matches[0]
+	for _, c := range matches[1:] {
+		for !strings.HasPrefix(c, prefix) {
+			prefix = prefix[:len(prefix)-1]
+		}
+	}
+	m.command.SetValue(prefix)
+	m.command.CursorEnd()
+	return m, m.say("%s", strings.Join(matches, "  "))
 }
 
 // runCommand is a `:` command: a view's name, q, help, create, ssh,
@@ -96,7 +145,7 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 			return m.claude(words[1])
 		}
 		return m.claude("")
-	case "provider", "ctx", "cloud":
+	case "provider", "providers", "ctx", "cloud":
 		if len(words) > 1 {
 			return m.switchProvider(words[1])
 		}
@@ -348,6 +397,7 @@ func (m *tuiModel) pushHelp() {
 		{":claude [vm]", "run Claude Code on a VM (the project's box without one)"},
 		{":provider [name]", "switch cloud provider (a list to pick from without a name)"},
 		{":help", "this page"}, {":q", "quit (ctrl-c too)"},
+		{"tab", "complete the command (`:pro` -> `:providers`)"},
 		{"/text", "filter the rows; esc clears"},
 		{"j/k ↑/↓", "move; ctrl-f/ctrl-b page; g/G top/bottom"},
 		{"shift+letter", "sort by that column (again: the other way)"},
