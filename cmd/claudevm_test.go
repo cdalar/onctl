@@ -6,6 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/cdalar/onctl/pkg/cloud"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestRootLoginScript runs the script that lets root in on a cloud VM,
@@ -113,4 +117,37 @@ func TestClaudeSetupScriptInstallsOnlyWhatIsMissing(t *testing.T) {
 	if got := run(t, "tmux"); !strings.Contains(got, "install -y -qq git curl") {
 		t.Errorf("git and curl not installed: %q", got)
 	}
+}
+
+// A stopped VM that List returns (ac, aws) has no address: onctl claude
+// must resume it, not hand it back as is and fail to ssh (issue seen with
+// a paused ac box: "claude-onctl has no address to ssh to").
+func TestEnsureClaudeVMResumesStoppedVMFromList(t *testing.T) {
+	fake := &tuiFakeProvider{vms: []cloud.Vm{
+		{Name: "claude-onctl", Status: "stopped", Provider: "ac"},
+	}}
+	prev := provider
+	provider = fake
+	t.Cleanup(func() { provider = prev })
+
+	vm, created, err := ensureClaudeVM("claude-onctl", "/dev/null", false)
+	require.NoError(t, err)
+	assert.False(t, created)
+	assert.Equal(t, "10.0.0.9", vm.IP, "the resumed VM's address, not the stopped record's")
+	assert.Equal(t, []string{"sshkey", "resume claude-onctl key=key-1"}, fake.calls)
+}
+
+func TestEnsureClaudeVMReturnsRunningVMWithoutResuming(t *testing.T) {
+	fake := &tuiFakeProvider{vms: []cloud.Vm{
+		{Name: "claude-onctl", Status: "running", IP: "192.168.65.4", Provider: "ac"},
+	}}
+	prev := provider
+	provider = fake
+	t.Cleanup(func() { provider = prev })
+
+	vm, created, err := ensureClaudeVM("claude-onctl", "/dev/null", false)
+	require.NoError(t, err)
+	assert.False(t, created)
+	assert.Equal(t, "192.168.65.4", vm.IP)
+	assert.Empty(t, fake.calls, "a running VM is used as is")
 }
