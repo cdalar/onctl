@@ -154,10 +154,13 @@ func listVMs(p cloud.CloudProviderInterface) (running, paused cloud.VmList, err 
 }
 
 // isPausedStatus reports whether a VM status means stopped/paused rather than
-// running. AWS uses "stopped", GCP uses "TERMINATED" (stopped, not deleted),
-// Azure uses "VM deallocated", OVH uses "SHELVED"/"SHELVED_OFFLOADED".
+// running. AWS uses "stopped", Hetzner "off" (a server powered off outside
+// onctl pause, which snapshots and deletes it), GCP uses "TERMINATED"
+// (stopped, not deleted), Azure uses "VM deallocated", OVH uses
+// "SHELVED"/"SHELVED_OFFLOADED".
 func isPausedStatus(status string) bool {
 	return status == "stopped" ||
+		status == "off" ||
 		status == "TERMINATED" ||
 		status == "SHELVED" ||
 		status == "SHELVED_OFFLOADED" ||

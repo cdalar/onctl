@@ -31,7 +31,8 @@ func TestListCmd_FlagDefaults(t *testing.T) {
 }
 
 // TestIsPausedStatus documents the cross-provider paused/resumable
-// convention (AWS "stopped", GCP "TERMINATED", Azure "...deallocated") and
+// convention (AWS "stopped", Hetzner "off", GCP "TERMINATED", Azure
+// "...deallocated") and
 // guards against fc's "dead" status (a non-resumable, process-is-gone state
 // with no cross-provider equivalent) ever being folded back into it, which
 // would misreport a dead-after-host-reboot microVM as merely "paused" in
@@ -42,6 +43,7 @@ func TestIsPausedStatus(t *testing.T) {
 		want   bool
 	}{
 		{"stopped", true},
+		{"off", true},
 		{"TERMINATED", true},
 		{"VM deallocated", true},
 		{"SHELVED", true},
