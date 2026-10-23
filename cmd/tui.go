@@ -27,8 +27,9 @@ import (
 // bottom. It is a front end to the provider calls the subcommands make
 // -- List/ListPaused, Pause, Resume, Destroy, ListImages, ListSizes --
 // and runs `onctl ssh`, `onctl create` and `onctl claude` as child
-// processes for a terminal, a new VM and Claude Code on a VM, so nothing
-// here changes how those commands behave. `:provider` switches clouds
+// processes for a terminal, a new VM and Claude Code on a VM (or, from
+// `:repos`, on a box with a GitHub repository cloned -- tuirepos.go), so
+// nothing here changes how those commands behave. `:provider` switches clouds
 // like k9s's `:ctx`: the tui restarts on the other provider.
 
 var tuiCmd = &cobra.Command{
@@ -36,7 +37,7 @@ var tuiCmd = &cobra.Command{
 	Short: "Browse and manage your VMs in a k9s-style terminal UI",
 	Long: `Opens a live, full-screen view of your VMs, laid out like k9s.
 
-  :vms :images :sizes   switch view (also :q, :help, :create)
+  :vms :images :sizes :repos   switch view (also :q, :help, :create)
   :provider [name]      switch cloud provider (a list to pick from without a name)
   :claude [vm]          run Claude Code on a VM (onctl claude --box vm; the project's box without one)
   /text        filter the rows; esc clears
@@ -44,6 +45,8 @@ var tuiCmd = &cobra.Command{
   enter, d     describe the VM; y its JSON
   s            open a terminal on the VM (onctl ssh)
   a            run Claude Code on the VM (onctl claude --box vm)
+  enter        in :repos (your GitHub repos, newest push first, from gh), start Claude
+               on a box of this provider with the repo cloned (onctl claude --repo)
   c            create a VM (name, image and type are asked; runs onctl create)
   p / r        pause / resume
   ctrl-d       destroy the VM (asks first)
@@ -148,10 +151,11 @@ var tuiFlashFor = 5 * time.Second
 // Messages from the commands the model runs.
 type (
 	tuiListMsg struct {
-		resource string // vms, images, sizes
+		resource string // vms, images, sizes, repos
 		vms      []cloud.Vm
 		images   []cloud.CloudImage
 		sizes    []cloud.CloudSize
+		repos    []ghRepo
 		err      error
 	}
 	tuiActionMsg struct {
@@ -162,6 +166,11 @@ type (
 	tuiChildDoneMsg struct { // `onctl ssh`/`onctl create`/`onctl claude` exited
 		verb   string // ssh, create, claude
 		name   string
+		err    error
+		stderr string
+	}
+	tuiClaudeDoneMsg struct { // `onctl claude --repo` from :repos ended
+		repo   string
 		err    error
 		stderr string
 	}
@@ -213,6 +222,8 @@ type tuiModel struct {
 	vms     []cloud.Vm // every VM, running then paused, as sortVMs orders them
 	images  []cloud.CloudImage
 	sizes   []cloud.CloudSize
+	repos   []ghRepo         // GitHub's, newest push first (tuirepos.go)
+	reposAt time.Time        // when repos came from GitHub, or the cache did
 	loaded  map[string]bool  // resources listed at least once
 	loading map[string]bool  // listings in flight
 	listErr map[string]error // why a resource's last listing failed
@@ -251,7 +262,7 @@ func newTUI(p cloud.CloudProviderInterface) tuiModel {
 	f.CharLimit = 80
 	cmd := textinput.New()
 	cmd.Prompt = ""
-	cmd.Placeholder = "vms, images, sizes, create, claude, provider, help, q"
+	cmd.Placeholder = "vms, images, sizes, repos, create, claude, provider, help, q"
 	cmd.CharLimit = 80
 	sp := bspinner.New(bspinner.WithSpinner(bspinner.Spinner{Frames: tuiSpinnerFrames, FPS: 80 * time.Millisecond}))
 	sp.Style = k9s.logo
@@ -296,6 +307,9 @@ func (m *tuiModel) pop() {
 // list fetches one resource; "" (a view made of what's known) is
 // nothing to fetch.
 func (m *tuiModel) list(resource string) tea.Cmd {
+	if resource == "repos" {
+		return m.listRepos(false)
+	}
 	if resource == "" || m.loading[resource] {
 		return nil
 	}
@@ -443,6 +457,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.images = msg.images
 		case "sizes":
 			m.sizes = msg.sizes
+		case "repos":
+			m.repos = msg.repos
+			m.reposAt = time.Now()
 		}
 		// A describe/json page follows its VM.
 		for i := range m.pages {
@@ -495,6 +512,12 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(m.say("created %s", what), m.refresh())
 		}
 		return m, m.refresh()
+
+	case tuiClaudeDoneMsg:
+		if msg.err != nil {
+			return m, tea.Batch(m.fail("claude on %s: %s", msg.repo, claudeFailure(msg.stderr, msg.err)), m.refresh())
+		}
+		return m, tea.Batch(m.say("claude on %s ended", msg.repo), m.refresh())
 
 	case tuiCatalogMsg:
 		if m.create != nil {

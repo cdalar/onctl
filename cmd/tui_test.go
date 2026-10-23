@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -758,5 +761,206 @@ func TestTUICreateForm(t *testing.T) {
 	m, _ = press(t, m, "esc")
 	if m.create != nil {
 		t.Error("esc didn't close the form")
+	}
+}
+
+// :repos is gh's listing, not the provider's: the rows come from the
+// cache when there is one and from GitHub otherwise (or when stale, or
+// on R), never on the tick; enter hands the terminal to `onctl claude
+// --repo` on the tui's provider, and d says so.
+func TestTUIRepos(t *testing.T) {
+	tuiFlashFor = time.Millisecond
+	withCloudProvider(t, "hetzner")
+	cache := filepath.Join(t.TempDir(), "repos.json")
+	origPath, origList := repoCachePath, listGitHubRepos
+	t.Cleanup(func() { repoCachePath, listGitHubRepos = origPath, origList })
+	repoCachePath = func() (string, error) { return cache, nil }
+	now := time.Now()
+	fetched := 0
+	listGitHubRepos = func(context.Context) ([]ghRepo, error) {
+		fetched++
+		return []ghRepo{
+			{FullName: "cdalar/onctl", Description: "the CLI", Language: "Go", PushedAt: now.Add(-time.Hour)},
+			{FullName: "acme/web", Private: true, Fork: true, Language: "TypeScript", PushedAt: now.Add(-48 * time.Hour)},
+			{FullName: "acme/old", Archived: true, PushedAt: now.Add(-24 * 30 * time.Hour)},
+		}, nil
+	}
+
+	f := tuiFixture()
+	m := listed(t, f, 140, 40)
+	// :repos with no cache asks GitHub.
+	m, _ = press(t, m, ":")
+	m = typeIn(t, m, "repos")
+	m, cmd := press(t, m, "enter")
+	if m.top().view != reposView || cmd == nil || !m.loading["repos"] {
+		t.Fatalf("view=%v loading=%v cmd=%v", m.top().view, m.loading, cmd != nil)
+	}
+	var listedMsg *tuiListMsg
+	for _, msg := range runCmd(cmd) {
+		if lm, ok := msg.(tuiListMsg); ok && lm.resource == "repos" {
+			listedMsg = &lm
+		}
+	}
+	if listedMsg == nil || listedMsg.err != nil || fetched != 1 {
+		t.Fatalf("listing: %#v fetched=%d", listedMsg, fetched)
+	}
+	next, _ := m.Update(*listedMsg)
+	m = next.(tuiModel)
+	if got, want := keys(m.rows()), "cdalar/onctl acme/web acme/old"; got != want {
+		t.Fatalf("rows = %q, want %q", got, want)
+	}
+	view := m.View()
+	for _, want := range []string{"GitHub Repos[3]", "<repos>", "private fork", "archived public", "TypeScript", "the CLI", "<enter>", "claude on a box"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("view lacks %q:\n%s", want, view)
+		}
+	}
+	// The tick refreshes the VMs only; GitHub isn't asked again.
+	next, _ = m.Update(tuiTickMsg(now))
+	m = next.(tuiModel)
+	if m.loading["repos"] || fetched != 1 {
+		t.Errorf("the tick asked GitHub: loading=%v fetches=%d", m.loading, fetched)
+	}
+	// shift-p by PUSHED keeps newest first; the other way round reverses it.
+	m, _ = press(t, m, "P")
+	if got, want := keys(m.rows()), "cdalar/onctl acme/web acme/old"; got != want {
+		t.Errorf("by pushed = %q, want %q", got, want)
+	}
+	m, _ = press(t, m, "P")
+	if got, want := keys(m.rows()), "acme/old acme/web cdalar/onctl"; got != want {
+		t.Errorf("by pushed desc = %q, want %q", got, want)
+	}
+	m, _ = press(t, m, "P")
+	m.filter.SetValue("acme")
+	if got, want := keys(m.rows()), "acme/web acme/old"; got != want {
+		t.Errorf("filtered = %q, want %q", got, want)
+	}
+	m.filter.SetValue("")
+	m, _ = press(t, m, "g")
+
+	// d describes the row; the page names the command enter runs, on
+	// this provider.
+	m, _ = press(t, m, "d")
+	if m.top().kind != pageText || !strings.Contains(m.View(), "onctl claude --repo cdalar/onctl --provider hetzner") {
+		t.Errorf("describe page:\n%s", m.View())
+	}
+	m, _ = press(t, m, "esc")
+	// y is GitHub's record of it.
+	m, _ = press(t, m, "y")
+	if m.top().kind != pageText || m.top().title != "cdalar/onctl.json" || !strings.Contains(m.View(), `"full_name": "cdalar/onctl"`) {
+		t.Errorf("json page: title=%q\n%s", m.top().title, m.View())
+	}
+	m, _ = press(t, m, "esc")
+	// enter hands the terminal to onctl claude --repo; the VM keys do
+	// nothing here (there's no VM under the cursor).
+	m, cmd = press(t, m, "enter")
+	if cmd == nil || m.flash != "" {
+		t.Errorf("enter: cmd=%v flash=%q", cmd != nil, m.flash)
+	}
+	for _, k := range []string{"p", "r", "s", "ctrl+d"} {
+		m, cmd = press(t, m, k)
+		if cmd != nil || m.dialog != nil {
+			t.Errorf("%s in :repos: cmd=%v dialog=%v", k, cmd != nil, m.dialog != nil)
+		}
+	}
+	if len(f.calls) != 0 {
+		t.Errorf("provider saw %v, want nothing", f.calls)
+	}
+
+	// The list was cached: a fresh model shows it at once and doesn't
+	// ask GitHub again...
+	m2 := newTUI(f)
+	cmd = m2.openView(reposView)
+	if !m2.loaded["repos"] || m2.loading["repos"] || len(m2.repos) != 3 || cmd != nil && fetched != 1 {
+		t.Fatalf("from the cache: loaded=%v loading=%v repos=%d fetched=%d", m2.loaded, m2.loading, len(m2.repos), fetched)
+	}
+	// ...R does...
+	m2, cmd = press(t, m2, "R")
+	runCmd(cmd)
+	if fetched != 2 {
+		t.Errorf("R: fetched %d times in all, want 2", fetched)
+	}
+	// ...and so does opening it once the cache is an hour old, with the
+	// cache shown meanwhile.
+	stale, _ := json.Marshal(repoCache{FetchedAt: now.Add(-2 * time.Hour), Repos: []ghRepo{{FullName: "cdalar/stale"}}})
+	if err := os.WriteFile(cache, stale, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m3 := newTUI(f)
+	cmd = m3.openView(reposView)
+	if keys(m3.rows()) != "cdalar/stale" || !m3.loading["repos"] {
+		t.Errorf("stale cache: rows=%q loading=%v", keys(m3.rows()), m3.loading)
+	}
+	// applyRepos feeds a listing's outcome back to the model.
+	applyRepos := func(m tuiModel, cmd tea.Cmd) tuiModel {
+		for _, msg := range runCmd(cmd) {
+			if lm, ok := msg.(tuiListMsg); ok && lm.resource == "repos" {
+				next, _ := m.Update(lm)
+				m = next.(tuiModel)
+			}
+		}
+		return m
+	}
+	m3 = applyRepos(m3, cmd)
+	if fetched != 3 || keys(m3.rows()) != "cdalar/onctl acme/web acme/old" {
+		t.Errorf("stale cache: fetched %d times in all, want 3; rows=%q", fetched, keys(m3.rows()))
+	}
+	if c := readRepoCache(); c == nil || len(c.Repos) != 3 || time.Since(c.FetchedAt) > time.Minute {
+		t.Errorf("cache after the fetch: %#v", c)
+	}
+
+	// A listing that fails keeps what was shown and says why.
+	listGitHubRepos = func(context.Context) ([]ghRepo, error) { return nil, errors.New("gh isn't installed") }
+	m3, cmd = press(t, m3, "R")
+	m3 = applyRepos(m3, cmd)
+	if keys(m3.rows()) != "cdalar/onctl acme/web acme/old" || !m3.flashErr || !strings.Contains(m3.flash, "gh isn't installed") {
+		t.Errorf("failed listing: rows=%q flash=%q", keys(m3.rows()), m3.flash)
+	}
+}
+
+// The flash after `onctl claude --repo` ends is cobra's Error line --
+// usage and main's log line come after it on stderr -- or, failing
+// that, whatever was said last.
+func TestTUIClaudeDone(t *testing.T) {
+	tuiFlashFor = time.Millisecond
+	m := newTUI(nil)
+	next, _ := m.Update(tuiClaudeDoneMsg{repo: "cdalar/onctl", err: errors.New("exit status 1"),
+		stderr: "Cloning cdalar/onctl on claude-onctl...\nfatal: repository not found\nError: cloning cdalar/onctl on claude-onctl: exit status 128\nUsage:\n  onctl claude [-- claude-args...] [flags]\n\n2026/10/23 10:00:00 cloning cdalar/onctl on claude-onctl: exit status 128\n"})
+	m = next.(tuiModel)
+	if !m.flashErr || m.flash != "claude on cdalar/onctl: cloning cdalar/onctl on claude-onctl: exit status 128" {
+		t.Errorf("flash = %q", m.flash)
+	}
+	next, _ = m.Update(tuiClaudeDoneMsg{repo: "cdalar/onctl", err: errors.New("signal: killed"), stderr: "ssh: connection closed\n"})
+	m = next.(tuiModel)
+	if m.flash != "claude on cdalar/onctl: ssh: connection closed" {
+		t.Errorf("flash = %q", m.flash)
+	}
+	next, _ = m.Update(tuiClaudeDoneMsg{repo: "cdalar/onctl", err: errors.New("exit status 1")})
+	m = next.(tuiModel)
+	if m.flash != "claude on cdalar/onctl: exit status 1" {
+		t.Errorf("flash = %q", m.flash)
+	}
+	next, _ = m.Update(tuiClaudeDoneMsg{repo: "cdalar/onctl"})
+	m = next.(tuiModel)
+	if m.flashErr || m.flash != "claude on cdalar/onctl ended" {
+		t.Errorf("flash = %q", m.flash)
+	}
+}
+
+func TestParseRepoPage(t *testing.T) {
+	repos, err := parseRepoPage([]byte(`[{"full_name":"cdalar/onctl","description":null,"private":false,"fork":false,"archived":false,
+		"language":"Go","default_branch":"main","pushed_at":"2026-10-23T14:17:26Z","html_url":"https://github.com/cdalar/onctl","permissions":{"push":true}},
+		{"full_name":"acme/empty","pushed_at":null,"permissions":{"push":false}}]`))
+	if err != nil || len(repos) != 2 {
+		t.Fatalf("parse: %v, %d repos", err, len(repos))
+	}
+	if r := repos[0]; r.FullName != "cdalar/onctl" || r.Language != "Go" || !r.Permissions.Push || r.PushedAt.Year() != 2026 {
+		t.Errorf("repo = %#v", r)
+	}
+	if r := repos[1]; !r.PushedAt.IsZero() || r.Permissions.Push {
+		t.Errorf("empty repo = %#v", r)
+	}
+	if _, err := parseRepoPage([]byte(`{"message":"Bad credentials"}`)); err == nil {
+		t.Error("an error page parsed")
 	}
 }

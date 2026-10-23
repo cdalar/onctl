@@ -110,7 +110,7 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	}
-	return m, m.fail("unknown command %q (try :vms, :images, :sizes, :provider, :claude, :help, :q)", words[0])
+	return m, m.fail("unknown command %q (try :vms, :images, :sizes, :repos, :provider, :claude, :help, :q)", words[0])
 }
 
 // --- the / filter ---------------------------------------------------------
@@ -198,6 +198,9 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Quit
 	case "R", "ctrl+r", "f5":
+		if t.view == reposView {
+			return m, tea.Batch(m.list("vms"), m.listRepos(true), m.spinIfBusy())
+		}
 		return m, m.refreshAll()
 	case "0", "1", "2":
 		if t.view == vmsView {
@@ -216,13 +219,20 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m.openCreate("", "")
-	case "enter", "d":
-		if t.view == providersView {
-			if r := m.currentRow(); r != nil {
+	case "enter":
+		if r := m.currentRow(); r != nil {
+			switch t.view {
+			case providersView:
 				return m.switchProvider(r.key)
+			case reposView:
+				return m.claudeRepo(r.key)
 			}
+		}
+		if t.view == providersView || t.view == reposView {
 			return m, nil
 		}
+		return m.describe()
+	case "d":
 		return m.describe()
 	case "y":
 		return m.showJSON()
@@ -333,7 +343,7 @@ func (m *tuiModel) pushHelp() {
 	}
 	lines := []string{"General", ""}
 	general := [][2]string{
-		{":<view>", "switch view: vms, images, sizes (`:vms web` filters too)"},
+		{":<view>", "switch view: vms, images, sizes, repos (`:vms web` filters too)"},
 		{":create", "create a VM"}, {":ssh <vm>", "open a terminal on a VM"},
 		{":claude [vm]", "run Claude Code on a VM (the project's box without one)"},
 		{":provider [name]", "switch cloud provider (a list to pick from without a name)"},
@@ -359,6 +369,13 @@ func (m *tuiModel) pushHelp() {
 	if len(sorts) > 0 {
 		lines = append(lines, "", "  sort:          "+strings.Join(sorts, ", "))
 	}
+	if v == reposView {
+		lines = append(lines, "", "GitHub Repos",
+			"  The repositories gh's account can reach (gh api user/repos), newest push first;",
+			"  enter runs `onctl claude --repo owner/name` on this provider: a box (claude-<name>) with the repo",
+			"  cloned on a new onctl/... branch and Claude attached; the same --repo later comes back to it.",
+			"  The list is cached (~/.onctl/repos.json) and asked of GitHub again when an hour old, or with R.")
+	}
 	if v == vmsView {
 		lines = append(lines, "", "VMs",
 			"  s shell runs `onctl ssh <vm>`; a runs `onctl claude --box <vm>` (Claude Code on the VM, with this directory's project);",
@@ -371,9 +388,18 @@ func (m *tuiModel) pushHelp() {
 
 // --- actions --------------------------------------------------------------
 
-// describe pushes the page's VM as a describe page.
+// describe pushes the page's VM (or the repos view's repository) as a
+// describe page.
 func (m tuiModel) describe() (tea.Model, tea.Cmd) {
 	t := m.top()
+	if t.kind == pageTable && t.view == reposView {
+		if r := m.currentRow(); r != nil {
+			if repo := m.repo(r.key); repo != nil {
+				m.push(page{kind: pageText, title: repo.FullName, lines: describeRepo(*repo)})
+			}
+		}
+		return m, nil
+	}
 	vm := m.currentVM()
 	if vm == nil {
 		return m, nil
@@ -392,8 +418,17 @@ func (m tuiModel) describe() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// showJSON pushes the page's VM as the provider returns it.
+// showJSON pushes the page's VM as the provider returns it (or the
+// repos view's repository as GitHub does).
 func (m tuiModel) showJSON() (tea.Model, tea.Cmd) {
+	if t := m.top(); t.kind == pageTable && t.view == reposView {
+		if r := m.currentRow(); r != nil {
+			if repo := m.repo(r.key); repo != nil {
+				m.push(page{kind: pageText, title: repo.FullName + ".json", lines: jsonLines(*repo)})
+			}
+		}
+		return m, nil
+	}
 	vm := m.currentVM()
 	if vm == nil {
 		return m, nil
