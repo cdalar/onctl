@@ -68,6 +68,7 @@ var (
 	claudeTask    string
 	claudeOwnBox  bool
 	claudeAuth    string
+	claudeRepo    string
 )
 
 var claudeCmd = &cobra.Command{
@@ -97,6 +98,13 @@ box.
   onctl claude --detach --prompt "..."   # start it, don't attach
   onctl claude -- --model opus           # arguments for claude itself
   onctl -p hetzner claude                # the same, on your own Hetzner VM
+  onctl claude --repo owner/name         # no project here: a box with the repo cloned, on a new branch
+
+--repo owner/name needs no local copy: a box named claude-<name> gets the
+repository's default branch cloned from GitHub onto a new onctl/... branch,
+and Claude starts in it. The same --repo again comes back to that box. A
+private repository needs --github store (the clone runs before you're
+attached, so forwarding can't serve it).
 
 The first time, log Claude in on the box with /login: it prints a URL to
 open here and a code to paste back. That login stays on the box.
@@ -159,6 +167,9 @@ func runClaude(cmd *cobra.Command, args []string) error {
 		if !cmd.Flags().Changed("image") {
 			claudeImage = ""
 		}
+	}
+	if claudeRepo != "" {
+		return runRepo(cmd, args)
 	}
 	if err := resolveTask(); err != nil {
 		return err
@@ -238,6 +249,14 @@ func runClaude(cmd *cobra.Command, args []string) error {
 		}
 		args = append([]string{"--resume", claudeHandoff}, args...)
 	}
+	return startSession(ctx, box, name, sess, env, running, attachHint(sess, name), args)
+}
+
+// startSession starts Claude in sess on the box named name -- or, with
+// running set, leaves the one there be -- and attaches to it, unless
+// --detach, when hint is the command that attaches later. env is what
+// claudeEnv gave; args are claude's own.
+func startSession(ctx context.Context, box *boxSSH, name string, sess taskSession, env string, running bool, hint string, args []string) error {
 	if running {
 		if claudePrompt != "" || len(args) > 0 {
 			fmt.Fprintf(os.Stderr, "Claude is already running there; attaching to it (--prompt and claude arguments only apply to a new session).\n")
@@ -257,7 +276,7 @@ func runClaude(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("starting Claude on %s: %w", name, err)
 			}
 		}
-		fmt.Fprintf(os.Stderr, "Claude is running on %s; attach with: %s\n", name, attachHint(sess, name))
+		fmt.Fprintf(os.Stderr, "Claude is running on %s; attach with: %s\n", name, hint)
 		return nil
 	}
 	return attachClaude(ctx, box, sess, sess.tmuxCommand(line, false))

@@ -55,6 +55,8 @@ var k9s = struct {
 		"stopping": lipgloss.NewStyle().Foreground(lipgloss.Color("51")),
 		"dead":     lipgloss.NewStyle().Foreground(lipgloss.Color("203")),
 		"failed":   lipgloss.NewStyle().Foreground(lipgloss.Color("203")),
+		"private":  lipgloss.NewStyle().Foreground(lipgloss.Color("220")),
+		"archived": lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
 	},
 }
 
