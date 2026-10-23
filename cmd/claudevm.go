@@ -99,16 +99,27 @@ func ensureClaudeVM(name, publicKeyFile string, create bool) (vm cloud.Vm, creat
 	if err != nil {
 		return cloud.Vm{}, false, err
 	}
+	var stopped bool
 	for _, vm := range list.List {
 		// A "dead" fc/ch record is a VMM process that died out of band;
 		// Deploy makes a new one in its place (as onctl create does).
-		if vm.Name == name && vm.Status != "dead" {
-			return vm, false, nil
+		if vm.Name != name || vm.Status == "dead" {
+			continue
 		}
+		// Some providers (ac, aws) list stopped VMs rather than filing
+		// them under ListPaused; such a VM has no address until resumed.
+		if isPausedStatus(vm.Status) {
+			stopped = true
+			break
+		}
+		return vm, false, nil
 	}
 	keyID, err := provider.CreateSSHKey(publicKeyFile)
 	if err != nil {
 		return cloud.Vm{}, false, err
+	}
+	if stopped {
+		return resumeClaudeVM(name, keyID)
 	}
 	paused, err := provider.ListPaused()
 	if err != nil {
@@ -116,12 +127,7 @@ func ensureClaudeVM(name, publicKeyFile string, create bool) (vm cloud.Vm, creat
 	}
 	for _, vm := range paused.List {
 		if vm.Name == name {
-			fmt.Fprintf(os.Stderr, "Resuming %s...\n", name)
-			vm, err := provider.Resume(cloud.Vm{Name: name, SSHKeyID: keyID})
-			if err != nil {
-				return cloud.Vm{}, false, fmt.Errorf("resuming %s: %w", name, err)
-			}
-			return vm, false, nil
+			return resumeClaudeVM(name, keyID)
 		}
 	}
 	if !create {
@@ -141,6 +147,16 @@ func ensureClaudeVM(name, publicKeyFile string, create bool) (vm cloud.Vm, creat
 		return cloud.Vm{}, false, fmt.Errorf("creating %s: %w", name, err)
 	}
 	return vm, true, nil
+}
+
+// resumeClaudeVM resumes the paused VM named name through the provider.
+func resumeClaudeVM(name, keyID string) (cloud.Vm, bool, error) {
+	fmt.Fprintf(os.Stderr, "Resuming %s...\n", name)
+	vm, err := provider.Resume(cloud.Vm{Name: name, SSHKeyID: keyID})
+	if err != nil {
+		return cloud.Vm{}, false, fmt.Errorf("resuming %s: %w", name, err)
+	}
+	return vm, false, nil
 }
 
 // waitSSH tries ssh to the VM until it answers or timeout passes: a VM
