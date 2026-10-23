@@ -117,12 +117,15 @@ func runRepo(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("can't ssh into %s: %w", name, err)
 	}
 	// A box that holds another project is refused, as with --box.
-	needsClone, err := checkProject(ctx, box, dir)
+	needsClone, boxMux, err := checkProject(ctx, box, dir)
 	if err != nil {
 		return err
 	}
+	if err := useBoxMux(ctx, box, dir, boxMux); err != nil {
+		return err
+	}
 	// First: the clone needs git, and a VM made from a plain image has none.
-	if err := box.run(ctx, claudeSetupScript, nil); err != nil {
+	if err := box.run(ctx, claudeSetupScript(), nil); err != nil {
 		return fmt.Errorf("installing Claude Code on %s: %w", name, err)
 	}
 	// -C "": git reads your global identity from wherever this runs.
@@ -157,7 +160,7 @@ func runRepo(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "warning: couldn't skip Claude's first-run setup on %s: %v\n", name, err)
 	}
 	sess := newTaskSession(dir, "")
-	running := box.run(ctx, "tmux has-session -t ="+sess.tmux+" 2>/dev/null", nil) == nil
+	running := sessionRunning(ctx, box, sess)
 	return startSession(ctx, box, name, sess, env, running, repoAttachHint(repo), args)
 }
 

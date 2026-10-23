@@ -102,7 +102,7 @@ func TestClaudeSetupScriptInstallsOnlyWhatIsMissing(t *testing.T) {
 			t.Fatal(err)
 		}
 		log := filepath.Join(t.TempDir(), "log")
-		c := exec.Command("sh", "-c", claudeSetupScript)
+		c := exec.Command("sh", "-c", claudeSetupScript())
 		// Only the stubs: the machine's own git and curl must not count.
 		c.Env = []string{"PATH=" + bin, "HOME=" + t.TempDir(), "LOG=" + log}
 		if out, err := c.CombinedOutput(); err != nil {

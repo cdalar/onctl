@@ -14,27 +14,27 @@ import (
 // A Claude session on a box: the project's main checkout, or a task --
 // a git worktree of its own beside it (`--task auth` -> <dir>@auth, on
 // branch auth), so several Claudes can work on one project at once
-// without touching each other's files. Each runs in its own tmux session
-// and gets its own GitHub socket, so attaching to one never takes the
-// other's forwarding away.
+// without touching each other's files. Each runs in a session of its own
+// in the box's multiplexer (mux: tmux, or herdr) and gets its own GitHub
+// socket, so attaching to one never takes the other's forwarding away.
 
 var taskNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,29}$`)
 
 type taskSession struct {
 	task     string // "" for the main checkout
 	dir      string // where Claude runs on the box
-	tmux     string // its tmux session
+	name     string // its session in the multiplexer: claude, -<task> for a task
 	ghSocket string // where its GitHub forwarding lands on the box
 }
 
 func newTaskSession(project, task string) taskSession {
 	if task == "" {
-		return taskSession{dir: project, tmux: claudeSession, ghSocket: boxGitHubSocket}
+		return taskSession{dir: project, name: claudeSession, ghSocket: boxGitHubSocket}
 	}
 	return taskSession{
 		task:     task,
 		dir:      taskDir(project, task),
-		tmux:     claudeSession + "-" + task,
+		name:     claudeSession + "-" + task,
 		ghSocket: "/root/.boxctl/gh-" + task + ".sock",
 	}
 }
@@ -55,11 +55,11 @@ func (s taskSession) attachHint(box string) string {
 // envFile is where this session's secrets wait for Claude to start: in
 // /run, a tmpfs -- memory, never the box's disk -- read and deleted by the
 // session's command the moment it runs.
-func (s taskSession) envFile() string { return "/run/boxctl/" + s.tmux + ".env" }
+func (s taskSession) envFile() string { return muxRunDir + "/" + s.name + ".env" }
 
-// commandLine is the shell command tmux runs for this session: pick up
-// and delete the secrets, point the GitHub helpers at this session's
-// socket, then claude with the prompt and arguments.
+// commandLine is the shell command the multiplexer runs for this session
+// (mux.start): pick up and delete the secrets, point the GitHub helpers
+// at this session's socket, then claude with the prompt and arguments.
 func (s taskSession) commandLine(prompt string, args []string) string {
 	f := shellQuote(s.envFile())
 	words := []string{
@@ -74,18 +74,6 @@ func (s taskSession) commandLine(prompt string, args []string) string {
 		words = append(words, shellQuote(prompt))
 	}
 	return strings.Join(words, " ")
-}
-
-// tmuxCommand starts this session's Claude in tmux, or with -A attaches
-// to it if it's already running. -u: the box has no locale set, and
-// Claude's interface is Unicode.
-func (s taskSession) tmuxCommand(claudeLine string, detached bool) string {
-	mode := "-A"
-	if detached {
-		mode = "-d"
-	}
-	return fmt.Sprintf("tmux -u new-session %s -s %s -c %s %s",
-		mode, s.tmux, shellQuote(s.dir), shellQuote(claudeLine))
 }
 
 // worktreeScript makes the task's worktree if it isn't there: on branch
@@ -149,7 +137,7 @@ func stageClaudeEnv(ctx context.Context, box *boxSSH, s taskSession, env string)
 	if env == "" {
 		return nil
 	}
-	return box.run(ctx, "umask 077 && mkdir -p /run/boxctl && cat >"+shellQuote(s.envFile()), strings.NewReader(env))
+	return box.run(ctx, "umask 077 && mkdir -p "+shellQuote(muxRunDir)+" && cat >"+shellQuote(s.envFile()), strings.NewReader(env))
 }
 
 // claudeStateScript marks what a person would otherwise click through on

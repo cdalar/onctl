@@ -42,11 +42,11 @@ func TestSessionCommandQuoting(t *testing.T) {
 	s := newTaskSession("/Users/me/my proj", "")
 	prompt := `fix "it" -- don't touch $HOME`
 	line := s.commandLine(prompt, []string{"--model", "opus"})
-	cmd := s.tmuxCommand(line, false)
-	if !strings.HasPrefix(cmd, "tmux -u new-session -A -s claude -c '/Users/me/my proj' ") {
+	cmd := (tmuxMux{}).start(s, line, false)
+	if !strings.Contains(cmd, "; tmux -u new-session -A -s claude -c '/Users/me/my proj' ") {
 		t.Fatalf("got %q", cmd)
 	}
-	if !strings.Contains(s.tmuxCommand(line, true), " -d -s claude ") {
+	if !strings.Contains((tmuxMux{}).start(s, line, true), " -d -s claude ") {
 		t.Fatal("detached mode doesn't use -d")
 	}
 	// Replay what tmux hands sh -c, with a claude that prints its words.
