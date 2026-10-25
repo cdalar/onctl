@@ -114,6 +114,31 @@ func TestHerdrStart(t *testing.T) {
 	}
 }
 
+// TestHerdrStartEphemeral: an ephemeral run deletes its box once Claude
+// exits, so the attached client must return then -- the pane stops the
+// server after Claude. Detached (a kept box) it doesn't.
+func TestHerdrStartEphemeral(t *testing.T) {
+	log := fakeHerdr(t)
+	_, runDir := boxPaths(t)
+	s := newTaskSession("/w/app", "")
+	s.ephemeral = true
+	out, err := exec.Command("sh", "-c", (herdrMux{}).start(s, "exec claude", false)).CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if calls := readFile(t, log); !strings.Contains(calls, "pane run w1:p1 sh "+shellQuote(runDir+"/claude.cmd")+"; herdr server stop\n") {
+		t.Errorf("ephemeral pane must stop the server after Claude:\n%s", calls)
+	}
+	log = fakeHerdr(t)
+	_, runDir = boxPaths(t)
+	if out, err := exec.Command("sh", "-c", (herdrMux{}).start(s, "exec claude", true)).CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if calls := readFile(t, log); strings.Contains(calls, "server stop") || !strings.Contains(calls, "pane run w1:p1 exec sh "+shellQuote(runDir+"/claude.cmd")+"\n") {
+		t.Errorf("a detached start must leave the server running:\n%s", calls)
+	}
+}
+
 // TestHerdrStartDetached: a detached start makes a task's workspace
 // under the task's label and doesn't attach.
 func TestHerdrStartDetached(t *testing.T) {

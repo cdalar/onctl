@@ -51,20 +51,6 @@ func repoBranch() string {
 	return "onctl/" + hex.EncodeToString(b[:])
 }
 
-// cloneScript clones url's default branch into dir and branches. The
-// clone fetches one branch, but maps them all, so a later fetch sees the
-// rest. GIT_TERMINAL_PROMPT=0 makes a repository GitHub answers 401 for
-// (a private one, or a mistyped name) fail at once instead of waiting
-// for a username nobody can type.
-func cloneScript(url, dir, branch string) string {
-	d := shellQuote(dir)
-	return `set -e
-mkdir -p "$(dirname ` + d + `)"
-GIT_TERMINAL_PROMPT=0 git clone -q --single-branch ` + shellQuote(url) + ` ` + d + `
-git -C ` + d + ` config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
-git -C ` + d + ` checkout -q -b ` + shellQuote(branch)
-}
-
 // repoConflicts names the claude flags that make no sense with --repo:
 // the ones about a project here, or a box that holds one.
 func repoConflicts() []string {
