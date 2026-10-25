@@ -88,6 +88,29 @@ func TestRemoteURL(t *testing.T) {
 // TestClaudeSetupScriptInstallsOnlyWhatIsMissing: on the claude-agent
 // image everything is there and apt must not run; elsewhere the missing
 // tools are installed in one go.
+// TestVMClaudeImage: a VM for Claude boots the provider's default image,
+// except on ac, which can run the box image with everything baked in --
+// the point of the ac default is that nothing gets installed on first use.
+func TestVMClaudeImage(t *testing.T) {
+	saved := provider
+	t.Cleanup(func() { provider = saved })
+	provider = &cloud.ProviderAC{}
+	assert.Equal(t, acClaudeImage, vmClaudeImage())
+	assert.True(t, strings.HasPrefix(acClaudeImage, "ghcr.io/"), "ac needs an OCI image reference, got %q", acClaudeImage)
+	provider = &cloud.ProviderHetzner{}
+	assert.Equal(t, "", vmClaudeImage(), "a cloud VM takes its provider's configured image")
+	assert.False(t, onAC())
+}
+
+// TestVMGitHubWithoutHelpers: without the box image's helpers the
+// forwarded socket has no reader, so forward turns into off whether it
+// was the default or asked for.
+func TestVMGitHubWithoutHelpers(t *testing.T) {
+	assert.Equal(t, githubOff, vmGitHubWithoutHelpers(false))
+	assert.Equal(t, githubOff, vmGitHubWithoutHelpers(true))
+	assert.Contains(t, forwardHelpersCheck, "git-credential-boxctl")
+}
+
 func TestClaudeSetupScriptInstallsOnlyWhatIsMissing(t *testing.T) {
 	run := func(t *testing.T, tools ...string) string {
 		bin := t.TempDir()

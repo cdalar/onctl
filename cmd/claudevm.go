@@ -35,6 +35,52 @@ func onBoxes() bool {
 	return ok
 }
 
+// onAC reports whether the selected provider is ac (Apple containers).
+func onAC() bool {
+	_, ok := provider.(*cloud.ProviderAC)
+	return ok
+}
+
+// vmClaudeImage is the image a VM for Claude is made from when --image
+// isn't given: on ac, which runs OCI images the way a box does, the
+// claude-agent image; elsewhere "" for the provider's configured default.
+func vmClaudeImage() string {
+	if onAC() {
+		return acClaudeImage
+	}
+	return ""
+}
+
+// forwardHelpersCheck tells whether a VM has the box image's GitHub
+// forwarding helpers (git-credential-boxctl and the gh wrapper beside it).
+const forwardHelpersCheck = "test -x /usr/local/bin/git-credential-boxctl"
+
+// resolveVMGitHub settles --github forward on a VM once it's reachable:
+// it stays where the VM has the box image's helpers (the claude-agent
+// image, on ac) and becomes off where it doesn't -- the helpers are what
+// the forwarded socket is for. explicit is whether --github was given.
+// Boxes always have them.
+func resolveVMGitHub(ctx context.Context, box *boxSSH, explicit bool) {
+	if onBoxes() || claudeGitHub != githubForward {
+		return
+	}
+	if box.run(ctx, forwardHelpersCheck, nil) == nil {
+		return
+	}
+	claudeGitHub = vmGitHubWithoutHelpers(explicit)
+}
+
+// vmGitHubWithoutHelpers is what --github forward becomes on a VM without
+// the helpers, said more pointedly when forward was asked for.
+func vmGitHubWithoutHelpers(explicit bool) string {
+	if explicit {
+		fmt.Fprintf(os.Stderr, "--github forward needs the box image's helpers, which this %s VM doesn't have; Claude gets no GitHub credentials (--github store keeps a token there).\n", cloudProvider)
+	} else {
+		fmt.Fprintf(os.Stderr, "Claude on %s gets no GitHub credentials (--github store keeps a token there).\n", cloudProvider)
+	}
+	return githubOff
+}
+
 // connectClaudeVM finds or creates the VM named name on the selected
 // provider and returns a root ssh connection to it, reporting whether it
 // created it.

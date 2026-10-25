@@ -124,6 +124,9 @@ ch:
 # boots fastest. Pause/resume are `container stop`/`start` (disk kept,
 # memory not).
 ac:
+  # onctl claude doesn't use this image: its sandboxes boot
+  # ghcr.io/boxctl-io/claude-agent (sshd, tmux, git, gh and Claude Code baked
+  # in) unless --image says otherwise.
   image: docker.io/library/ubuntu:24.04  # OCI image to run (or --image)
   vcpuCount: 1
   memSizeMib: 2048
