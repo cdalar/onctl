@@ -8,10 +8,12 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cdalar/onctl/internal/providerboxes"
@@ -83,10 +85,23 @@ var claudeCmd = &cobra.Command{
 	Use:   "claude [-- claude-args...]",
 	Short: "Run Claude Code on a box, with this project on it",
 	Long: `Runs Claude Code on a box instead of on this machine, attached to your
-terminal. The first time, it creates the project's box (claude-<project>),
-copies the project there -- the same absolute path, .git and uncommitted
-changes included, .gitignore'd files left out -- installs Claude Code and
-your Claude configuration, and starts Claude in it.
+terminal. Each run creates a box of its own (<project>-<slug>-<id>, the
+slug from --prompt) and puts the project there, at the same absolute
+path: a git repository with an origin is cloned from it -- the default
+branch, then a new branch onctl/<slug>-<id> for Claude to work on;
+nothing local, uncommitted or unpushed, goes -- and anything else is
+copied (.gitignore'd files left out). Then it installs Claude Code and
+your Claude configuration, and starts Claude in it. When Claude exits,
+the box's branches and uncommitted work are fetched here as box/* (as
+onctl claude fetch does) and the box is deleted; detaching (Ctrl-b d;
+Ctrl-b q in herdr) with Claude still running keeps it, and the message
+says how to come back.
+
+--keep uses the project's own box (claude-<project>) instead, and keeps
+it: the first time it's created and the project put there the same way
+(a clone on branch onctl/<project>, or a copy); later runs come back to
+it, don't copy again, and nothing is synced back -- Claude commits and
+pushes from the box. --box, --detach and --task keep their box too.
 
 The box is a hosted one (-p boxes, the default) or a VM of any other
 provider: onctl -p hetzner claude creates claude-<project> on Hetzner
@@ -98,16 +113,15 @@ has, ghcr.io/boxctl-io/claude-agent, so nothing is installed. A VM is
 paused and resumed with onctl pause/resume, not on its own.
 
 Claude runs in tmux, so it keeps going when you detach (Ctrl-b d) or the
-connection drops; run onctl claude again to come back to it. --mux herdr
+connection drops; onctl claude --box <name> comes back to it. --mux herdr
 runs it in herdr (herdr.dev) instead: a terminal workspace manager made
 for coding agents that shows every task on the box in one window, each
 marked working, blocked or idle; Ctrl-b q detaches. ONCTL_MUX=herdr makes
 it the default, and a box keeps using whichever its sessions were started
-in. The box's copy of the project is the one Claude works on: later runs
-don't copy it again, and nothing is synced back -- Claude commits and
-pushes from the box.
+in.
 
-  onctl claude                           # create or reattach
+  onctl claude                           # a new box, deleted when Claude exits
+  onctl claude --keep                    # create or reattach to claude-<project>
   onctl claude --prompt "fix the flaky auth test"
   onctl claude --detach --prompt "..."   # start it, don't attach
   onctl claude -- --model opus           # arguments for claude itself
@@ -138,7 +152,8 @@ there once gh is installed on it.`,
 }
 
 func init() {
-	claudeCmd.PersistentFlags().StringVar(&claudeBox, "box", "", "box to use (default: claude-<project directory name>)")
+	claudeCmd.PersistentFlags().StringVar(&claudeBox, "box", "", "box to use, kept after the run (default: claude-<project directory name> with --keep and for ls/fetch/push; otherwise a new box of the run's own)")
+	claudeCmd.Flags().BoolVarP(&claudeKeep, "keep", "k", false, "use the project's own box, claude-<project>, and keep it -- instead of a new box deleted when Claude exits (--box, --detach and --task keep it too)")
 	claudeCmd.PersistentFlags().StringVar(&claudeProject, "project", "", "project directory (default: the git repository, or directory, you're in)")
 	claudeCmd.Flags().StringVar(&claudeHandoff, "handoff", "", "continue this local Claude Code session (its ID) on the box")
 	claudeCmd.PersistentFlags().StringVarP(&claudeTask, "task", "t", "", "work on a task in parallel: its own worktree (<dir>@<task>, branch <task>) and Claude on the box")
@@ -204,13 +219,36 @@ func runClaude(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	// Ctrl-C reaches the deferred end below: an ephemeral box made so far
+	// is deleted rather than left behind.
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	ephemeral := ephemeralRun()
+	if ephemeral {
+		dir, err := projectDir()
+		if err != nil {
+			return err
+		}
+		n, err := ephemeralBoxName(ctx, dir)
+		if err != nil {
+			return err
+		}
+		claudeBox, claudeBranch = n.box(), n.branch()
+	}
 
 	t, err := openClaudeBox(ctx, true, cmd.Flags().Changed("idle-ttl"))
 	if err != nil {
+		if ephemeral {
+			discardIfMade(context.Background(), claudeBox)
+		}
 		return err
 	}
-	defer t.box.close()
+	t.ephemeral = ephemeral
+	defer t.end()
 	dir, name, box := t.dir, t.name, t.box
+	if ephemeral {
+		fmt.Fprintf(os.Stderr, "Ephemeral: %s is deleted when Claude exits, after its work is fetched here as box/* (--keep keeps a box).\n", name)
+	}
 	resolveVMGitHub(ctx, box, cmd.Flags().Changed("github"))
 
 	// First: everything after this needs git on the box, and a VM made
@@ -218,13 +256,28 @@ func runClaude(cmd *cobra.Command, args []string) error {
 	if err := box.run(ctx, claudeSetupScript(), nil); err != nil {
 		return fmt.Errorf("installing Claude Code on %s: %w", name, err)
 	}
+	// Before the project: a clone of a private repository needs the token.
+	if claudeGitHub == githubStore {
+		if err := storeGitHubToken(ctx, box, githubRepo(dir)); err != nil {
+			return err
+		}
+	}
 	if t.needsCopy {
-		if err := copyProject(ctx, box, dir); err != nil {
+		if url := cloneURL(dir); url != "" {
+			branch := claudeBranch
+			if branch == "" {
+				branch = "onctl/" + strings.TrimPrefix(name, "claude-")
+			}
+			if err := cloneProject(ctx, box, dir, url, branch); err != nil {
+				return err
+			}
+		} else if err := copyProject(ctx, box, dir); err != nil {
 			return err
 		}
 		if err := markProject(ctx, box, dir); err != nil {
 			return err
 		}
+		t.needsCopy = false
 	} else if claudeTask == "" {
 		fmt.Fprintf(os.Stderr, "%s is already on %s; working with the box's copy (it isn't copied again).\n", dir, name)
 		if claudeHandoff != "" {
@@ -232,6 +285,7 @@ func runClaude(cmd *cobra.Command, args []string) error {
 		}
 	}
 	sess := newTaskSession(dir, claudeTask)
+	sess.ephemeral = t.ephemeral
 	if sess.task != "" {
 		if err := box.run(ctx, worktreeScript(dir, sess.task), nil); err != nil {
 			return fmt.Errorf("making the %s worktree on %s: %w", sess.task, name, err)
@@ -242,11 +296,6 @@ func runClaude(cmd *cobra.Command, args []string) error {
 	}
 	if err := copyGitIdentity(ctx, box, dir); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: couldn't set your git identity on %s: %v\n", name, err)
-	}
-	if claudeGitHub == githubStore {
-		if err := storeGitHubToken(ctx, box, githubRepo(dir)); err != nil {
-			return err
-		}
 	}
 	if err := box.run(ctx, claudeStateScript([]string{sess.dir}, localClaudeTheme(), apiKey), nil); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: couldn't skip Claude's first-run setup on %s: %v\n", name, err)
@@ -262,7 +311,19 @@ func runClaude(cmd *cobra.Command, args []string) error {
 		}
 		args = append([]string{"--resume", claudeHandoff}, args...)
 	}
-	return startSession(ctx, box, name, sess, env, running, attachHint(sess, name), args)
+	err = startSession(ctx, box, name, sess, env, running, attachHint(sess, name), args)
+	if err == nil && t.ephemeral && !claudeDetach {
+		// Detaching (Ctrl-b d in tmux, Ctrl-b q in herdr) returns here with
+		// Claude still running -- maybe mid-task -- so the box isn't this
+		// run's to end: kept, work and all.
+		sctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if sessionRunning(sctx, box, sess) {
+			t.ephemeral = false
+			fmt.Fprintf(os.Stderr, "Claude is still running on %s, so it's kept -- attach with: %s\n", name, attachHint(sess, name))
+		}
+	}
+	return err
 }
 
 // startSession starts Claude in sess on the box named name -- or, with
@@ -347,8 +408,19 @@ func resolveTask() error {
 // attachClaude attaches to Claude on the box, lending it GitHub
 // credentials for as long as the attach lasts unless --github says not to.
 func attachClaude(ctx context.Context, box *boxSSH, sess taskSession, command string) error {
+	extra, done := forwardGitHub(ctx, box, sess.ghSocket)
+	defer done()
+	return box.attach(ctx, command, extra)
+}
+
+// forwardGitHub lends this machine's GitHub token to the box for one ssh
+// connection -- an attach, or the clone before it -- as the ssh arguments
+// that carry the socket there; done takes the socket away again and
+// reports what was used. Unless --github forward (and a token server to
+// serve it), extra is nil and done does nothing.
+func forwardGitHub(ctx context.Context, box *boxSSH, socket string) (extra []string, done func()) {
 	if claudeGitHub != githubForward {
-		return box.attach(ctx, command, nil)
+		return nil, func() {}
 	}
 	logPath := ""
 	if home, err := os.UserHomeDir(); err == nil {
@@ -357,23 +429,23 @@ func attachClaude(ctx context.Context, box *boxSSH, sess taskSession, command st
 	srv, err := startTokenServer(box.name, logPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: not forwarding GitHub credentials: %v\n", err)
-		return box.attach(ctx, command, nil)
+		return nil, func() {}
 	}
 	// A socket a dropped connection left behind would stop sshd binding
 	// the new one on an image without StreamLocalBindUnlink.
-	_ = box.run(ctx, "rm -f "+shellQuote(sess.ghSocket), nil)
-	err = box.attach(ctx, command, []string{"-R", sess.ghSocket + ":" + srv.socket})
-	// Without the socket the box's helpers say "attach to forward", rather
-	// than failing to reach a stale one.
-	_ = box.run(context.Background(), "rm -f "+shellQuote(sess.ghSocket), nil)
-	if given, refused := srv.close(); given+refused > 0 {
-		fmt.Fprintf(os.Stderr, "%s used your GitHub token %d time(s)", box.name, given)
-		if refused > 0 {
-			fmt.Fprintf(os.Stderr, ", %d refused", refused)
+	_ = box.run(ctx, "rm -f "+shellQuote(socket), nil)
+	return []string{"-R", socket + ":" + srv.socket}, func() {
+		// Without the socket the box's helpers say "attach to forward",
+		// rather than failing to reach a stale one.
+		_ = box.run(context.Background(), "rm -f "+shellQuote(socket), nil)
+		if given, refused := srv.close(); given+refused > 0 {
+			fmt.Fprintf(os.Stderr, "%s used your GitHub token %d time(s)", box.name, given)
+			if refused > 0 {
+				fmt.Fprintf(os.Stderr, ", %d refused", refused)
+			}
+			fmt.Fprintf(os.Stderr, " (%s).\n", logPath)
 		}
-		fmt.Fprintf(os.Stderr, " (%s).\n", logPath)
 	}
-	return err
 }
 
 // claudeTarget is the project here and its box, reachable over ssh.
@@ -382,6 +454,8 @@ type claudeTarget struct {
 	box       *boxSSH
 	// needsCopy: the project isn't on the box yet.
 	needsCopy bool
+	// ephemeral: the box is this run's, deleted by end.
+	ephemeral bool
 }
 
 // openClaudeBox resolves the project and its box (--box, or
@@ -729,6 +803,23 @@ func (b *boxSSH) run(ctx context.Context, command string, in io.Reader) error {
 	cmd.Stdin = in
 	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 	return cmd.Run()
+}
+
+// runWith is run with extra ssh arguments -- a socket forward -- on a
+// connection of its own, like attach: the shared control master doesn't
+// carry a forward opened after it. Without extra it is run.
+func (b *boxSSH) runWith(ctx context.Context, extra []string, command string) error {
+	if len(extra) == 0 {
+		return b.run(ctx, command, nil)
+	}
+	cmd := exec.CommandContext(ctx, "ssh", b.runWithArgs(extra, command)...)
+	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
+	return cmd.Run()
+}
+
+func (b *boxSSH) runWithArgs(extra []string, command string) []string {
+	argv := append([]string{"-o", "BatchMode=yes", "-o", "ControlPath=none", "-o", "ExitOnForwardFailure=no"}, extra...)
+	return append(append(argv, b.args...), command)
 }
 
 // output runs a command on the box and returns its stdout; stderr passes
