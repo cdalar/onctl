@@ -116,6 +116,7 @@ func runRepo(cmd *cobra.Command, args []string) error {
 	if err := box.run(ctx, "true", nil); err != nil {
 		return fmt.Errorf("can't ssh into %s: %w", name, err)
 	}
+	resolveVMGitHub(ctx, box, cmd.Flags().Changed("github"))
 	// A box that holds another project is refused, as with --box.
 	needsClone, boxMux, err := checkProject(ctx, box, dir)
 	if err != nil {

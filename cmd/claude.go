@@ -38,10 +38,18 @@ const (
 	// claudeSession is the session Claude runs in on the box (in tmux, or
 	// herdr): one per box, so a second `onctl claude` attaches to it.
 	claudeSession = "claude"
-	// claudeInstall is Anthropic's installer, run on first use rather than
-	// baking Claude Code into the image (which would redistribute it). It
-	// installs to ~/.local/bin and keeps itself updated.
+	// claudeInstall is Anthropic's installer, run on first use on an image
+	// without Claude Code (a cloud VM's; the claude-agent image has it
+	// baked in). It installs to ~/.local/bin and keeps itself updated.
 	claudeInstall = "curl -fsSL https://claude.ai/install.sh | bash"
+	// acClaudeImage is what a sandbox for Claude boots from on the ac
+	// provider unless --image says otherwise: boxctl's claude-agent image
+	// (images/claude-agent in boxctl-io/boxctl-images), published to ghcr
+	// for Apple containers, with sshd, tmux, git, gh, the GitHub
+	// forwarding helpers and Claude Code baked in -- so a new sandbox
+	// starts in seconds instead of installing them all. Only ac: the other
+	// VM providers take their cloud's images, not OCI ones.
+	acClaudeImage = "ghcr.io/boxctl-io/claude-agent:latest"
 	// claudeReadyTimeout bounds waiting for a new or resumed box to boot.
 	claudeReadyTimeout = 3 * time.Minute
 	// claudeDefaultIdleTTL is the idle TTL of a box created for Claude.
@@ -85,7 +93,9 @@ provider: onctl -p hetzner claude creates claude-<project> on Hetzner
 the way onctl create does (--size and --image are the provider's type
 and image; unset, its onctl.yaml defaults), reaches it over ssh with your
 key, installs tmux, git and Claude Code, and from there on it's the same.
-A VM is paused and resumed with onctl pause/resume, not on its own.
+onctl -p ac claude (Apple containers, on a Mac) boots the image a box
+has, ghcr.io/boxctl-io/claude-agent, so nothing is installed. A VM is
+paused and resumed with onctl pause/resume, not on its own.
 
 Claude runs in tmux, so it keeps going when you detach (Ctrl-b d) or the
 connection drops; run onctl claude again to come back to it. --mux herdr
@@ -122,8 +132,8 @@ that must reach GitHub while you're away, --github store keeps a token
 you paste on the box -- make it a fine-grained one for this repository.
 --github off gives it nothing. Your git user.name and user.email are set
 on the box either way. Forwarding needs the box image's helpers, so on
-another provider's VM the default is off; store works there once gh is
-installed on it.`,
+a VM without them (any image but claude-agent) it's off; store works
+there once gh is installed on it.`,
 	RunE: runClaude,
 }
 
@@ -161,21 +171,15 @@ func runClaude(cmd *cobra.Command, args []string) error {
 	}
 	if !onBoxes() {
 		// The box image's credential helper and gh wrapper do the
-		// forwarding; a VM has neither.
-		if claudeGitHub == githubForward {
-			if cmd.Flags().Changed("github") {
-				return fmt.Errorf("--github forward needs the box image's helpers; on %s use --github store or off", cloudProvider)
-			}
-			claudeGitHub = githubOff
-			fmt.Fprintf(os.Stderr, "Claude on %s gets no GitHub credentials (--github store keeps a token there).\n", cloudProvider)
-		}
-		// The flag defaults are box image and size names; a VM takes the
-		// provider's own defaults unless told otherwise.
+		// forwarding; whether the VM has them is settled once it's up
+		// (resolveVMGitHub). The flag defaults are box image and size
+		// names; a VM takes the provider's own defaults unless told
+		// otherwise -- except the image on ac, which runs a box's.
 		if !cmd.Flags().Changed("size") {
 			claudeSize = ""
 		}
 		if !cmd.Flags().Changed("image") {
-			claudeImage = ""
+			claudeImage = vmClaudeImage()
 		}
 	}
 	if claudeRepo != "" {
@@ -207,6 +211,7 @@ func runClaude(cmd *cobra.Command, args []string) error {
 	}
 	defer t.box.close()
 	dir, name, box := t.dir, t.name, t.box
+	resolveVMGitHub(ctx, box, cmd.Flags().Changed("github"))
 
 	// First: everything after this needs git on the box, and a VM made
 	// from a plain image has none.
