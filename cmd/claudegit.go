@@ -78,7 +78,13 @@ func claudeFetch(ctx context.Context) error {
 		return err
 	}
 	defer t.box.close()
+	return fetchBox(ctx, t)
+}
 
+// fetchBox brings t's box's branches and uncommitted work here as box/*
+// and lists what came -- onctl claude fetch, and what an ephemeral run
+// does before deleting its box.
+func fetchBox(ctx context.Context, t *claudeGitTarget) error {
 	// Snapshot the uncommitted work of the main checkout and of every
 	// task's worktree: box/wip, box/wip-<task>.
 	worktrees, err := boxWorktrees(ctx, t.box, t.dir)

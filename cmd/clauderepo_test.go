@@ -74,6 +74,10 @@ func TestCloneScript(t *testing.T) {
 	if !strings.Contains(string(refs), "origin/other") {
 		t.Errorf("remote branches after fetch: %q", refs)
 	}
+	// A second clone into the same place would clone into the checkout.
+	if out, err := exec.Command("sh", "-c", cloneScript(origin, dir, "onctl/ef34ab")).CombinedOutput(); err == nil || !strings.Contains(string(out), "already exists") {
+		t.Errorf("cloning over an existing directory: %v, %s", err, out)
+	}
 }
 
 // --repo is a project of its own on the box, so the flags about a

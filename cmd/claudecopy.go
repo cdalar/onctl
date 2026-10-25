@@ -312,3 +312,51 @@ func copyTranscript(ctx context.Context, box *boxSSH, dir, jsonl, id string) err
 	return streamTar(ctx, box, "mkdir -p ~/.claude/projects/"+shellQuote(key)+" && tar -xzf - -C ~/.claude/projects/"+shellQuote(key),
 		func(tw *tar.Writer) error { return addFiles(tw, src, files) })
 }
+
+// cloneURL is where the box clones the project from: its origin, with a
+// GitHub one as https so the box's credential helper (forwarded or
+// stored token) serves it -- or "" for a repository without an origin,
+// or no repository, which is copied instead.
+func cloneURL(dir string) string {
+	if repo := githubRepo(dir); repo != "" {
+		return "https://github.com/" + repo + ".git"
+	}
+	out, err := exec.Command("git", "-C", dir, "remote", "get-url", "origin").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// cloneProject clones url onto the box at dir, on branch, lending it this
+// machine's GitHub token for the clone when --github forward (the box's
+// helpers read the main session's socket).
+func cloneProject(ctx context.Context, box *boxSSH, dir, url, branch string) error {
+	fmt.Fprintf(os.Stderr, "Cloning %s on %s...\n", url, box.name)
+	extra, done := forwardGitHub(ctx, box, boxGitHubSocket)
+	defer done()
+	if err := box.runWith(ctx, extra, cloneScript(url, dir, branch)); err != nil {
+		if claudeGitHub == githubOff {
+			return fmt.Errorf("cloning %s on %s: %w (a private repository needs --github store, a token kept on the box)", url, box.name, err)
+		}
+		return fmt.Errorf("cloning %s on %s: %w", url, box.name, err)
+	}
+	fmt.Fprintf(os.Stderr, "On branch %s.\n", branch)
+	return nil
+}
+
+// cloneScript clones url's default branch into dir and branches -- or
+// fails if dir is already there, rather than cloning into it. The
+// clone fetches one branch, but maps them all, so a later fetch sees the
+// rest. GIT_TERMINAL_PROMPT=0 makes a repository GitHub answers 401 for
+// (a private one, or a mistyped name) fail at once instead of waiting
+// for a username nobody can type.
+func cloneScript(url, dir, branch string) string {
+	d := shellQuote(dir)
+	return `set -e
+[ ! -e ` + d + ` ] || { echo "` + dir + ` already exists on this box" >&2; exit 1; }
+mkdir -p "$(dirname ` + d + `)"
+GIT_TERMINAL_PROMPT=0 git clone -q --single-branch ` + shellQuote(url) + ` ` + d + `
+git -C ` + d + ` config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+git -C ` + d + ` checkout -q -b ` + shellQuote(branch)
+}

@@ -172,6 +172,12 @@ func (herdrMux) setup() string {
 func (herdrMux) start(s taskSession, line string, detached bool) string {
 	cmdFile := muxRunDir + "/" + s.name + ".cmd"
 	pane := "exec sh " + shellQuote(cmdFile)
+	if !detached && s.ephemeral {
+		// The run deletes the box once Claude exits, so the attached
+		// client (exec herdr, below) has to return then: stopping the
+		// server does that. A kept box's server outlives the session.
+		pane = "sh " + shellQuote(cmdFile) + "; herdr server stop"
+	}
 	script := muxMarkScript("herdr") + `
 if ! herdr workspace list >/dev/null 2>&1; then
   (cd / && setsid herdr server >/dev/null 2>&1 </dev/null &)

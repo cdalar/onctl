@@ -25,6 +25,9 @@ type taskSession struct {
 	dir      string // where Claude runs on the box
 	name     string // its session in the multiplexer: claude, -<task> for a task
 	ghSocket string // where its GitHub forwarding lands on the box
+	// ephemeral: the box is this run's, deleted when Claude exits -- so
+	// the session must end with Claude (mux.start), not outlive it.
+	ephemeral bool
 }
 
 func newTaskSession(project, task string) taskSession {
