@@ -1,3 +1,6 @@
+---
+sidebar_position: 4
+---
 # Deployments
 
 Deploy a Docker image to a VM onctl already manages: `deploy` pulls the image
