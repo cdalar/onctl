@@ -22,7 +22,12 @@ import (
 // newest push first. Enter on one runs `onctl claude --repo owner/name`
 // on the tui's provider as a child process, the way `s` runs `onctl
 // ssh`: a box with the repository cloned on a new branch and Claude
-// attached (clauderepo.go). The list is cached in ~/.onctl/repos.json,
+// attached (clauderepo.go). The box is a new one every time -- named
+// <name>-<word>-<word>-<id> like a generated box (boxname.go) and
+// passed as --box, where `onctl claude --repo` alone would come back
+// to claude-<name> -- so that two pieces of work on a repository never
+// share a box; it is kept when Claude exits, for :vms to pause or
+// destroy. The list is cached in ~/.onctl/repos.json,
 // since it hardly changes and a page of 100 repositories takes gh a few
 // seconds: opening the view shows the cache at once, asks GitHub again
 // in the background only when the cache is older than repoCacheMaxAge,
@@ -252,7 +257,9 @@ func describeRepo(r ghRepo) []string {
 	if !r.PushedAt.IsZero() {
 		lines = append(lines, kv("Pushed", stamp(r.PushedAt)+" ("+vmAge(r.PushedAt)+" ago)"))
 	}
-	lines = append(lines, "", "enter starts Claude on a box with it cloned (`"+strings.Join(append([]string{"onctl"}, claudeRepoArgs(r.FullName)...), " ")+"`).")
+	lines = append(lines, "",
+		"enter starts Claude on a new box with it cloned, "+repoBoxPrefix(r.FullName)+"-<word>-<word>-<id>:",
+		"`"+strings.Join(append([]string{"onctl"}, claudeRepoArgs(r.FullName, "<box>")...), " ")+"`. Every enter is another box.")
 	if r.Private {
 		lines = append(lines, "A private repository needs a token on the box: `onctl claude --repo "+r.FullName+" --github store`.")
 	}
@@ -272,27 +279,53 @@ func (m *tuiModel) repo(name string) *ghRepo {
 	return nil
 }
 
-// claudeRepoArgs is the command line `enter` runs for repo, less the
-// binary: `onctl claude --repo` on the tui's provider.
-func claudeRepoArgs(repo string) []string {
-	return tuiChildArgs("claude", "--repo", repo)
+// claudeRepoArgs is the command line `enter` runs for repo on the box
+// named box, less the binary: `onctl claude --repo --box` on the tui's
+// provider.
+func claudeRepoArgs(repo, box string) []string {
+	return tuiChildArgs("claude", "--repo", repo, "--box", box)
 }
 
-// claudeRepo hands the terminal to `onctl claude --repo <repo>` (a
-// child process, as ssh is: its output -- the progress lines, then
-// Claude itself over ssh -- goes to the terminal the alternate screen
-// gives back). The end of its stderr is kept too, to say why it failed,
-// since the tui's redraw hides what it printed.
+// repoBoxPrefix is the first part of a box name for repo: its name,
+// as a name part.
+func repoBoxPrefix(repo string) string {
+	_, name, _ := strings.Cut(repo, "/")
+	return nameSlug(name)
+}
+
+// repoBoxName is a name for a new box for repo, none of the VMs the
+// tui lists: <name>-<word>-<word>-<id>, as generateName makes them.
+func (m *tuiModel) repoBoxName(repo string) (string, error) {
+	taken := make(map[string]bool, len(m.vms))
+	for _, vm := range m.vms {
+		taken[vm.Name] = true
+	}
+	n, err := generateName(repoBoxPrefix(repo), "", func(s string) bool { return taken[s] })
+	if err != nil {
+		return "", err
+	}
+	return n.box(), nil
+}
+
+// claudeRepo hands the terminal to `onctl claude --repo <repo> --box
+// <new box>` (a child process, as ssh is: its output -- the progress
+// lines, then Claude itself over ssh -- goes to the terminal the
+// alternate screen gives back). The end of its stderr is kept too, to
+// say why it failed, since the tui's redraw hides what it printed.
 func (m tuiModel) claudeRepo(repo string) (tea.Model, tea.Cmd) {
 	exe, err := os.Executable()
 	if err != nil {
 		return m, m.fail("finding onctl: %v", err)
 	}
-	cmd := exec.Command(exe, claudeRepoArgs(repo)...)
+	box, err := m.repoBoxName(repo)
+	if err != nil {
+		return m, m.fail("naming a box for %s: %v", repo, err)
+	}
+	cmd := exec.Command(exe, claudeRepoArgs(repo, box)...)
 	tail := &tailBuffer{max: 4096}
 	cmd.Stderr = io.MultiWriter(os.Stderr, tail)
 	return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
-		return tuiClaudeDoneMsg{repo: repo, err: err, stderr: tail.String()}
+		return tuiClaudeDoneMsg{repo: repo, box: box, err: err, stderr: tail.String()}
 	})
 }
 

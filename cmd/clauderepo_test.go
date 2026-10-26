@@ -94,10 +94,17 @@ func TestRepoConflicts(t *testing.T) {
 }
 
 // The way back to a --repo box is the same --repo (a --box from a
-// directory here would be another project), on the same provider.
+// directory here would be another project), on the same provider --
+// and the same --box when one was named, since --repo alone goes to
+// claude-<name>.
 func TestRepoAttachHint(t *testing.T) {
 	withCloudProvider(t, "hetzner")
 	if got := repoAttachHint("cdalar/onctl"); got != "onctl -p hetzner claude --repo cdalar/onctl" {
+		t.Errorf("hint = %q", got)
+	}
+	claudeBox = "onctl-quiet-otter-1a2b"
+	t.Cleanup(func() { claudeBox = "" })
+	if got := repoAttachHint("cdalar/onctl"); got != "onctl -p hetzner claude --repo cdalar/onctl --box onctl-quiet-otter-1a2b" {
 		t.Errorf("hint = %q", got)
 	}
 }

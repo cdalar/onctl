@@ -209,6 +209,6 @@ onctl claude -- --model opus
 
 :::tip From the TUI
 In `onctl tui`, `a` runs Claude Code on the VM under the cursor, and `:repos`
-lists your GitHub repositories so `enter` starts Claude on a box with one
-cloned (`onctl claude --repo`).
+lists your GitHub repositories so `enter` starts Claude on a new box with one
+cloned (`onctl claude --repo`, a box of its own each time).
 :::
