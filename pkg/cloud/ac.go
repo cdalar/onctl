@@ -356,6 +356,15 @@ func (p ProviderAC) Deploy(server Vm) (Vm, error) {
 		sshPublicKey = strings.TrimSpace(string(data))
 	}
 
+	// `container run` pulls a missing image itself, but silently, and a
+	// first pull of an agent image is hundreds of MB: say what the wait is.
+	if _, err := p.CLI.Run("image", "inspect", image); err != nil {
+		fmt.Fprintf(os.Stderr, "Pulling %s...\n", image)
+		if _, err := p.CLI.Run("image", "pull", image); err != nil {
+			return Vm{}, fmt.Errorf("pulling %s: %w", image, err)
+		}
+	}
+
 	args := []string{
 		"run", "--detach",
 		"--name", server.Name,
