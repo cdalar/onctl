@@ -31,6 +31,8 @@ type fakeACRunner struct {
 	lists      int
 	// logs is what `container logs` prints for any container.
 	logs string
+	// images are the references `image inspect` finds; `image pull` adds.
+	images map[string]bool
 }
 
 func (f *fakeACRunner) Run(args ...string) ([]byte, error) {
@@ -98,6 +100,20 @@ func (f *fakeACRunner) Run(args ...string) ([]byte, error) {
 		return nil, f.setStatus(args[1], "running")
 	case "logs":
 		return []byte(f.logs), nil
+	case "image":
+		switch args[1] {
+		case "inspect":
+			if f.images[args[2]] {
+				return []byte("[]"), nil
+			}
+			return nil, errors.New("not found")
+		case "pull":
+			if f.images == nil {
+				f.images = map[string]bool{}
+			}
+			f.images[args[2]] = true
+			return nil, nil
+		}
 	case "rm":
 		for i, c := range f.containers {
 			if c["configuration"].(map[string]any)["id"] == args[1] {
@@ -212,6 +228,30 @@ func TestAC_Deploy_ImageOverride(t *testing.T) {
 	_, err = p.Deploy(Vm{Name: "sb2"})
 	require.Error(t, err, "no image anywhere must be refused before anything runs")
 	assert.Len(t, f.callsTo("run"), 1)
+}
+
+// An image not on the Mac yet is pulled before `run` -- which would pull it
+// too, but silently, and that wait had no explanation; a pull that fails
+// is the error, rather than a failed `run`. An image already here is not.
+func TestAC_Deploy_PullsMissingImage(t *testing.T) {
+	f := &fakeACRunner{}
+	p := newTestAC(t, f)
+	_, err := p.Deploy(Vm{Name: "sb1"})
+	require.NoError(t, err)
+	pulls := f.callsTo("image")
+	require.Len(t, pulls, 2, "inspect, then pull")
+	assert.Equal(t, []string{"image", "inspect", "docker.io/library/ubuntu:24.04"}, pulls[0])
+	assert.Equal(t, []string{"image", "pull", "docker.io/library/ubuntu:24.04"}, pulls[1])
+
+	_, err = p.Deploy(Vm{Name: "sb2"})
+	require.NoError(t, err)
+	assert.Len(t, f.callsTo("image"), 3, "the second sandbox finds the image and doesn't pull")
+
+	f.failOn = map[string]error{"image": errors.New("registry unreachable")}
+	_, err = p.Deploy(Vm{Name: "sb3"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pulling docker.io/library/ubuntu:24.04")
+	assert.Len(t, f.callsTo("run"), 2, "no run without the image")
 }
 
 // A second Deploy of an existing name returns it rather than starting a
