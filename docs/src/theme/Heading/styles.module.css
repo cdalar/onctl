@@ -1,0 +1,74 @@
+/* The theme's own hash-link rules, carried over from
+   @docusaurus/theme-classic's Heading/styles.module.css (which is only
+   loaded by the original component, so an ejected Heading has to bring
+   them along). */
+
+:global(.hash-link) {
+  opacity: 0;
+  padding-left: 0.5rem;
+  transition: opacity var(--ifm-transition-fast);
+  user-select: none;
+}
+
+:global(.hash-link::before) {
+  content: '#';
+}
+
+:global(.hash-link:focus),
+:global(*:hover > .hash-link) {
+  opacity: 1;
+}
+
+/* Added for the copy-on-click behaviour. */
+
+.hashLink {
+  position: relative;
+}
+
+/* No hover on touch screens, so keep the link visible there. */
+@media (hover: none) {
+  .hashLink {
+    opacity: 1;
+  }
+}
+
+.hashLink.copied {
+  /* Clicking scrolls the heading out from under the cursor, so the
+     hover rule alone would hide the link and its toast mid-feedback. */
+  opacity: 1;
+}
+
+.copied::before {
+  color: var(--ifm-color-success);
+}
+
+.toast {
+  /* To the right of the '#', not above it: clicking scrolls the heading
+     to just below the sticky navbar, which would cover anything above. */
+  position: absolute;
+  left: calc(100% + 0.5rem);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0.2rem 0.55rem;
+  border-radius: 0.3rem;
+  background: var(--ifm-color-emphasis-800);
+  color: var(--ifm-color-emphasis-0);
+  font-family: var(--ifm-font-family-base);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: hashLinkToastIn var(--ifm-transition-fast) ease-out;
+}
+
+@keyframes hashLinkToastIn {
+  from {
+    opacity: 0;
+    transform: translate(-0.2rem, -50%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+}
