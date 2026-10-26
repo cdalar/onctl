@@ -422,8 +422,9 @@ func (m *tuiModel) pushHelp() {
 	if v == reposView {
 		lines = append(lines, "", "GitHub Repos",
 			"  The repositories gh's account can reach (gh api user/repos), newest push first;",
-			"  enter runs `onctl claude --repo owner/name` on this provider: a box (claude-<name>) with the repo",
-			"  cloned on a new onctl/... branch and Claude attached; the same --repo later comes back to it.",
+			"  enter runs `onctl claude --repo owner/name` on this provider: a new box every time",
+			"  (<name>-<word>-<word>-<id>) with the repo cloned on a new onctl/... branch and Claude attached,",
+			"  kept when Claude exits (pause or destroy it in :vms); two pieces of work never share a box.",
 			"  The list is cached (~/.onctl/repos.json) and asked of GitHub again when an hour old, or with R.")
 	}
 	if v == vmsView {

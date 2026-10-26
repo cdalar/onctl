@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -889,7 +890,7 @@ func TestTUIRepos(t *testing.T) {
 	// d describes the row; the page names the command enter runs, on
 	// this provider.
 	m, _ = press(t, m, "d")
-	if m.top().kind != pageText || !strings.Contains(m.View(), "onctl claude --repo cdalar/onctl --provider hetzner") {
+	if m.top().kind != pageText || !strings.Contains(m.View(), "onctl claude --repo cdalar/onctl --box <box> --provider hetzner") {
 		t.Errorf("describe page:\n%s", m.View())
 	}
 	m, _ = press(t, m, "esc")
@@ -988,10 +989,37 @@ func TestTUIClaudeDone(t *testing.T) {
 	if m.flash != "claude on cdalar/onctl: exit status 1" {
 		t.Errorf("flash = %q", m.flash)
 	}
-	next, _ = m.Update(tuiClaudeDoneMsg{repo: "cdalar/onctl"})
+	next, _ = m.Update(tuiClaudeDoneMsg{repo: "cdalar/onctl", box: "onctl-quiet-otter-1a2b"})
 	m = next.(tuiModel)
-	if m.flashErr || m.flash != "claude on cdalar/onctl ended" {
+	if m.flashErr || m.flash != "claude on cdalar/onctl ended (onctl-quiet-otter-1a2b is kept)" {
 		t.Errorf("flash = %q", m.flash)
+	}
+}
+
+// enter in :repos names a new box each time -- the repository's name,
+// two words and an id, never one of the VMs listed -- so that two
+// pieces of work on a repository never share a box (--repo alone would
+// come back to claude-<name>).
+func TestTUIRepoBoxName(t *testing.T) {
+	withCloudProvider(t, "hetzner")
+	m := newTUI(nil)
+	m.vms = []cloud.Vm{{Name: "claude-onctl"}, {Name: "onctl-brave-otter-1a2b"}}
+	seen := map[string]bool{}
+	for range 5 {
+		name, err := m.repoBoxName("cdalar/Onctl")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !regexp.MustCompile(`^onctl-[a-z]+-[a-z]+-[0-9a-f]{4}$`).MatchString(name) || name == "onctl-brave-otter-1a2b" {
+			t.Errorf("box name %q", name)
+		}
+		if seen[name] {
+			t.Errorf("box name %q twice", name)
+		}
+		seen[name] = true
+	}
+	if got := claudeRepoArgs("cdalar/onctl", "onctl-quiet-otter-1a2b"); strings.Join(got, " ") != "claude --repo cdalar/onctl --box onctl-quiet-otter-1a2b --provider hetzner" {
+		t.Errorf("args = %q", got)
 	}
 }
 

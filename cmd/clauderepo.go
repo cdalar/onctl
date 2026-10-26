@@ -153,12 +153,18 @@ func runRepo(cmd *cobra.Command, args []string) error {
 
 // repoAttachHint is the command that comes back to a --repo box: the
 // same --repo (--box from a directory here would be another project),
-// naming the provider when it isn't the default.
+// with the same --box when the box was named (the tui names a new one
+// each time; --repo alone would go to claude-<name>), naming the
+// provider when it isn't the default.
 func repoAttachHint(repo string) string {
-	if onBoxes() {
-		return "onctl claude --repo " + repo
+	hint := "onctl claude --repo " + repo
+	if claudeBox != "" {
+		hint += " --box " + claudeBox
 	}
-	return "onctl -p " + cloudProvider + " claude --repo " + repo
+	if onBoxes() {
+		return hint
+	}
+	return "onctl -p " + cloudProvider + " " + strings.TrimPrefix(hint, "onctl ")
 }
 
 func init() {

@@ -46,7 +46,7 @@ var tuiCmd = &cobra.Command{
   s            open a terminal on the VM (onctl ssh)
   a            run Claude Code on the VM (onctl claude --box vm)
   enter        in :repos (your GitHub repos, newest push first, from gh), start Claude
-               on a box of this provider with the repo cloned (onctl claude --repo)
+               on a new box of this provider with the repo cloned (onctl claude --repo)
   c            create a VM (name, image and type are asked; runs onctl create)
   p / r        pause / resume
   ctrl-d       destroy the VM (asks first)
@@ -171,6 +171,7 @@ type (
 	}
 	tuiClaudeDoneMsg struct { // `onctl claude --repo` from :repos ended
 		repo   string
+		box    string // the new box it ran on, kept
 		err    error
 		stderr string
 	}
@@ -517,7 +518,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			return m, tea.Batch(m.fail("claude on %s: %s", msg.repo, claudeFailure(msg.stderr, msg.err)), m.refresh())
 		}
-		return m, tea.Batch(m.say("claude on %s ended", msg.repo), m.refresh())
+		return m, tea.Batch(m.say("claude on %s ended (%s is kept)", msg.repo, msg.box), m.refresh())
 
 	case tuiCatalogMsg:
 		if m.create != nil {
