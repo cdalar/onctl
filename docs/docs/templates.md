@@ -1,52 +1,79 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 ---
 # Templates
 
-## initialize virtual machines
-
-- use --apply-file (-a in short) to execute an initialization script 
-- use --cloud-init (-i in short) to set cloud-init script on virtual machines startup.  
-
-## bash
-
-1. use your own script. 
+A template is a bash script onctl runs on a VM over ssh: on a new VM with
+`onctl create -a`, or on one that already exists with `onctl ssh NAME -a`.
+Cloud-init is the other way in, at boot.
 
 ```bash
-onctl create -a scripts/init.sh 
+onctl create -n web -a docker/docker.sh           # a new VM, Docker installed
+onctl ssh web -a scripts/harden.sh                # the same on an existing VM
+onctl create -n web -i cloud-init/ssh-443.config  # cloud-init at boot
 ```
-    to use the file `scripts/init.sh` in your current directory.
 
-1. use onctl-templates repo. 
+## Where a script can come from
 
-    files on the `onctl-templates` repo can be access directly by using the relative path.
+`-a` takes a path or a URL, resolved in this order:
+
+1. **A local file**: `onctl create -a scripts/init.sh` runs `scripts/init.sh`
+   from your current directory.
+2. **A file embedded in onctl** (under `internal/files/` in the repository).
+3. **The [onctl-templates](https://github.com/cdalar/onctl-templates)
+   repository**, by relative path: `onctl create -a wireguard/vpn.sh` fetches
+   `https://templates.onctl.com/wireguard/vpn.sh`. `onctl templates list`
+   shows what's there.
+4. **Any URL**: `onctl create -a https://example.com/setup.sh`.
+
+`-a` can be given more than once; the scripts run in order.
+
+## Files and variables for the script
+
+| | |
+|---|---|
+| `-e KEY=VALUE`, `--vars` | environment variables for the script (repeatable) |
+| `--dot-env .env` | the same, from a dot-env file |
+| `-u`, `--upload FILE` | files copied to the VM before the scripts run (repeatable) |
+| `-d`, `--download FILE` | files copied back here after they've run (repeatable) |
+
+They work the same on `onctl create` and `onctl ssh`.
+
+## cloud-init
+
+`-i`/`--cloud-init` hands a [cloud-init](https://cloudinit.readthedocs.io/en/latest/)
+file to the VM at boot, before any `-a` script runs. For example, to move ssh
+to port 443 and then install WireGuard:
 
 ```bash
-onctl create -a wireguard/vpn.sh  # https://templates.onctl.com/wireguard/vpn.sh
+onctl create -a wireguard/vpn.sh --cloud-init cloud-init-ssh-443.config -P 443
 ```
 
-1. use any external source as a HTTP URL.
+`--cloud-init-timeout` (default `3m`) is how long onctl waits for cloud-init
+to finish before running the scripts.
 
-    any file that is accessiable via URL can be used. 
+## Everything in one file
 
-    ```bash
-    onctl create -a https://gist.githubusercontent.com/cdalar/dabdc001059089f553879a7b535e9b21/raw/02f336857b04eb13bc7ceeec1e66395bd615824b/helloworld.sh
-    ```
-    to use the embedded file. Embedded files can be found under `internal/files/` in the repository.
+`-f`/`--file` takes all of `create`'s options from a YAML file, so a VM's
+setup can be kept and repeated:
 
-## cloud-init 
+```yaml
+vm:
+  name: web
+  type: cpx21
+  image: ubuntu-24.04
+applyFiles:
+  - docker/docker.sh
+  - scripts/deploy.sh
+uploadFiles:
+  - docker-compose.yml
+variables:
+  - APP_ENV=production
+dotEnvFile: .env
+```
 
-check: [cloud-init docs](https://cloudinit.readthedocs.io/en/latest/)
-
-To set a cloud-init configuration to your virtual machine. Just add `--cloud-init` flag to your command. 
-
-ex. this command will set the ssh port to 443.
 ```bash
-onctl create -a wireguard/vpn.sh --cloud-init cloud-init-ssh-443.config
+onctl create -f web.yaml
+onctl env create -t web.yaml      # the same
+onctl env destroy -t web.yaml     # and its teardown
 ```
-
-## precedence on scripts
-1. local file
-1. embedded files
-1. files on [onctl-templates](https://github.com/cdalar/onctl-templates) repo
-1. as defined on URL (https://example.com)

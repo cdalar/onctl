@@ -17,13 +17,18 @@ Check 🌍 https://onctl.sh for detailed documentation
 
 ## What onctl brings 
 
-- 🌍 Simple intuitive CLI to run VMs in seconds.  
-- ⛅️ Supports multiple cloud providers (aws, azure, gcp, hetzner, ovh) plus local microVMs via Firecracker (`fc`) and Cloud Hypervisor (`ch`) -- no cloud account needed for those two
-- 🚀 Sets your public key and Gives you SSH access with `onctl ssh <vm-name>`
-- ✨ Cloud-init support. Set your own cloud-init file `onctl up -n qwe --cloud-init <cloud.init.file>`
-- 🤖 Use ready to use templates to configure your vm. Check [onctl-templates](https://github.com/cdalar/onctl-templates) `onctl up -n qwe -a k3s/k3s-server.sh`
-- 🗂️ Use your custom local or http accessible scripts to configure your vm. `onctl ssh qwe -a <my_local_script.sh>`
-  
+- 🌍 Simple intuitive CLI to run VMs in seconds.
+- ⛅️ One CLI for aws, azure, gcp, hetzner and ovh, plus local microVMs with Firecracker (`fc`), Cloud Hypervisor (`ch`) and, on a Mac, Apple containers (`ac`) -- no cloud account needed for those three.
+- 📦 Hosted microVMs with the `boxes` provider: no cloud account, no host to run. `onctl login` once with a token from [boxctl.io](https://boxctl.io), then `onctl create -p boxes`.
+- 🤖 `onctl claude`: run Claude Code on a box instead of your laptop, with your project on it, and get the work back as git branches. See [Claude Code on a box](./claude).
+- 🖥️ `onctl tui`: your VMs in a k9s-style terminal UI -- shell, Claude, create, pause, resume, destroy, images, sizes, GitHub repos. See [Terminal UI](./tui).
+- 🚀 Sets your public key and gives you SSH access with `onctl ssh <vm-name>`; `onctl port-forward` brings the VM's ports here.
+- ⏸️ `onctl pause` snapshots a VM and deletes the server so it costs nothing, keeping its IP; `onctl resume` brings it back.
+- ✨ Cloud-init support: `onctl create -n qwe --cloud-init <cloud.init.file>`.
+- 🤖 Ready-to-use templates to configure your VM, from [onctl-templates](https://github.com/cdalar/onctl-templates): `onctl create -n qwe -a k3s/k3s-server.sh`.
+- 🗂️ Your own local or HTTP-accessible scripts, on a new VM or an existing one: `onctl ssh qwe -a <my_local_script.sh>`.
+- 📥 Import a server onctl didn't create (a Hetzner auction box, say) so `ssh`/`ls` work on it too: `onctl import <name> --ip <ip>`.
+
 ## Quick Start
 
 initialize project. this will create a `.onctl` directory. check configuration file and set as needed.
@@ -106,29 +111,36 @@ Examples:
   onctl destroy test
 
 Available Commands:
-  action      Execute a custom action from GitHub
-  completion  Generate the autocompletion script for the specified shell
-  create      Create a VM
-  deploy      Deploy a Docker image to a remote VM
-  destroy     Destroy VM(s)
-  env         Manage environments
-  help        Help about any command
-  images      List available OS images for the current cloud provider
-  import      Import an existing server so it can be managed with ssh/ls
-  init        init onctl environment
-  ls          List VMs
-  pause       Snapshot and delete a VM to stop compute cost (keeps its IP)
-  resume      Recreate a paused VM from its snapshot
-  ssh         Spawn an SSH connection to a VM
-  templates   Manage onctl templates
-  version     Print the version number of onctl
-  vm          Manage virtual machines
+  action       Execute a custom action from GitHub
+  claude       Run Claude Code on a box, with this project on it
+  completion   Generate the autocompletion script for the specified shell
+  create       Create a VM
+  deploy       Deploy a Docker image to a remote VM
+  destroy      Destroy VM(s)
+  env          Manage environments
+  help         Help about any command
+  images       List available OS images for the current cloud provider
+  import       Import an existing server so it can be managed with ssh/ls
+  init         init onctl environment
+  login        Log in to hosted boxes (-p boxes) with a personal token
+  logout       Forget the saved boxes token
+  ls           List VMs
+  pause        Snapshot and delete a VM to stop compute cost (keeps its IP)
+  port-forward Forward local ports to ports on a VM, over ssh
+  restart      Cold-boot a VM again from its own disk, optionally on a new kernel (fc)
+  resume       Recreate a paused VM from its snapshot
+  sizes        List the VM sizes the current provider offers (what --type takes)
+  ssh          Spawn an SSH connection to a VM
+  ssh-proxy    Relay stdin/stdout to a VM's port through the provider (for ssh's ProxyCommand)
+  templates    Manage onctl templates
+  tui          Browse and manage your VMs in a k9s-style terminal UI
+  version      Print the version number of onctl
 
 Flags:
   -c, --config string                             Path to onctl.yaml configuration file (overrides the .onctl directory lookup)
-  -h, --help                                       help for onctl
+  -h, --help                                      help for onctl
       --project gcloud config get-value project   GCP: project ID (falls back to gcloud config get-value project when the onctl.yaml placeholder is present)
-  -p, --provider string                           cloud provider: aws, hetzner, azure, gcp, ovh, fc, ch, static (overrides ONCTL_CLOUD)
+  -p, --provider string                           cloud provider: aws, hetzner, azure, gcp, ovh, fc, ch, ac, static, boxes (overrides ONCTL_CLOUD)
       --resource-group string                     Azure: resource group (required for the azure provider; falls back to the az CLI's configured default group, if any)
       --service-name string                       OVH: Public Cloud project service name (required for the ovh provider)
       --subscription-id az account show           Azure: subscription ID (required for the azure provider; falls back to az account show)

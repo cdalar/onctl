@@ -26,8 +26,8 @@ export default function Tui(): ReactNode {
             <img
               src="/img/tui.png"
               alt="onctl tui: a header with the provider, VM counts and hotkeys, and a table of VMs with their state, public IP, type, image, location, age and hourly cost"
-              width={2068}
-              height={774}
+              width={2076}
+              height={828}
               loading="lazy"
             />
           </TerminalWindow>
