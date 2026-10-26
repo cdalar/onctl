@@ -50,16 +50,45 @@ branch, and Claude starts in it.
 
 ## Logging in
 
-The first time, Claude on the box asks you to `/login`: it prints a URL to open
-here and a code to paste back. To skip that on every new box, save a
-long-lived token once:
+Claude on the box needs to be logged in to Claude, separately from your
+machine. The first time, with nothing saved, Claude on the box asks you to
+`/login`: it prints a URL to open here and a code to paste back. That login
+stays on that box, and the next box asks again.
+
+To skip that on every new box, save a long-lived token once:
 
 ```bash
-onctl claude login     # runs `claude setup-token`, keeps the token in the Keychain
-onctl claude logout    # forgets it
+onctl claude login
 ```
 
-`--claude-auth` picks the method explicitly (`token`, `login` or `api-key`).
+It runs `claude setup-token`, which needs a Pro, Max, Team or Enterprise plan
+and opens the browser for approval, and asks you to paste the token it prints
+(input hidden). A token can also be piped in, made with `claude setup-token`
+on any machine with Claude Code:
+
+```bash
+echo "$TOKEN" | onctl claude login
+```
+
+The token is kept in the macOS Keychain (elsewhere in
+`~/.onctl/claude/oauth-token`, mode 0600). Each box's Claude gets it in its
+environment when it starts, never on the box's disk. `onctl claude logout`
+forgets it.
+
+:::note
+The token can only make model requests: Remote Control and claude.ai
+connectors don't work with it. For a box that needs them, use
+`--claude-auth login` and log in on the box.
+:::
+
+`--claude-auth` picks the method for a run:
+
+| | |
+|---|---|
+| `auto` | the saved token if there is one, else `/login` on the box (default) |
+| `token` | the saved token; fails if none is saved |
+| `login` | `/login` on the box, even with a token saved |
+| `api-key` | `ANTHROPIC_API_KEY` from this machine's environment, passed to the box |
 
 ## GitHub access
 
@@ -167,6 +196,16 @@ Everything after `--` goes to `claude` itself:
 ```bash
 onctl claude -- --model opus
 ```
+
+## Subcommands
+
+| | |
+|---|---|
+| `onctl claude login` | save a Claude token here, so Claude on every box is logged in ([Logging in](#logging-in)) |
+| `onctl claude logout` | forget the saved token |
+| `onctl claude ls` | list this project's Claude sessions: the main one and its tasks ([Several tasks at once](#several-tasks-at-once)) |
+| `onctl claude fetch` | fetch the box's branches and uncommitted work as `box/*` ([Getting the work back](#getting-the-work-back)) |
+| `onctl claude push [refspec...]` | push local commits to the project on its box |
 
 :::tip From the TUI
 In `onctl tui`, `a` runs Claude Code on the VM under the cursor, and `:repos`
