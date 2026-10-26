@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -57,6 +58,18 @@ type cliRunner struct {
 // NewRunner returns a cloud.ACRunner that executes binPath.
 func NewRunner(binPath string) cloud.ACRunner {
 	return cliRunner{binPath: binPath}
+}
+
+// Stream runs the CLI with its output on the terminal, for commands that
+// draw their own progress (image pull).
+func (r cliRunner) Stream(args ...string) error {
+	cmd := exec.Command(r.binPath, args...)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("container %s: %w", args[0], err)
+	}
+	return nil
 }
 
 func (r cliRunner) Run(args ...string) ([]byte, error) {
