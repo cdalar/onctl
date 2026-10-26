@@ -670,7 +670,7 @@ func ensureClaudeBox(ctx context.Context, c *providerboxes.Client, name string, 
 	if !create {
 		return false, fmt.Errorf("no box %s -- start one with onctl claude", name)
 	}
-	fmt.Fprintf(os.Stderr, "Creating %s (%s, %s)...\n", name, claudeImage, claudeSize)
+	fmt.Fprintf(os.Stderr, "Creating %s %s (%s, %s)...\n", name, providerWhere(), claudeImage, claudeSize)
 	if _, err := c.Create(ctx, name, claudeImage, claudeSize); err != nil {
 		return false, fmt.Errorf("creating %s: %w", name, err)
 	}

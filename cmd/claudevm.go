@@ -51,16 +51,6 @@ func vmClaudeImage() string {
 	return ""
 }
 
-// creatingMessage says what's being made for name on the selected
-// provider. On ac that's an Apple container on this Mac, not a VM
-// somewhere: "on ac" alone read like a cloud.
-func creatingMessage(name string) string {
-	if onAC() {
-		return "Creating " + name + " as an Apple container on this Mac..."
-	}
-	return "Creating " + name + " on " + cloudProvider + "..."
-}
-
 // forwardHelpersCheck tells whether a VM has the box image's GitHub
 // forwarding helpers (git-credential-boxctl and the gh wrapper beside it).
 const forwardHelpersCheck = "test -x /usr/local/bin/git-credential-boxctl"

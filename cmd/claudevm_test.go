@@ -102,18 +102,6 @@ func TestVMClaudeImage(t *testing.T) {
 	assert.False(t, onAC())
 }
 
-// TestCreatingMessage: on ac the sandbox is an Apple container on the
-// Mac the command runs on; the message says so, where "on ac" sounded
-// like a cloud region. Elsewhere the provider's name is the place.
-func TestCreatingMessage(t *testing.T) {
-	saved, savedName := provider, cloudProvider
-	t.Cleanup(func() { provider, cloudProvider = saved, savedName })
-	provider, cloudProvider = &cloud.ProviderAC{}, "ac"
-	assert.Equal(t, "Creating demo as an Apple container on this Mac...", creatingMessage("demo"))
-	provider, cloudProvider = &cloud.ProviderHetzner{}, "hetzner"
-	assert.Equal(t, "Creating demo on hetzner...", creatingMessage("demo"))
-}
-
 // TestVMGitHubWithoutHelpers: without the box image's helpers the
 // forwarded socket has no reader, so forward turns into off whether it
 // was the default or asked for.
