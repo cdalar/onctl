@@ -9,7 +9,7 @@ export default function Lifecycle(): ReactNode {
       <div className="container">
         <div className={styles.grid}>
           <div className={styles.text}>
-            <Heading as="h2">The whole lifecycle</Heading>
+            <Heading as="h2" id="lifecycle">The whole lifecycle</Heading>
             <p>
               Create, connect, check on it, tear it down -- four verbs, regardless of
               which of the six backends is on the other end.

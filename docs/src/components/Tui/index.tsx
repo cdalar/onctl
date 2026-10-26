@@ -12,7 +12,7 @@ export default function Tui(): ReactNode {
     <section className={styles.section}>
       <div className="container">
         <div className={styles.text}>
-          <Heading as="h2">Or watch them all at once</Heading>
+          <Heading as="h2" id="tui">Or watch them all at once</Heading>
           <p>
             <code>onctl tui</code> is the VM list as a live, k9s-style view. <code>s</code> opens
             a shell on the VM under the cursor, <code>c</code> creates one, <code>p</code> and{' '}
