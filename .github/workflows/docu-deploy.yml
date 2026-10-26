@@ -11,6 +11,16 @@ on:
 permissions:
   contents: read
 
+# One Pages deploy at a time, in order. Two merges minutes apart each
+# trigger a deploy, and without this the older build could finish last
+# and overwrite the newer one (it did: #1251's deploy landed after
+# #1252's, and the page #1252 added was missing from the site until a
+# re-run). Not cancel-in-progress: a queued run is superseded by a newer
+# one anyway, so the latest commit always deploys last.
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build Docusaurus
