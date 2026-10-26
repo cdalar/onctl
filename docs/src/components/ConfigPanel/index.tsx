@@ -30,7 +30,7 @@ export default function ConfigPanel(): ReactNode {
       <div className="container">
         <div className={styles.grid}>
           <div className={styles.text}>
-            <Heading as="h2">One config file, every backend</Heading>
+            <Heading as="h2" id="config">One config file, every backend</Heading>
             <p>
               <code>onctl init</code> writes a single <code>onctl.yaml</code> with every
               provider's defaults pre-filled. Edit the section you need, then pick it
