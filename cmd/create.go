@@ -274,7 +274,7 @@ var createCmd = &cobra.Command{
 		}
 
 		s.Stop()
-		fmt.Println("\033[32m✔\033[0m Creating VM...")
+		fmt.Println("\033[32m✔\033[0m " + creatingMessage(opt.Vm.Name))
 
 		// Check Domain Env
 		if opt.Domain != "" {

@@ -51,6 +51,16 @@ func vmClaudeImage() string {
 	return ""
 }
 
+// creatingMessage says what's being made for name on the selected
+// provider. On ac that's an Apple container on this Mac, not a VM
+// somewhere: "on ac" alone read like a cloud.
+func creatingMessage(name string) string {
+	if onAC() {
+		return "Creating " + name + " as an Apple container on this Mac..."
+	}
+	return "Creating " + name + " on " + cloudProvider + "..."
+}
+
 // forwardHelpersCheck tells whether a VM has the box image's GitHub
 // forwarding helpers (git-credential-boxctl and the gh wrapper beside it).
 const forwardHelpersCheck = "test -x /usr/local/bin/git-credential-boxctl"
@@ -187,7 +197,7 @@ func ensureClaudeVM(name, publicKeyFile string, create bool) (vm cloud.Vm, creat
 	if claudeImage != "" {
 		viper.Set(cloudProvider+".vm.image", claudeImage)
 	}
-	fmt.Fprintf(os.Stderr, "Creating %s on %s...\n", name, cloudProvider)
+	fmt.Fprintln(os.Stderr, creatingMessage(name))
 	vm, err = provider.Deploy(want)
 	if err != nil {
 		return cloud.Vm{}, false, fmt.Errorf("creating %s: %w", name, err)
