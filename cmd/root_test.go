@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"os"
 	"testing"
 
@@ -125,4 +126,14 @@ func TestPersistentPreRunE_CompletionNeedsNoConfig(t *testing.T) {
 	ls := &cobra.Command{Use: "ls"}
 	other.AddCommand(ls)
 	assert.Error(t, rootCmd.PersistentPreRunE(ls, nil))
+}
+
+// TestRootErrorsPrintOnce: a run-time failure is reported by main alone
+// (exit 1), not also by cobra with the command's whole usage as if the
+// user had mistyped; a bad flag still says where the usage is.
+func TestRootErrorsPrintOnce(t *testing.T) {
+	assert.True(t, rootCmd.SilenceUsage)
+	assert.True(t, rootCmd.SilenceErrors)
+	err := flagError(claudeCmd, errors.New("unknown flag: --kep"))
+	assert.EqualError(t, err, "unknown flag: --kep\nRun 'onctl claude --help' for usage.")
 }

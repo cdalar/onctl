@@ -29,7 +29,7 @@ var listCmd = &cobra.Command{
 	Use:     "ls",
 	Aliases: []string{"list"},
 	Short:   "List VMs",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 
 		var (
 			tmpl       string
@@ -39,16 +39,13 @@ var listCmd = &cobra.Command{
 		var pausedList cloud.VmList
 		if output == "puppet" || output == "ansible" {
 			serverList, err = provider.List()
-			if err != nil {
-				log.Println(err)
-			}
 			log.Println("[DEBUG] VM List: ", serverList)
 		} else {
 			serverList, pausedList, err = listVMs(provider)
-			if err != nil {
-				log.Println(err)
-			}
 		}
+		// What a failed call returned is still shown (listVMs hands back
+		// the other call's VMs); the failure is the command's result.
+		listErr := err
 
 		switch output {
 		case "puppet":
@@ -119,7 +116,7 @@ var listCmd = &cobra.Command{
 				TabWriter(pausedList, noCostTmpl)
 			}
 		}
-
+		return listErr
 	},
 }
 

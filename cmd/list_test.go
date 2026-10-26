@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -13,7 +14,7 @@ func TestListCmd_CommandProperties(t *testing.T) {
 	assert.Equal(t, "ls", listCmd.Use)
 	assert.Contains(t, listCmd.Aliases, "list")
 	assert.Equal(t, "List VMs", listCmd.Short)
-	assert.NotNil(t, listCmd.Run)
+	assert.NotNil(t, listCmd.RunE)
 }
 
 func TestListCmd_HasFlags(t *testing.T) {
@@ -88,4 +89,19 @@ func TestListVMs_SnapshotHiddenWhileServerExists(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, []cloud.Vm{{Name: "api", Status: "initializing"}}, running.List)
 	assert.Equal(t, []cloud.Vm{{Name: "db", Status: "stopped"}, {Name: "web", Status: "paused"}}, paused.List)
+}
+
+// TestListCmd_ProviderErrorIsTheResult: a provider that can't list (the
+// container CLI missing, no credentials) used to be logged and followed
+// by an empty table and exit 0, so a script read "no VMs". The error is
+// now what ls returns, so main exits non-zero; what did come back is
+// still printed first.
+func TestListCmd_ProviderErrorIsTheResult(t *testing.T) {
+	boom := errors.New("the ac provider needs Apple's container CLI")
+	withProvider(t, &tuiFakeProvider{listErr: boom})
+	err := listCmd.RunE(listCmd, nil)
+	assert.ErrorIs(t, err, boom)
+
+	withProvider(t, &tuiFakeProvider{vms: []cloud.Vm{{Name: "api"}}})
+	assert.NoError(t, listCmd.RunE(listCmd, nil))
 }

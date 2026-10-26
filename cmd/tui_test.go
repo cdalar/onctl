@@ -19,9 +19,10 @@ import (
 // that records the calls the tui makes, so the tests check the tui
 // drives the provider exactly as the subcommands would.
 type tuiFakeProvider struct {
-	vms    []cloud.Vm // what List returns (a stopped one among them)
-	paused []cloud.Vm // what ListPaused returns
-	calls  []string
+	vms     []cloud.Vm // what List returns (a stopped one among them)
+	paused  []cloud.Vm // what ListPaused returns
+	listErr error      // what List fails with, when set
+	calls   []string
 }
 
 func (f *tuiFakeProvider) Deploy(v cloud.Vm) (cloud.Vm, error) {
@@ -40,7 +41,9 @@ func (f *tuiFakeProvider) Resume(v cloud.Vm) (cloud.Vm, error) {
 	f.calls = append(f.calls, "resume "+v.Name+" key="+v.SSHKeyID)
 	return cloud.Vm{Name: v.Name, IP: "10.0.0.9"}, nil
 }
-func (f *tuiFakeProvider) List() (cloud.VmList, error) { return cloud.VmList{List: f.vms}, nil }
+func (f *tuiFakeProvider) List() (cloud.VmList, error) {
+	return cloud.VmList{List: f.vms}, f.listErr
+}
 func (f *tuiFakeProvider) ListPaused() (cloud.VmList, error) {
 	return cloud.VmList{List: f.paused}, nil
 }
