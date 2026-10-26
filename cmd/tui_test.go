@@ -1012,3 +1012,25 @@ func TestParseRepoPage(t *testing.T) {
 		t.Error("an error page parsed")
 	}
 }
+
+// TestTUIActionRefreshes: the periodic tick is slow, so an action's
+// completion, succeeded or failed, must list the VMs at once; the row
+// would otherwise show a stale state for up to tuiRefreshEvery.
+func TestTUIActionRefreshes(t *testing.T) {
+	tuiFlashFor = time.Millisecond
+	for _, msg := range []tea.Msg{
+		tuiActionMsg{name: "web", verb: "pause"},
+		tuiActionMsg{name: "web", verb: "pause", err: errors.New("boom")},
+		tuiChildDoneMsg{verb: "create", name: "my-vm"},
+		tuiChildDoneMsg{verb: "ssh", name: "web", err: errors.New("exit status 1")},
+		tuiClaudeDoneMsg{repo: "app"},
+		tuiClaudeDoneMsg{repo: "app", err: errors.New("boom")},
+	} {
+		m := newTUI(nil)
+		next, cmd := m.Update(msg)
+		m = next.(tuiModel)
+		if !m.loading["vms"] || cmd == nil {
+			t.Errorf("%T did not refresh the VMs", msg)
+		}
+	}
+}

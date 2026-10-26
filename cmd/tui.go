@@ -142,7 +142,7 @@ func quietLogs() func() {
 
 // tuiRefreshEvery paces the list's own refreshes while nothing else is
 // going on; an action's completion refreshes at once.
-const tuiRefreshEvery = 5 * time.Second
+const tuiRefreshEvery = 15 * time.Second
 
 // tuiFlashFor is how long a flash message stays on the crumbs line (a
 // variable so tests, which run every command, needn't wait for it).
