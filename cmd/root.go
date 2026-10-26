@@ -26,7 +26,13 @@ var (
 	rootCmd = &cobra.Command{
 		Use:   "onctl",
 		Short: "onctl is a tool to manage cross platform resources in cloud",
-		Long:  `onctl is a tool to manage cross platform resources in cloud`,
+		// A command that fails at run time ("needs Apple's container CLI")
+		// gets its error once, from main, not cobra's "Error:" plus the
+		// whole usage text as if it were a typo. Flag errors keep a hint
+		// (flagError).
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		Long:          `onctl is a tool to manage cross platform resources in cloud`,
 		Example: `  # List all VMs
   onctl ls
 
@@ -108,6 +114,13 @@ func checkCloudProvider() string {
 func Execute() error {
 	log.Println("[DEBUG] Args: " + strings.Join(os.Args, ","))
 	return rootCmd.Execute()
+}
+
+// flagError is cobra's error for a bad flag, with where the usage went
+// now that it isn't printed: "unknown flag: --keep" alone leaves the
+// reader without it.
+func flagError(c *cobra.Command, err error) error {
+	return fmt.Errorf("%w\nRun '%s --help' for usage.", err, c.CommandPath())
 }
 
 // initState resolves the cloud provider and loads its config. The onctl.yaml
@@ -362,6 +375,7 @@ func init() {
 	// commands (ls, ssh, destroy...), not just create. Register as persistent
 	// so resolve runs and flags are available everywhere.
 	rootCmd.PersistentFlags().StringVar(&flagGCPProject, "project", "", "GCP: project ID (falls back to `gcloud config get-value project` when the onctl.yaml placeholder is present)")
+	rootCmd.SetFlagErrorFunc(flagError)
 	rootCmd.PersistentFlags().StringVar(&flagAzureSubscriptionID, "subscription-id", "", "Azure: subscription ID (required for the azure provider; falls back to `az account show`)")
 	rootCmd.PersistentFlags().StringVar(&flagAzureResourceGroup, "resource-group", "", "Azure: resource group (required for the azure provider; falls back to the az CLI's configured default group, if any)")
 	rootCmd.PersistentFlags().StringVar(&flagOvhServiceName, "service-name", "", "OVH: Public Cloud project service name (required for the ovh provider)")
