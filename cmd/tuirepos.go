@@ -26,7 +26,7 @@ import (
 // since it hardly changes and a page of 100 repositories takes gh a few
 // seconds: opening the view shows the cache at once, asks GitHub again
 // in the background only when the cache is older than repoCacheMaxAge,
-// and R always asks. It is never listed on the 5s tick.
+// and R always asks. It is never listed on the periodic tick.
 
 // ghRepo is what this keeps of a repository from the GitHub API.
 type ghRepo struct {
