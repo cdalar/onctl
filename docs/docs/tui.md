@@ -70,11 +70,12 @@ web` switches and filters in one go.
 ![The sizes view](/img/tui/sizes.png)
 
 - `:repos` lists the GitHub repositories `gh`'s account can reach, newest
-  push first. `enter` on one runs `onctl claude --repo owner/name`: a new box
-  on this provider every time (`<name>-<word>-<word>-<id>`), with the
-  repository cloned and Claude Code attached, so two pieces of work on a
-  repository never share a box. The box is kept when Claude exits; pause or
-  destroy it from `:vms`.
+  push first. `enter` on one runs `onctl claude --repo owner/name`: a box on
+  this provider with the repository cloned and Claude Code attached. It asks
+  which box first: `n`, a new one (`<name>-<word>-<word>-<id>`), so two
+  pieces of work on a repository never share a box, kept when Claude exits
+  for `:vms` to pause or destroy; or `r`, the repository's own box,
+  `claude-<name>`, which later enters come back to.
 
 ![The GitHub repos view](/img/tui/repos.png)
 
