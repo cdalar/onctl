@@ -427,7 +427,7 @@ func (m tuiModel) dialogTitleAndLines(w, inner int) (string, []string) {
 	d := m.dialog
 	var body []string
 	body = append(body, d.body...)
-	body = append(body, "", k9s.hotKey.Render("<y>")+" yes   "+k9s.hotKey.Render("<n>")+" no")
+	body = append(body, "", dialogKeys(d))
 	bw := lipgloss.Width(d.title)
 	for _, l := range body {
 		bw = max(bw, lipgloss.Width(l))
@@ -449,6 +449,19 @@ func (m tuiModel) dialogTitleAndLines(w, inner int) (string, []string) {
 	}
 	title := k9s.title.Render(m.pageTitle())
 	return title, lines
+}
+
+// dialogKeys is the dialog's last line: its keys and what they do.
+func dialogKeys(d *tuiDialog) string {
+	if len(d.choices) == 0 {
+		return k9s.hotKey.Render("<y>") + " yes   " + k9s.hotKey.Render("<n>") + " no"
+	}
+	var parts []string
+	for _, c := range d.choices {
+		parts = append(parts, k9s.hotKey.Render("<"+c.key+">")+" "+c.label)
+	}
+	parts = append(parts, k9s.hotKey.Render("<esc>")+" cancel")
+	return strings.Join(parts, "   ")
 }
 
 // pageTitle is the top page's own title, for a dialog over it.

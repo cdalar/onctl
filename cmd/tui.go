@@ -46,7 +46,8 @@ var tuiCmd = &cobra.Command{
   s            open a terminal on the VM (onctl ssh)
   a            run Claude Code on the VM (onctl claude --box vm)
   enter        in :repos (your GitHub repos, newest push first, from gh), start Claude
-               on a new box of this provider with the repo cloned (onctl claude --repo)
+               on a box of this provider with the repo cloned (onctl claude --repo):
+               a new box, or the repo's own box, is asked
   c            create a VM (name, image and type are asked; runs onctl create)
   p / r        pause / resume
   ctrl-d       destroy the VM (asks first)
@@ -171,7 +172,7 @@ type (
 	}
 	tuiClaudeDoneMsg struct { // `onctl claude --repo` from :repos ended
 		repo   string
-		box    string // the new box it ran on, kept
+		box    string // the box it ran on; "" for the repo's own
 		err    error
 		stderr string
 	}
@@ -210,11 +211,19 @@ type page struct {
 	refresh func(m *tuiModel) []string
 }
 
-// tuiDialog is a modal: a y/N question.
+// tuiDialog is a modal: a y/N question (yes), or a choice between a
+// few keys (choices). Any other key closes it.
 type tuiDialog struct {
-	title string
-	body  []string
-	yes   func(m tuiModel) (tea.Model, tea.Cmd)
+	title   string
+	body    []string
+	yes     func(m tuiModel) (tea.Model, tea.Cmd)
+	choices []tuiChoice
+}
+
+// tuiChoice is one key of a choice dialog and what it does.
+type tuiChoice struct {
+	key, label string
+	do         func(m tuiModel) (tea.Model, tea.Cmd)
 }
 
 type tuiModel struct {
@@ -518,7 +527,10 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			return m, tea.Batch(m.fail("claude on %s: %s", msg.repo, claudeFailure(msg.stderr, msg.err)), m.refresh())
 		}
-		return m, tea.Batch(m.say("claude on %s ended (%s is kept)", msg.repo, msg.box), m.refresh())
+		if msg.box != "" {
+			return m, tea.Batch(m.say("claude on %s ended (%s is kept)", msg.repo, msg.box), m.refresh())
+		}
+		return m, tea.Batch(m.say("claude on %s ended", msg.repo), m.refresh())
 
 	case tuiCatalogMsg:
 		if m.create != nil {

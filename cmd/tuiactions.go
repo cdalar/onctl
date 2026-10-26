@@ -186,8 +186,14 @@ func (m tuiModel) handleFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m tuiModel) handleDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	d := m.dialog
 	m.dialog = nil
+	s := msg.String()
+	for _, c := range d.choices {
+		if s == c.key {
+			return c.do(m)
+		}
+	}
 	// y alone says yes, as in destroy's own [y/N]: enter is no.
-	if s := msg.String(); s == "y" || s == "Y" {
+	if d.yes != nil && (s == "y" || s == "Y") {
 		return d.yes(m)
 	}
 	return m, nil
@@ -196,6 +202,11 @@ func (m tuiModel) handleDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // ask opens a y/N question.
 func (m *tuiModel) ask(title string, body []string, yes func(m tuiModel) (tea.Model, tea.Cmd)) {
 	m.dialog = &tuiDialog{title: title, body: body, yes: yes}
+}
+
+// choose opens a choice between a few keys; any other key cancels.
+func (m *tuiModel) choose(title string, body []string, choices ...tuiChoice) {
+	m.dialog = &tuiDialog{title: title, body: body, choices: choices}
 }
 
 // --- table keys -----------------------------------------------------------
@@ -274,7 +285,7 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			case providersView:
 				return m.switchProvider(r.key)
 			case reposView:
-				return m.claudeRepo(r.key)
+				return m.askRepoBox(r.key)
 			}
 		}
 		if t.view == providersView || t.view == reposView {
@@ -422,9 +433,10 @@ func (m *tuiModel) pushHelp() {
 	if v == reposView {
 		lines = append(lines, "", "GitHub Repos",
 			"  The repositories gh's account can reach (gh api user/repos), newest push first;",
-			"  enter runs `onctl claude --repo owner/name` on this provider: a new box every time",
-			"  (<name>-<word>-<word>-<id>) with the repo cloned on a new onctl/... branch and Claude attached,",
-			"  kept when Claude exits (pause or destroy it in :vms); two pieces of work never share a box.",
+			"  enter runs `onctl claude --repo owner/name` on this provider: a box with the repo cloned on a",
+			"  new onctl/... branch and Claude attached. It asks which box: n, a new one (<name>-<word>-<word>-<id>,",
+			"  so two pieces of work never share a box; kept when Claude exits, for :vms to pause or destroy),",
+			"  or r, the repo's own box, claude-<name>, which later enters come back to.",
 			"  The list is cached (~/.onctl/repos.json) and asked of GitHub again when an hour old, or with R.")
 	}
 	if v == vmsView {

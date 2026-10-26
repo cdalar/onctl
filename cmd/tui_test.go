@@ -890,7 +890,7 @@ func TestTUIRepos(t *testing.T) {
 	// d describes the row; the page names the command enter runs, on
 	// this provider.
 	m, _ = press(t, m, "d")
-	if m.top().kind != pageText || !strings.Contains(m.View(), "onctl claude --repo cdalar/onctl --box <box> --provider hetzner") {
+	if m.top().kind != pageText || !strings.Contains(m.View(), "onctl claude --repo cdalar/onctl --provider hetzner") || !strings.Contains(m.View(), "claude-onctl") {
 		t.Errorf("describe page:\n%s", m.View())
 	}
 	m, _ = press(t, m, "esc")
@@ -900,12 +900,38 @@ func TestTUIRepos(t *testing.T) {
 		t.Errorf("json page: title=%q\n%s", m.top().title, m.View())
 	}
 	m, _ = press(t, m, "esc")
-	// enter hands the terminal to onctl claude --repo; the VM keys do
-	// nothing here (there's no VM under the cursor).
+	// enter asks which box -- a new one, or the repo's own, claude-onctl,
+	// not made yet here -- and esc cancels; n or r hands the terminal to
+	// onctl claude --repo. The VM keys do nothing here (there's no VM
+	// under the cursor).
 	m, cmd = press(t, m, "enter")
-	if cmd == nil || m.flash != "" {
-		t.Errorf("enter: cmd=%v flash=%q", cmd != nil, m.flash)
+	if cmd != nil || m.dialog == nil || len(m.dialog.choices) != 2 {
+		t.Fatalf("enter: cmd=%v dialog=%v", cmd != nil, m.dialog)
 	}
+	for _, want := range []string{"Claude on cdalar/onctl", "<n> new box", "<r> repo's box", "<esc> cancel", "claude-onctl (not made yet", "onctl-<word>-<word>-<id>"} {
+		if !strings.Contains(m.View(), want) {
+			t.Errorf("dialog lacks %q:\n%s", want, m.View())
+		}
+	}
+	m, cmd = press(t, m, "esc")
+	if cmd != nil || m.dialog != nil || m.flash != "" {
+		t.Errorf("esc: cmd=%v dialog=%v flash=%q", cmd != nil, m.dialog != nil, m.flash)
+	}
+	for _, k := range []string{"n", "r"} {
+		m, _ = press(t, m, "enter")
+		m, cmd = press(t, m, k)
+		if cmd == nil || m.dialog != nil || m.flash != "" {
+			t.Errorf("enter, %s: cmd=%v dialog=%v flash=%q", k, cmd != nil, m.dialog != nil, m.flash)
+		}
+	}
+	// With the repo's box there, the dialog says so.
+	m.vms = []cloud.Vm{{Name: "claude-onctl", Status: "running"}}
+	m, _ = press(t, m, "enter")
+	if !strings.Contains(m.View(), "claude-onctl (running, with what was done on it)") {
+		t.Errorf("dialog with the box there:\n%s", m.View())
+	}
+	m, _ = press(t, m, "esc")
+	m.vms = nil
 	for _, k := range []string{"p", "r", "s", "ctrl+d"} {
 		m, cmd = press(t, m, k)
 		if cmd != nil || m.dialog != nil {
@@ -994,6 +1020,12 @@ func TestTUIClaudeDone(t *testing.T) {
 	if m.flashErr || m.flash != "claude on cdalar/onctl ended (onctl-quiet-otter-1a2b is kept)" {
 		t.Errorf("flash = %q", m.flash)
 	}
+	// On the repo's own box there's no box to name: it's the usual one.
+	next, _ = m.Update(tuiClaudeDoneMsg{repo: "cdalar/onctl"})
+	m = next.(tuiModel)
+	if m.flashErr || m.flash != "claude on cdalar/onctl ended" {
+		t.Errorf("flash = %q", m.flash)
+	}
 }
 
 // enter in :repos names a new box each time -- the repository's name,
@@ -1019,6 +1051,10 @@ func TestTUIRepoBoxName(t *testing.T) {
 		seen[name] = true
 	}
 	if got := claudeRepoArgs("cdalar/onctl", "onctl-quiet-otter-1a2b"); strings.Join(got, " ") != "claude --repo cdalar/onctl --box onctl-quiet-otter-1a2b --provider hetzner" {
+		t.Errorf("args = %q", got)
+	}
+	// "" is the repo's own box: --repo alone comes back to claude-<name>.
+	if got := claudeRepoArgs("cdalar/onctl", ""); strings.Join(got, " ") != "claude --repo cdalar/onctl --provider hetzner" {
 		t.Errorf("args = %q", got)
 	}
 }

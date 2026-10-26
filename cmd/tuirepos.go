@@ -22,12 +22,12 @@ import (
 // newest push first. Enter on one runs `onctl claude --repo owner/name`
 // on the tui's provider as a child process, the way `s` runs `onctl
 // ssh`: a box with the repository cloned on a new branch and Claude
-// attached (clauderepo.go). The box is a new one every time -- named
-// <name>-<word>-<word>-<id> like a generated box (boxname.go) and
-// passed as --box, where `onctl claude --repo` alone would come back
-// to claude-<name> -- so that two pieces of work on a repository never
-// share a box; it is kept when Claude exits, for :vms to pause or
-// destroy. The list is cached in ~/.onctl/repos.json,
+// attached (clauderepo.go). Which box is asked first: a new one --
+// named <name>-<word>-<word>-<id> like a generated box (boxname.go)
+// and passed as --box, so that two pieces of work on a repository
+// never share a box; kept when Claude exits, for :vms to pause or
+// destroy -- or the repository's own, claude-<name>, the one `onctl
+// claude --repo` alone comes back to. The list is cached in ~/.onctl/repos.json,
 // since it hardly changes and a page of 100 repositories takes gh a few
 // seconds: opening the view shows the cache at once, asks GitHub again
 // in the background only when the cache is older than repoCacheMaxAge,
@@ -258,8 +258,8 @@ func describeRepo(r ghRepo) []string {
 		lines = append(lines, kv("Pushed", stamp(r.PushedAt)+" ("+vmAge(r.PushedAt)+" ago)"))
 	}
 	lines = append(lines, "",
-		"enter starts Claude on a new box with it cloned, "+repoBoxPrefix(r.FullName)+"-<word>-<word>-<id>:",
-		"`"+strings.Join(append([]string{"onctl"}, claudeRepoArgs(r.FullName, "<box>")...), " ")+"`. Every enter is another box.")
+		"enter starts Claude on a box with it cloned (`"+strings.Join(append([]string{"onctl"}, claudeRepoArgs(r.FullName, "")...), " ")+"`),",
+		"asking which: a new box, "+repoBoxPrefix(r.FullName)+"-<word>-<word>-<id> (--box), or the repo's own, "+claudeBoxName(repoDir(r.FullName))+".")
 	if r.Private {
 		lines = append(lines, "A private repository needs a token on the box: `onctl claude --repo "+r.FullName+" --github store`.")
 	}
@@ -279,11 +279,42 @@ func (m *tuiModel) repo(name string) *ghRepo {
 	return nil
 }
 
-// claudeRepoArgs is the command line `enter` runs for repo on the box
-// named box, less the binary: `onctl claude --repo --box` on the tui's
-// provider.
+// claudeRepoArgs is the command line `enter` runs for repo, less the
+// binary: `onctl claude --repo` on the tui's provider, with --box when
+// box names one (else the repo's own box, claude-<name>).
 func claudeRepoArgs(repo, box string) []string {
+	if box == "" {
+		return tuiChildArgs("claude", "--repo", repo)
+	}
 	return tuiChildArgs("claude", "--repo", repo, "--box", box)
+}
+
+// askRepoBox is enter on a repository: which box Claude works on it
+// in -- a new one, or the repository's own -- then claudeRepo on it.
+func (m tuiModel) askRepoBox(repo string) (tea.Model, tea.Cmd) {
+	own := claudeBoxName(repoDir(repo))
+	ownState := "not made yet: it is created"
+	if vm := m.vm(own); vm != nil {
+		ownState = vm.Status + ", with what was done on it"
+	}
+	m.choose("Claude on "+repo, []string{
+		"Which box should Claude work on it in?",
+		"",
+		"n  a new box, " + repoBoxPrefix(repo) + "-<word>-<word>-<id>: nothing of earlier work on it",
+		"r  the repo's own box, " + own + " (" + ownState + ")",
+	},
+		tuiChoice{key: "n", label: "new box", do: func(m tuiModel) (tea.Model, tea.Cmd) {
+			box, err := m.repoBoxName(repo)
+			if err != nil {
+				return m, m.fail("naming a box for %s: %v", repo, err)
+			}
+			return m.claudeRepo(repo, box)
+		}},
+		tuiChoice{key: "r", label: "repo's box", do: func(m tuiModel) (tea.Model, tea.Cmd) {
+			return m.claudeRepo(repo, "")
+		}},
+	)
+	return m, nil
 }
 
 // repoBoxPrefix is the first part of a box name for repo: its name,
@@ -307,19 +338,16 @@ func (m *tuiModel) repoBoxName(repo string) (string, error) {
 	return n.box(), nil
 }
 
-// claudeRepo hands the terminal to `onctl claude --repo <repo> --box
-// <new box>` (a child process, as ssh is: its output -- the progress
-// lines, then Claude itself over ssh -- goes to the terminal the
-// alternate screen gives back). The end of its stderr is kept too, to
-// say why it failed, since the tui's redraw hides what it printed.
-func (m tuiModel) claudeRepo(repo string) (tea.Model, tea.Cmd) {
+// claudeRepo hands the terminal to `onctl claude --repo <repo>`, on
+// the box named box or, with "", the repo's own (a child process, as
+// ssh is: its output -- the progress lines, then Claude itself over
+// ssh -- goes to the terminal the alternate screen gives back). The
+// end of its stderr is kept too, to say why it failed, since the tui's
+// redraw hides what it printed.
+func (m tuiModel) claudeRepo(repo, box string) (tea.Model, tea.Cmd) {
 	exe, err := os.Executable()
 	if err != nil {
 		return m, m.fail("finding onctl: %v", err)
-	}
-	box, err := m.repoBoxName(repo)
-	if err != nil {
-		return m, m.fail("naming a box for %s: %v", repo, err)
 	}
 	cmd := exec.Command(exe, claudeRepoArgs(repo, box)...)
 	tail := &tailBuffer{max: 4096}
