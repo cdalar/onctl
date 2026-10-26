@@ -111,6 +111,12 @@ type ACRunner interface {
 	Run(args ...string) ([]byte, error)
 }
 
+// ACStreamer is an ACRunner that can also run the CLI with its output on
+// the terminal, for commands that draw their own progress (image pull).
+type ACStreamer interface {
+	Stream(args ...string) error
+}
+
 // ProviderAC manages Apple containers on the local macOS host as
 // onctl-managed VMs.
 type ProviderAC struct {
@@ -360,7 +366,14 @@ func (p ProviderAC) Deploy(server Vm) (Vm, error) {
 	// first pull of an agent image is hundreds of MB: say what the wait is.
 	if _, err := p.CLI.Run("image", "inspect", image); err != nil {
 		fmt.Fprintf(os.Stderr, "Pulling %s...\n", image)
-		if _, err := p.CLI.Run("image", "pull", image); err != nil {
+		// The CLI draws a progress bar on a terminal, so let it.
+		var err error
+		if st, ok := p.CLI.(ACStreamer); ok {
+			err = st.Stream("image", "pull", image)
+		} else {
+			_, err = p.CLI.Run("image", "pull", image)
+		}
+		if err != nil {
 			return Vm{}, fmt.Errorf("pulling %s: %w", image, err)
 		}
 	}
