@@ -42,6 +42,9 @@ func SSHIntoVM(request SSHIntoVMRequest) {
 	sshCommand.Stdin = os.Stdin
 	sshCommand.Stdout = os.Stdout
 	sshCommand.Stderr = os.Stderr
+	// The VM has terminfo for the common terminals, not for every one
+	// (xterm-ghostty, xterm-kitty), and tmux won't start without it.
+	sshCommand.Env = append(os.Environ(), "TERM=xterm-256color")
 
 	if err := sshCommand.Run(); err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
