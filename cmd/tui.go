@@ -54,7 +54,8 @@ var tuiCmd = &cobra.Command{
                a PR, o opens it. You get a desktop notification when Claude waits
   c            create a VM (name, image and type are asked; runs onctl create)
   p / r        pause / resume
-  ctrl-d       destroy the VM (asks first)
+  space        mark the VM (again: unmark), for ctrl-d
+  ctrl-d       destroy the VM, or the marked ones (asks first)
   0 / 1 / 2    all VMs / running only / paused only
   esc          back; ctrl-c or :q quits`,
 	Args: cobra.NoArgs,
@@ -285,6 +286,7 @@ type tuiModel struct {
 	dialog      *tuiDialog
 	create      *tuiCreateForm
 	pending     map[string]string // VM -> verb in flight
+	marked      map[string]bool   // VMs marked with space in :vms, for ctrl-d
 	spin        bspinner.Model
 	spinning    bool
 
@@ -335,6 +337,7 @@ func newTUI(p cloud.CloudProviderInterface) tuiModel {
 		command:      cmd,
 		task:         task,
 		pending:      map[string]string{},
+		marked:       map[string]bool{},
 		spin:         sp,
 	}
 }

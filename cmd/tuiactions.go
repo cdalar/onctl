@@ -327,7 +327,20 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.describe()
 	case "y":
 		return m.showJSON()
+	case " ":
+		if r := m.currentRow(); r != nil && t.view == vmsView {
+			if m.marked[r.key] {
+				delete(m.marked, r.key)
+			} else {
+				m.marked[r.key] = true
+			}
+			m.move(1)
+		}
+		return m, nil
 	case "ctrl+d":
+		if t.view == vmsView && len(m.markedVMs()) > 0 {
+			return m.askDestroyMarked()
+		}
 		return m.askDestroy()
 	}
 	// shift+letter sorts by the column with that letter.
@@ -602,6 +615,45 @@ func (m tuiModel) askDestroy() (tea.Model, tea.Cmd) {
 			return m.act(vm, "destroy", -1, func() (string, error) {
 				return "", p.Destroy(cloud.Vm{Name: name})
 			})
+		})
+	return m, nil
+}
+
+// markedVMs is the names of the marked VMs still listed, in list order.
+func (m tuiModel) markedVMs() []string {
+	var names []string
+	for _, vm := range m.vms {
+		if m.marked[vm.Name] {
+			names = append(names, vm.Name)
+		}
+	}
+	return names
+}
+
+// askDestroyMarked is destroy's confirmation for the marked VMs, then a
+// destroy of each; one that's busy with something else is left alone.
+func (m tuiModel) askDestroyMarked() (tea.Model, tea.Cmd) {
+	names := m.markedVMs()
+	body := []string{fmt.Sprintf("This will permanently destroy these %d VMs and all their data:", len(names))}
+	for _, name := range names {
+		body = append(body, "  "+name)
+	}
+	m.ask(fmt.Sprintf("Destroy %d VMs?", len(names)), append(body, "This cannot be undone."),
+		func(m tuiModel) (tea.Model, tea.Cmd) {
+			m.marked = map[string]bool{}
+			p := m.p
+			var cmds []tea.Cmd
+			for _, name := range names {
+				vm := m.vm(name)
+				if vm == nil {
+					continue
+				}
+				next, cmd := m.act(vm, "destroy", -1, func() (string, error) {
+					return "", p.Destroy(cloud.Vm{Name: name})
+				})
+				m, cmds = next.(tuiModel), append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
 		})
 	return m, nil
 }

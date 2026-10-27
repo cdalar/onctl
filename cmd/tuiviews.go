@@ -93,7 +93,7 @@ var vmsView = &tableView{
 	empty:    "No VMs yet. Press c to create one.",
 	hotkeys: []hotkey{
 		{"s", "shell"}, {"a", "claude"}, {"d", "describe"}, {"y", "json"}, {"c", "create"},
-		{"p", "pause"}, {"r", "resume"}, {"ctrl-d", "destroy"},
+		{"p", "pause"}, {"r", "resume"}, {"space", "mark"}, {"ctrl-d", "destroy"},
 		{"0", "all"}, {"1", "running"}, {"2", "paused"},
 	},
 	rows: func(m *tuiModel) []tableRow {
