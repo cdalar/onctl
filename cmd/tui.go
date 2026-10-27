@@ -16,7 +16,6 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -67,6 +66,12 @@ var tuiCmd = &cobra.Command{
 		var flashErr bool
 		for {
 			m := newTUI(provider)
+			// No provider asked for (bare `onctl`, no -p or ONCTL_CLOUD): the tui
+			// opens on the providers list, and enter on one restarts it there.
+			if provider == nil {
+				m.picking = true
+				m.pages = []page{{kind: pageTable, view: providersView, sortCol: -1}}
+			}
 			m.startFlash, m.startFlashErr = flash, flashErr
 			restore := quietLogs()
 			final, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
@@ -117,33 +122,6 @@ func switchProvider(name string) error {
 	}
 	initProvider(name)
 	return nil
-}
-
-// askProvider is `onctl tui` with neither -p nor ONCTL_CLOUD: the
-// provider is picked from a list, each with its full name and where it
-// runs ("ac  Apple Container  local"), instead of guessed from the
-// credentials in the environment.
-func askProvider() (string, error) {
-	prompt := promptui.Select{
-		Label: "Which provider do you want to work on",
-		Items: providerChoices(),
-		Size:  len(cloudProviderList),
-	}
-	i, _, err := prompt.Run()
-	if err != nil {
-		return "", err
-	}
-	return cloudProviderList[i], nil
-}
-
-// providerChoices are askProvider's lines, in cloudProviderList's order.
-func providerChoices() []string {
-	var items []string
-	for _, name := range cloudProviderList {
-		p := providerPlaces[name]
-		items = append(items, fmt.Sprintf("%-8s %-25s %s", name, p.title, p.kind.offering()))
-	}
-	return items
 }
 
 func init() {
@@ -316,6 +294,9 @@ type tuiModel struct {
 	// switchTo is the provider `:provider` asked for; set, the tui
 	// quits and tuiCmd starts it again on that provider.
 	switchTo string
+	// picking is the tui opened without a provider: only the providers
+	// list (and :q, :help) work until one is picked.
+	picking bool
 
 	width, height int
 	refreshedAt   time.Time
@@ -353,7 +334,10 @@ func newTUI(p cloud.CloudProviderInterface) tuiModel {
 var tuiSpinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 func (m tuiModel) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.list("vms"), m.tick(), m.spin.Tick}
+	var cmds []tea.Cmd
+	if !m.picking {
+		cmds = append(cmds, m.list("vms"), m.tick(), m.spin.Tick)
+	}
 	if m.startFlash != "" {
 		flash := tuiFlashMsg{text: m.startFlash, isErr: m.startFlashErr}
 		cmds = append(cmds, func() tea.Msg { return flash })
@@ -428,6 +412,9 @@ func tuiListSizes(p cloud.CloudProviderInterface) ([]cloud.CloudSize, error) {
 // not on every tick: they hardly change, and some providers list them
 // through several API calls.
 func (m *tuiModel) refresh() tea.Cmd {
+	if m.picking {
+		return nil
+	}
 	if m.loaded["agents"] {
 		// Once :agents has been opened its boxes are polled in every
 		// view, so a Claude waiting for you is noticed wherever you are.
@@ -438,6 +425,9 @@ func (m *tuiModel) refresh() tea.Cmd {
 
 // refreshAll is R: the VMs and the top page's catalog too.
 func (m *tuiModel) refreshAll() tea.Cmd {
+	if m.picking {
+		return nil
+	}
 	cmds := []tea.Cmd{m.list("vms")}
 	if t := m.top(); t.kind == pageTable && t.view.resource != "vms" {
 		cmds = append(cmds, m.list(t.view.resource))

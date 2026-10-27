@@ -1134,36 +1134,53 @@ func TestTUIActionRefreshes(t *testing.T) {
 	}
 }
 
-// The startup pick shows each provider's full name next to the short one,
-// so a reader who doesn't know "ac" sees "Apple Container"; a provider
-// added to cloudProviderList without a title would show up blank.
-func TestTUIProviderChoices(t *testing.T) {
-	items := providerChoices()
-	if len(items) != len(cloudProviderList) {
-		t.Fatalf("got %d choices for %d providers", len(items), len(cloudProviderList))
+// Without -p or ONCTL_CLOUD the tui opens on the providers list instead
+// of a prompt before it: each row has the full name and where it runs
+// (a reader who doesn't know "ac" sees "Apple Container"), enter on one
+// quits for tuiCmd to start again there, and nothing that needs a
+// provider -- listing, :vms, create -- is attempted before then.
+func TestTUIPickProvider(t *testing.T) {
+	tuiFlashFor = time.Millisecond
+	withCloudProvider(t, "")
+	m := newTUI(nil)
+	m.picking = true
+	m.pages = []page{{kind: pageTable, view: providersView, sortCol: -1}}
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = next.(tuiModel)
+	if cmd := m.Init(); cmd != nil && len(runCmd(cmd)) != 0 {
+		t.Errorf("Init while picking did something: %v", runCmd(cmd))
 	}
-	for i, name := range cloudProviderList {
-		title := providerPlaces[name].title
-		if title == "" {
-			t.Errorf("provider %q has no full name", name)
-		}
-		if !strings.HasPrefix(items[i], name+" ") || !strings.Contains(items[i], title) {
-			t.Errorf("choice %d = %q, want %q and its full name", i, items[i], name)
+	if got, want := keys(m.rows()), strings.Join(cloudProviderList, " "); got != want {
+		t.Fatalf("rows = %q, want %q", got, want)
+	}
+	for _, r := range m.rows() {
+		if r.cells[1] == "-" {
+			t.Errorf("provider %q has no full name", r.key)
 		}
 	}
-	// Each line says where the machines run, so the pick tells a
-	// container on this laptop from a cloud bill or a hosted service.
-	want := map[string]string{
-		"ac":     "Apple Container",
-		"fc":     "local",
-		"aws":    "cloud, BYO account",
-		"boxes":  "cloud, SaaS",
-		"static": "remote, BYO host",
+	if cmd := m.refresh(); cmd != nil {
+		t.Error("refresh while picking listed something")
 	}
-	for i, name := range cloudProviderList {
-		if w, ok := want[name]; ok && !strings.Contains(items[i], w) {
-			t.Errorf("%s choice = %q, want it to say %q", name, items[i], w)
-		}
+
+	m, _ = press(t, m, "c")
+	if m.create != nil {
+		t.Error("c opened the create form before a provider was picked")
+	}
+	m, _ = press(t, m, ":")
+	m = typeIn(t, m, "vms")
+	m, _ = press(t, m, "enter")
+	if !m.flashErr || !strings.Contains(m.flash, "pick a provider") || m.top().view != providersView {
+		t.Errorf(":vms while picking: flash=%q view=%s", m.flash, m.top().view.name)
+	}
+	m = ack(t, m)
+
+	m, cmd := press(t, m, "j")
+	m, cmd = press(t, m, "enter")
+	if m.switchTo != cloudProviderList[1] || cmd == nil {
+		t.Fatalf("enter: switchTo=%q cmd=%v", m.switchTo, cmd)
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Error("enter on a provider didn't quit")
 	}
 }
 

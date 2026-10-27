@@ -129,6 +129,13 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 	if len(words) == 0 {
 		return m, nil
 	}
+	if m.picking {
+		switch words[0] {
+		case "q", "quit", "exit", "help", "h", "?", "provider", "providers", "ctx", "cloud":
+		default:
+			return m, m.fail("pick a provider first (enter on one)")
+		}
+	}
 	switch words[0] {
 	case "q", "quit", "exit":
 		return m, tea.Quit
@@ -213,9 +220,20 @@ func (m *tuiModel) choose(title string, body []string, choices ...tuiChoice) {
 
 // --- table keys -----------------------------------------------------------
 
+// pickingKeys are the table keys that work before a provider is picked:
+// moving, filtering, help, back/quit and enter on a provider.
+var pickingKeys = map[string]bool{
+	"up": true, "k": true, "down": true, "j": true, "pgup": true, "ctrl+b": true,
+	"pgdown": true, "ctrl+f": true, "home": true, "g": true, "end": true, "G": true,
+	":": true, "/": true, "?": true, "esc": true, "q": true, "enter": true,
+}
+
 func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	t := m.top()
 	key := msg.String()
+	if m.picking && !pickingKeys[key] {
+		return m, nil
+	}
 	if t.view == agentsView {
 		if next, cmd, ok := m.handleAgentsKey(key); ok {
 			return next, cmd

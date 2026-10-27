@@ -9,7 +9,7 @@ current view's hotkeys, one table, and a crumbs line. It refreshes every 15
 seconds, and every action in it runs the matching `onctl` command.
 
 ```bash
-onctl tui                # the current provider (ONCTL_CLOUD, or -p)
+onctl tui                # the current provider (ONCTL_CLOUD, or -p); without one, pick from the providers list
 onctl tui -p hetzner
 onctl                    # the same as onctl tui; onctl --help for the commands
 ```
