@@ -180,12 +180,14 @@ func (p ProviderHetzner) Pause(server Vm, hot bool) error {
 		if ipID == 0 {
 			continue
 		}
+		autoDelete := false
+		labels := map[string]string{
+			labelOwner:    "onctl",
+			labelSnapshot: server.Name,
+		}
 		_, _, err := p.Client.PrimaryIP.Update(context.TODO(), &hcloud.PrimaryIP{ID: ipID}, hcloud.PrimaryIPUpdateOpts{
-			AutoDelete: hcloud.Ptr(false),
-			Labels: hcloud.Ptr(map[string]string{
-				labelOwner:    "onctl",
-				labelSnapshot: server.Name,
-			}),
+			AutoDelete: &autoDelete,
+			Labels:     &labels,
 		})
 		if err != nil {
 			log.Printf("[DEBUG] could not preserve primary IP %d: %v\n", ipID, err)
