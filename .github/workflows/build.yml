@@ -25,7 +25,7 @@ env:
 jobs:
   run:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: onctl-2
     timeout-minutes: 10
     strategy:
       fail-fast: true
