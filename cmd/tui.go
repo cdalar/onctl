@@ -265,6 +265,10 @@ type tuiModel struct {
 	loaded  map[string]bool  // resources listed at least once
 	loading map[string]bool  // listings in flight
 	listErr map[string]error // why a resource's last listing failed
+	// listErrShown is the error text of each resource's failing listing the
+	// popup has been opened for, so a refresh that fails the same way
+	// doesn't open it again every 15 seconds.
+	listErrShown map[string]string
 
 	agents        []agentSession    // :agents (tuiagents.go)
 	agentStatuses map[string]string // each box's status at the last poll; nil before the first
@@ -320,17 +324,18 @@ func newTUI(p cloud.CloudProviderInterface) tuiModel {
 	sp := bspinner.New(bspinner.WithSpinner(bspinner.Spinner{Frames: tuiSpinnerFrames, FPS: 80 * time.Millisecond}))
 	sp.Style = k9s.logo
 	return tuiModel{
-		p:           p,
-		loaded:      map[string]bool{},
-		loading:     map[string]bool{},
-		listErr:     map[string]error{},
-		pages:       []page{{kind: pageTable, view: vmsView, sortCol: -1}},
-		stateFilter: showAllVMs,
-		filter:      f,
-		command:     cmd,
-		task:        task,
-		pending:     map[string]string{},
-		spin:        sp,
+		p:            p,
+		loaded:       map[string]bool{},
+		loading:      map[string]bool{},
+		listErr:      map[string]error{},
+		listErrShown: map[string]string{},
+		pages:        []page{{kind: pageTable, view: vmsView, sortCol: -1}},
+		stateFilter:  showAllVMs,
+		filter:       f,
+		command:      cmd,
+		task:         task,
+		pending:      map[string]string{},
+		spin:         sp,
 	}
 }
 
@@ -536,10 +541,21 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loaded[msg.resource] = true
 		delete(m.listErr, msg.resource)
 		var cmd tea.Cmd
-		if msg.err != nil {
-			// Only flashed: a listing fails again on every refresh, and the
-			// table says why it's empty.
-			cmd = m.setFlash(fmt.Sprintf("listing %s: %v", msg.resource, msg.err), true)
+		if msg.err == nil {
+			delete(m.listErrShown, msg.resource)
+		} else {
+			// A popup the first time it fails, like any error. A listing
+			// fails again on every refresh, so the same failure after that
+			// is only flashed (the table says why it's empty), and one
+			// that comes while a question or a form is open waits for the
+			// next refresh rather than replacing it.
+			text := fmt.Sprintf("listing %s: %v", msg.resource, msg.err)
+			if m.dialog == nil && m.create == nil && m.listErrShown[msg.resource] != text {
+				m.listErrShown[msg.resource] = text
+				cmd = m.fail("%s", text)
+			} else {
+				cmd = m.setFlash(text, true)
+			}
 			m.listErr[msg.resource] = msg.err
 			// One of List/ListPaused failing still leaves the other's
 			// VMs worth showing; the catalogs are all or nothing.

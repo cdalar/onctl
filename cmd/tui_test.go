@@ -496,9 +496,10 @@ func TestTUIListError(t *testing.T) {
 	m.pages = []page{{kind: pageTable, view: imagesView, sortCol: -1}}
 	next, _ = m.Update(tuiListMsg{resource: "images", err: errors.New("no api token")})
 	m = next.(tuiModel)
-	// The flash says so now, and the table says so after the flash is
-	// gone: a failed listing is not "Loading…" for ever.
-	if !m.flashErr || m.flash != "listing images: no api token" || !m.loaded["images"] ||
+	// The popup says so now, and the table says so after it's closed: a
+	// failed listing is not "Loading…" for ever.
+	m = ack(t, m)
+	if m.flash != "" || !m.loaded["images"] ||
 		!strings.Contains(m.View(), "Listing images failed: no api token") {
 		t.Errorf("flash=%q loaded=%v view:\n%s", m.flash, m.loaded, m.View())
 	}
@@ -510,7 +511,7 @@ func TestTUIListError(t *testing.T) {
 	}
 	next, _ = m.Update(tuiListMsg{resource: "vms", vms: []cloud.Vm{{Name: "web", Status: "running"}}, err: errors.New("snapshots: 403")})
 	m = next.(tuiModel)
-	if len(m.vms) != 1 || !m.loaded["vms"] || !strings.Contains(m.flash, "snapshots: 403") {
+	if len(m.vms) != 1 || !m.loaded["vms"] || m.dialog == nil || !strings.Contains(m.flash, "snapshots: 403") {
 		t.Errorf("partial listing: vms=%d loaded=%v flash=%q", len(m.vms), m.loaded, m.flash)
 	}
 }
@@ -1248,9 +1249,9 @@ func TestTUIInitBeforeSwitch(t *testing.T) {
 
 // An error opens a popup with the whole message, wrapped -- the crumbs
 // line cut the end off one like a provider's setup hint, where the part
-// you need is -- and stays until OK. A listing that fails isn't one: it
-// fails again on every refresh, so it's only flashed, and the table says
-// why it's empty.
+// you need is -- and stays until OK. A listing that fails is one the
+// first time; it fails again on every refresh, so the same failure after
+// that is only flashed, and the table says why it's empty.
 func TestTUIErrorPopup(t *testing.T) {
 	tuiFlashFor = time.Millisecond
 	m := listed(t, tuiFixture(), 100, 30)
@@ -1287,7 +1288,37 @@ func TestTUIErrorPopup(t *testing.T) {
 
 	next, _ = m.Update(tuiListMsg{resource: "vms", err: errors.New("token expired")})
 	m = next.(tuiModel)
+	if m.dialog == nil || !strings.Contains(strings.Join(m.dialog.body, " "), "token expired") {
+		t.Fatalf("a failed listing: dialog=%v flash=%q", m.dialog, m.flash)
+	}
+	m = ack(t, m)
+	// The refresh that fails the same way doesn't open it again...
+	next, _ = m.Update(tuiListMsg{resource: "vms", err: errors.New("token expired")})
+	m = next.(tuiModel)
 	if m.dialog != nil || !m.flashErr || !strings.Contains(m.flash, "token expired") {
-		t.Errorf("a failed listing: dialog=%v flash=%q", m.dialog, m.flash)
+		t.Errorf("the same failure again: dialog=%v flash=%q", m.dialog, m.flash)
+	}
+	// ...nor does it cover a question that is open, but it does once that is
+	// answered...
+	m.ask("Destroy web?", []string{"sure?"}, nil)
+	m.listErrShown = map[string]string{}
+	next, _ = m.Update(tuiListMsg{resource: "vms", err: errors.New("token expired")})
+	m = next.(tuiModel)
+	if m.dialog == nil || m.dialog.title != "Destroy web?" {
+		t.Errorf("a failed listing replaced the open question: %v", m.dialog)
+	}
+	m.dialog = nil
+	next, _ = m.Update(tuiListMsg{resource: "vms", err: errors.New("token expired")})
+	m = next.(tuiModel)
+	if m.dialog == nil || !m.dialog.alert {
+		t.Errorf("the failure after the question: dialog=%v", m.dialog)
+	}
+	m = ack(t, m)
+	// ...and a listing that works lets the next failure open it.
+	next, _ = m.Update(tuiListMsg{resource: "vms", vms: []cloud.Vm{{Name: "web", Status: "running"}}})
+	next, _ = next.Update(tuiListMsg{resource: "vms", err: errors.New("token expired")})
+	m = next.(tuiModel)
+	if m.dialog == nil || !m.dialog.alert {
+		t.Errorf("a failure after a good listing: dialog=%v", m.dialog)
 	}
 }
