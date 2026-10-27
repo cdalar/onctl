@@ -304,6 +304,7 @@ type agentsModel struct {
 	statuses map[string]string // each box's status at the last poll
 	polling  bool
 	polled   bool
+	polledAt time.Time
 	flash    string
 	flashErr bool
 
@@ -318,9 +319,9 @@ type agentsModel struct {
 
 func newAgentsModel() agentsModel {
 	f := textinput.New()
-	f.Prompt = "repo> "
+	f.Prompt = ""
 	t := textinput.New()
-	t.Prompt = "task> "
+	t.Prompt = ""
 	t.CharLimit = 2000
 	return agentsModel{filter: f, task: t}
 }
@@ -347,7 +348,7 @@ func (m agentsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentsTickMsg:
 		return m, m.poll()
 	case agentsPolledMsg:
-		m.polling, m.polled = false, true
+		m.polling, m.polled, m.polledAt = false, true, time.Now()
 		if msg.err != nil {
 			m.flash, m.flashErr = "listing boxes: "+msg.err.Error(), true
 			return m, agentsTick()
@@ -592,88 +593,209 @@ func openPR(s agentSession) tea.Cmd {
 
 // --- rendering ----------------------------------------------------------------
 
-var (
-	agentsTitle   = lipgloss.NewStyle().Bold(true)
-	agentsDim     = lipgloss.NewStyle().Faint(true)
-	agentsSel     = lipgloss.NewStyle().Reverse(true)
-	agentsErr     = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-	agentsWaiting = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Bold(true)
-	agentsWorking = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-)
+// The view is drawn the way onctl tui is (tuirender.go): header with
+// info, hotkeys and logo; a prompt line while one is open; one bordered
+// box; the crumbs line with the flash at its right.
 
 func (m agentsModel) View() string {
+	if m.width == 0 {
+		return "loading…"
+	}
 	var b strings.Builder
-	b.WriteString(agentsTitle.Render("onctl agents") + agentsDim.Render("  on "+cloudProvider) + "\n\n")
+	header := m.height >= tuiMinForHeader
+	if header {
+		b.WriteString(renderHeader(m.infoBlock(), func(w int) []string { return hotkeyLines(m.hotkeys(), w) }, m.width) + "\n")
+	}
+	prompt := m.promptView()
+	if prompt != "" {
+		b.WriteString(prompt + "\n")
+	}
+	inner := m.height - 1 - 2 // crumbs, borders
+	if header {
+		inner -= tuiHeaderHeight
+	}
+	if prompt != "" {
+		inner--
+	}
+	inner = max(inner, 2)
+	w := max(m.width-2, 1)
+	var title string
+	var lines []string
 	switch m.mode {
 	case agentsPickRepo:
-		b.WriteString("New session: which repo?\n" + m.filter.View() + "\n\n")
-		repos := m.matchingRepos()
-		if len(m.repos) == 0 {
-			b.WriteString(agentsDim.Render("  listing your repos with gh...") + "\n")
-		}
-		for i, r := range repos[:min(len(repos), 15)] {
-			line := "  " + r.FullName
-			if i == m.repoCursor {
-				line = agentsSel.Render(line)
-			}
-			b.WriteString(line + "\n")
-		}
-		b.WriteString("\n" + agentsDim.Render("type to filter, up/down, enter picks, esc back"))
-		return b.String()
+		title, lines = m.repoTable(w, inner)
 	case agentsAskTask:
-		b.WriteString("New session on " + agentsTitle.Render(m.repo) + ": what should Claude do?\n" + m.task.View() + "\n\n")
-		b.WriteString(agentsDim.Render("enter starts a new box; Claude is asked to open a pull request when it's done. esc back"))
-		return b.String()
+		title = k9s.title.Render("New session")
+		lines = []string{
+			"",
+			" " + k9s.infoKey.Render(padRight("Repo:", 8)) + k9s.infoVal.Render(m.repo),
+			" " + k9s.infoKey.Render(padRight("Box:", 8)) + k9s.infoVal.Render("a new one on "+cloudProvider),
+			"",
+			" " + k9s.dim.Render("Say what Claude should do on the prompt line above. Claude is asked"),
+			" " + k9s.dim.Render("to open a pull request when it's done."),
+		}
+	default:
+		title, lines = m.sessionTable(w, inner)
 	}
+	b.WriteString(renderBox(title, lines, w, inner))
+	chips := []string{k9s.crumb.Render(" <agents> ")}
+	switch m.mode {
+	case agentsPickRepo:
+		chips = append(chips, k9s.crumbActive.Render(" <repos> "))
+	case agentsAskTask:
+		chips = append(chips, k9s.crumb.Render(" <repos> "), k9s.crumbActive.Render(" <task> "))
+	default:
+		chips[0] = k9s.crumbActive.Render(" <agents> ")
+	}
+	b.WriteString(renderCrumbs(chips, m.flash, m.flashErr, m.width))
+	return b.String()
+}
 
+// infoBlock is the header's left column: the provider, the sessions by
+// what Claude is doing, when the boxes were last polled.
+func (m agentsModel) infoBlock() []string {
+	kv := func(k, v string) string { return k9s.infoKey.Render(padRight(k+":", 11)) + k9s.infoVal.Render(v) }
+	working, waiting := 0, 0
+	for _, s := range m.sessions {
+		switch {
+		case s.waiting():
+			waiting++
+		case s.status == "working":
+			working++
+		}
+	}
+	polled := "never"
+	if !m.polledAt.IsZero() {
+		polled = shortAgo(time.Since(m.polledAt))
+	}
+	if m.polling {
+		polled = "polling…"
+	}
+	return []string{
+		kv("Provider", orDash(cloudProvider)),
+		kv("Sessions", fmt.Sprintf("%d working, %d waiting", working, waiting)),
+		kv("Notify", "when Claude waits"),
+		kv("Polled", polled),
+		kv("Rev", Version),
+	}
+}
+
+// hotkeys is the header's middle column for the mode.
+func (m agentsModel) hotkeys() []hotkey {
+	switch m.mode {
+	case agentsPickRepo:
+		return []hotkey{{"type", "filter"}, {"↑/↓", "move"}, {"enter", "pick"}, {"esc", "back"}}
+	case agentsAskTask:
+		return []hotkey{{"enter", "start"}, {"esc", "back"}}
+	}
+	return []hotkey{{"n", "new session"}, {"enter", "attach"}, {"o", "open PR"}, {"P", "push+PR"}, {"x", "destroy"}, {"r", "refresh"}, {"q", "quit"}}
+}
+
+// promptView is the line above the box: the repo filter or the task.
+func (m agentsModel) promptView() string {
+	switch m.mode {
+	case agentsPickRepo:
+		return fit(k9s.prompt.Render("/")+" "+m.filter.View(), m.width)
+	case agentsAskTask:
+		return fit(k9s.prompt.Render(">")+" "+m.task.View(), m.width)
+	}
+	return ""
+}
+
+// agentStatusStyle colours the CLAUDE cell: yellow when it waits for
+// you, green while it works, red on an error.
+func agentStatusStyle(s agentSession) (lipgloss.Style, bool) {
+	switch {
+	case s.err != "":
+		return k9s.state["dead"], true
+	case s.waiting():
+		return k9s.state["paused"].Bold(true), true
+	case s.status == "working":
+		return k9s.state["running"], true
+	}
+	return lipgloss.Style{}, false
+}
+
+func (m agentsModel) sessionTable(w, inner int) (string, []string) {
+	title := k9s.title.Render("Agents") + k9s.count.Render(fmt.Sprintf("[%d]", len(m.sessions)))
 	switch {
 	case !m.polled:
-		b.WriteString(agentsDim.Render("looking for sessions...") + "\n")
+		return title, []string{"", " " + k9s.dim.Render("Looking for sessions…")}
 	case len(m.sessions) == 0:
-		b.WriteString(agentsDim.Render("no sessions -- n starts one") + "\n")
-	default:
-		rows := [][]string{{"BOX", "REPO", "BRANCH", "CLAUDE", "PULL REQUEST"}}
-		for _, s := range m.sessions {
-			status := s.status
-			if s.err != "" {
-				status = "error: " + s.err
-			}
-			rows = append(rows, []string{s.box, orDash(s.repo), orDash(s.branch), status, orDash(s.pr)})
+		return title, []string{"", " " + k9s.dim.Render("No sessions. n starts one.")}
+	}
+	var rows [][]string
+	for _, s := range m.sessions {
+		status := s.status
+		if s.err != "" {
+			status = "error: " + s.err
 		}
-		widths := make([]int, len(rows[0]))
-		for _, r := range rows {
-			for i, c := range r {
-				widths[i] = max(widths[i], lipgloss.Width(c))
-			}
-		}
-		for i, r := range rows {
-			cells := make([]string, len(r))
-			for j, c := range r {
-				cells[j] = padRight(c, widths[j])
-			}
-			line := strings.Join(cells, "  ")
-			switch {
-			case i == 0:
-				line = agentsDim.Render(line)
-			case i-1 == m.cursor:
-				line = agentsSel.Render(line)
-			case m.sessions[i-1].err != "":
-				line = agentsErr.Render(line)
-			case m.sessions[i-1].waiting():
-				line = agentsWaiting.Render(line)
-			case m.sessions[i-1].status == "working":
-				line = agentsWorking.Render(line)
-			}
-			b.WriteString(line + "\n")
+		rows = append(rows, []string{s.box, orDash(s.repo), orDash(s.branch), status, orDash(s.pr)})
+	}
+	return title, agentsTableLines([]string{"BOX", "REPO", "BRANCH", "CLAUDE", "PULL REQUEST"}, rows, m.cursor, w, inner,
+		func(r int) (int, lipgloss.Style, bool) {
+			st, ok := agentStatusStyle(m.sessions[r])
+			return 3, st, ok
+		})
+}
+
+func (m agentsModel) repoTable(w, inner int) (string, []string) {
+	repos := m.matchingRepos()
+	title := k9s.title.Render("GitHub Repos")
+	if f := m.filter.Value(); f != "" {
+		title += k9s.title.Render("</" + f + ">")
+	}
+	title += k9s.count.Render(fmt.Sprintf("[%d]", len(repos)))
+	switch {
+	case len(m.repos) == 0:
+		return title, []string{"", " " + k9s.dim.Render("Listing your repos with gh…")}
+	case len(repos) == 0:
+		return title, []string{"", " " + k9s.dim.Render("No repos match the filter.")}
+	}
+	var rows [][]string
+	for _, r := range repos {
+		rows = append(rows, []string{r.FullName, vmAge(r.PushedAt), orDash(r.Language), r.Description})
+	}
+	return title, agentsTableLines([]string{"REPO", "PUSHED", "LANGUAGE", "DESCRIPTION"}, rows, m.repoCursor, w, inner, nil)
+}
+
+// agentsTableLines draws a table as onctl tui does: the column header,
+// then the rows around the cursor, the cursor's row highlighted. style,
+// if set, colours one cell of a row.
+func agentsTableLines(cols []string, rows [][]string, cursor, w, inner int, style func(row int) (int, lipgloss.Style, bool)) []string {
+	widths := make([]int, len(cols))
+	for i, c := range cols {
+		widths[i] = lipgloss.Width(c)
+	}
+	for _, r := range rows {
+		for i, c := range r {
+			widths[i] = max(widths[i], lipgloss.Width(c))
 		}
 	}
-	if m.flash != "" {
-		style := agentsDim
-		if m.flashErr {
-			style = agentsErr
-		}
-		b.WriteString("\n" + style.Render(m.flash) + "\n")
+	var header []string
+	for i, c := range cols {
+		header = append(header, k9s.header.Render(padRight(c, widths[i])))
 	}
-	b.WriteString("\n" + agentsDim.Render("n new  enter attach  o open PR  P push+PR  x destroy  r refresh  q quit"))
-	return b.String()
+	lines := []string{" " + strings.Join(header, "  ")}
+	top := 0
+	if cursor >= inner-1 {
+		top = cursor - (inner - 1) + 1
+	}
+	for r := top; r < min(top+inner-1, len(rows)); r++ {
+		cells := make([]string, len(cols))
+		for i := range cols {
+			cells[i] = padRight(rows[r][i], widths[i])
+		}
+		if r == cursor {
+			lines = append(lines, k9s.selected.Render(padRight(fit(" "+strings.Join(cells, "  "), w), w)))
+			continue
+		}
+		if style != nil {
+			if i, st, ok := style(r); ok {
+				cells[i] = st.Render(cells[i])
+			}
+		}
+		lines = append(lines, " "+strings.Join(cells, "  "))
+	}
+	return lines
 }

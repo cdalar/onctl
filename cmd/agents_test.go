@@ -108,3 +108,24 @@ func TestOriginRepo(t *testing.T) {
 	}
 	assert.Equal(t, "", originRepo(""))
 }
+
+// The view fills the screen the way onctl tui does -- exactly one line
+// per terminal row, so the alt screen doesn't scroll or leave stale
+// rows -- in each mode, and keeps the cursor's row on screen when the
+// sessions outnumber the box.
+func TestAgentsViewFillsScreen(t *testing.T) {
+	m := newAgentsModel()
+	m.width, m.height, m.polled = 100, 24, true
+	for i := 0; i < 40; i++ {
+		m.sessions = append(m.sessions, agentSession{box: "box" + string(rune('a'+i%26)) + string(rune('a'+i/26)), status: "working"})
+	}
+	m.cursor = 39
+	for _, mode := range []agentsMode{agentsList, agentsPickRepo, agentsAskTask} {
+		m.mode = mode
+		v := m.View()
+		assert.Len(t, strings.Split(v, "\n"), m.height, "mode %d", mode)
+	}
+	m.mode = agentsList
+	assert.Contains(t, m.View(), m.sessions[39].box, "the cursor's row is drawn")
+	assert.Contains(t, m.View(), "<agents>")
+}
