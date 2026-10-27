@@ -54,11 +54,16 @@ func newlyWaiting(prev map[string]string, now []agentSession) []agentSession {
 	return out
 }
 
+// boxGH is the box's own gh, not the image's wrapper (as in
+// claudegithub.go). A var so tests can point it at a stand-in: CI runners
+// have a real gh at /usr/bin/gh.
+var boxGH = "/usr/bin/gh"
+
 // agentStatusScript prints what the list shows of the box's project as
 // key=value lines, or nothing on a box without one.
 func agentStatusScript() string {
 	return `d=$(cat ` + projectMarker + ` 2>/dev/null); [ -n "$d" ] || exit 0
-gh=/usr/bin/gh; [ -x "$gh" ] || gh=gh
+gh=` + shellQuote(boxGH) + `; [ -x "$gh" ] || gh=gh
 echo "dir=$d"
 echo "mux=$(cat ` + muxMarker + ` 2>/dev/null)"
 echo "origin=$(git -C "$d" remote get-url origin 2>/dev/null)"
@@ -254,7 +259,7 @@ exec herdr`
 // what's committed, printing its URL (the existing one's, if there is).
 func openPRScript(dir string) string {
 	return `cd ` + shellQuote(dir) + ` || exit 1
-gh=/usr/bin/gh; [ -x "$gh" ] || gh=gh
+gh=` + shellQuote(boxGH) + `; [ -x "$gh" ] || gh=gh
 git push -u origin HEAD >&2 || exit 1
 url=$("$gh" pr view --json url -q .url 2>/dev/null) || { "$gh" pr create --fill >&2 && url=$("$gh" pr view --json url -q .url); } && echo "$url"`
 }

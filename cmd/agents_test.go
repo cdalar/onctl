@@ -235,6 +235,9 @@ esac`,
 		assert.NoError(t, os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body+"\n"), 0o755))
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prevGH := boxGH
+	t.Cleanup(func() { boxGH = prevGH })
+	boxGH = filepath.Join(bin, "gh")
 	t.Setenv("FAKE_ROOT", root)
 	t.Setenv("FAKE_LOG", logFile)
 	t.Setenv("HOME", root) // newVMSSH's control dir; and no global git config (signing)
