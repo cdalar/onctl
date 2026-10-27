@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -1320,5 +1321,47 @@ func TestTUIErrorPopup(t *testing.T) {
 	m = next.(tuiModel)
 	if m.dialog == nil || !m.dialog.alert {
 		t.Errorf("a failure after a good listing: dialog=%v", m.dialog)
+	}
+}
+
+// space marks VMs in :vms so one ctrl-d destroys them all: the question
+// names every one (a wrong mark costs a VM), n keeps the marks, y
+// destroys exactly the marked VMs, and a VM marked twice isn't marked.
+func TestTUIDestroyMarked(t *testing.T) {
+	f := tuiFixture()
+	m := listed(t, f, 140, 40)
+	for _, name := range []string{"web", "db", "booting", "booting"} {
+		m.top().selected = name
+		m, _ = press(t, m, " ")
+	}
+	if got := strings.Join(m.markedVMs(), ","); got != "db,web" {
+		t.Fatalf("marked %q, want db and web (booting unmarked by its second space)", got)
+	}
+	if !strings.Contains(m.View(), "*db") || !strings.Contains(m.View(), "*web") {
+		t.Errorf("marked rows don't show it:\n%s", m.View())
+	}
+
+	m, _ = press(t, m, "ctrl+d")
+	v := m.View()
+	if m.dialog == nil || !strings.Contains(v, "Destroy 2 VMs?") || !strings.Contains(v, "  db") || !strings.Contains(v, "  web") {
+		t.Fatalf("ctrl+d with marks: view:\n%s", v)
+	}
+	m, cmd := press(t, m, "n")
+	if hasAction(cmd) != nil || len(f.calls) != 0 || len(m.markedVMs()) != 2 {
+		t.Fatalf("n: calls=%v marked=%v", f.calls, m.markedVMs())
+	}
+
+	m, _ = press(t, m, "ctrl+d")
+	m, cmd = press(t, m, "y")
+	if m.pending["db"] != "destroy" || m.pending["web"] != "destroy" || len(m.pending) != 2 {
+		t.Errorf("y: pending=%v", m.pending)
+	}
+	runCmd(cmd)
+	sort.Strings(f.calls)
+	if got := strings.Join(f.calls, ", "); got != "destroy db, destroy web" {
+		t.Errorf("provider saw %q", got)
+	}
+	if len(m.marked) != 0 {
+		t.Errorf("marks kept after destroying: %v", m.marked)
 	}
 }
