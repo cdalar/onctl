@@ -29,6 +29,8 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleFilterKey(msg)
 	case m.commanding:
 		return m.handleCommandKey(msg)
+	case m.tasking:
+		return m.handleTaskKey(msg)
 	case m.dialog != nil:
 		return m.handleDialogKey(msg)
 	case m.create != nil:
@@ -159,7 +161,7 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	}
-	return m, m.fail("unknown command %q (try :vms, :images, :sizes, :repos, :provider, :claude, :help, :q)", words[0])
+	return m, m.fail("unknown command %q (try :vms, :agents, :images, :sizes, :repos, :provider, :claude, :help, :q)", words[0])
 }
 
 // --- the / filter ---------------------------------------------------------
@@ -214,6 +216,11 @@ func (m *tuiModel) choose(title string, body []string, choices ...tuiChoice) {
 func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	t := m.top()
 	key := msg.String()
+	if t.view == agentsView {
+		if next, cmd, ok := m.handleAgentsKey(key); ok {
+			return next, cmd
+		}
+	}
 	switch key {
 	case "up", "k":
 		m.move(-1)
@@ -285,6 +292,9 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			case providersView:
 				return m.switchProvider(r.key)
 			case reposView:
+				if m.pickedForAgent() {
+					return m.askTask(r.key)
+				}
 				return m.askRepoBox(r.key)
 			}
 		}
@@ -403,7 +413,7 @@ func (m *tuiModel) pushHelp() {
 	}
 	lines := []string{"General", ""}
 	general := [][2]string{
-		{":<view>", "switch view: vms, images, sizes, repos (`:vms web` filters too)"},
+		{":<view>", "switch view: vms, agents, images, sizes, repos (`:vms web` filters too)"},
 		{":create", "create a VM"}, {":ssh <vm>", "open a terminal on a VM"},
 		{":claude [vm]", "run Claude Code on a VM (the project's box without one)"},
 		{":provider [name]", "switch cloud provider (a list to pick from without a name)"},
@@ -438,6 +448,16 @@ func (m *tuiModel) pushHelp() {
 			"  so two pieces of work never share a box; kept when Claude exits, for :vms to pause or destroy),",
 			"  or r, the repo's own box, claude-<name>, which later enters come back to.",
 			"  The list is cached (~/.onctl/repos.json) and asked of GitHub again when an hour old, or with R.")
+	}
+	if v == agentsView {
+		lines = append(lines, "", "Agents",
+			"  The boxes running Claude, polled over ssh: CLAUDE is herdr's status (working, blocked, idle, done).",
+			"  n picks a repo in :repos, then asks for the task: `onctl claude --repo` runs detached on a new box,",
+			"  in herdr, with a GitHub token stored there (ONCTL_GITHUB_TOKEN, else asked), and Claude is asked",
+			"  to open a pull request when it's done. Once this view has been opened the boxes are polled on every",
+			"  refresh, and a desktop notification goes out when a Claude starts waiting for you.",
+			"  enter attaches (herdr: ctrl-b q comes back); o opens the PR; P pushes and runs gh pr create --fill;",
+			"  ctrl-d destroys the box. Off the boxes provider only boxes started here are polled (~/.onctl/agents.json).")
 	}
 	if v == vmsView {
 		lines = append(lines, "", "VMs",

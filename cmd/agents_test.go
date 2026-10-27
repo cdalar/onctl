@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -109,23 +112,85 @@ func TestOriginRepo(t *testing.T) {
 	assert.Equal(t, "", originRepo(""))
 }
 
-// The view fills the screen the way onctl tui does -- exactly one line
-// per terminal row, so the alt screen doesn't scroll or leave stale
-// rows -- in each mode, and keeps the cursor's row on screen when the
-// sessions outnumber the box.
-func TestAgentsViewFillsScreen(t *testing.T) {
-	m := newAgentsModel()
-	m.width, m.height, m.polled = 100, 24, true
-	for i := 0; i < 40; i++ {
-		m.sessions = append(m.sessions, agentSession{box: "box" + string(rune('a'+i%26)) + string(rune('a'+i/26)), status: "working"})
+// :agents in the tui: the sessions come in with each poll, a desktop
+// notification goes out only when a Claude starts waiting (not for what
+// was already waiting when the view opened), n -> repo -> task starts a
+// session on a new box and comes back to :agents, and :repos opened on
+// its own still asks which box, as before.
+func TestTUIAgents(t *testing.T) {
+	tuiFlashFor = time.Millisecond
+	withCloudProvider(t, "hetzner")
+	dir := t.TempDir()
+	origCache, origList, origReg, origNotify := repoCachePath, listGitHubRepos, agentsRegistryPath, notifyDesktop
+	t.Cleanup(func() {
+		repoCachePath, listGitHubRepos, agentsRegistryPath, notifyDesktop = origCache, origList, origReg, origNotify
+	})
+	repoCachePath = func() (string, error) { return filepath.Join(dir, "repos.json"), nil }
+	listGitHubRepos = func(context.Context) ([]ghRepo, error) {
+		return []ghRepo{{FullName: "acme/web", PushedAt: time.Now()}}, nil
 	}
-	m.cursor = 39
-	for _, mode := range []agentsMode{agentsList, agentsPickRepo, agentsAskTask} {
-		m.mode = mode
-		v := m.View()
-		assert.Len(t, strings.Split(v, "\n"), m.height, "mode %d", mode)
+	agentsRegistryPath = func() (string, error) { return filepath.Join(dir, "agents.json"), nil }
+	var notified []string
+	var mu sync.Mutex
+	notifyDesktop = func(title, _ string) { mu.Lock(); notified = append(notified, title); mu.Unlock() }
+	notifications := func() []string {
+		time.Sleep(20 * time.Millisecond) // notifications go out on their own goroutine
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), notified...)
 	}
-	m.mode = agentsList
-	assert.Contains(t, m.View(), m.sessions[39].box, "the cursor's row is drawn")
-	assert.Contains(t, m.View(), "<agents>")
+
+	m := listed(t, tuiFixture(), 140, 40)
+	_ = m.openView(agentsView) // its poll is ssh; the test delivers the sessions itself
+	poll := func(sessions ...agentSession) {
+		next, _ := m.Update(tuiListMsg{resource: "agents", agents: sessions})
+		m = next.(tuiModel)
+	}
+	poll(agentSession{box: "db", status: "working"}, agentSession{box: "web", repo: "acme/web", status: "blocked"})
+	assert.Equal(t, "db web", keys(m.rows()))
+	assert.Empty(t, notifications(), "already waiting when the view opened")
+	poll(agentSession{box: "db", status: "blocked"}, agentSession{box: "web", repo: "acme/web", status: "blocked"})
+	assert.Equal(t, []string{"Claude is waiting: db"}, notifications())
+	assert.Contains(t, m.View(), "blocked")
+
+	// Polled from now on in any view, so the notification doesn't need
+	// :agents on screen.
+	assert.True(t, m.loaded["agents"])
+
+	// n -> :repos on top of :agents -> enter asks for the task.
+	m, cmd := press(t, m, "n")
+	assert.Equal(t, reposView, m.top().view)
+	for _, msg := range runCmd(cmd) {
+		if lm, ok := msg.(tuiListMsg); ok {
+			next, _ := m.Update(lm)
+			m = next.(tuiModel)
+		}
+	}
+	m, _ = press(t, m, "enter")
+	assert.True(t, m.tasking, "enter asks for the task, not which box")
+	assert.Nil(t, m.dialog)
+	m = typeIn(t, m, "fix login")
+	assert.Len(t, strings.Split(m.View(), "\n"), 40, "the task prompt line fits in the screen")
+	m, cmd = press(t, m, "enter")
+	assert.NotNil(t, cmd, "onctl claude runs")
+	assert.False(t, m.tasking)
+	assert.Equal(t, agentsView, m.top().view, "back to the sessions")
+	reg := readAgentsRegistry()
+	assert.Len(t, reg, 1)
+	for box, repo := range reg {
+		assert.True(t, strings.HasPrefix(box, "web-fix-login-"), box)
+		assert.Equal(t, "acme/web", repo)
+	}
+
+	// ctrl-d on a session is the VM's destroy, asked first.
+	m.top().selected = "web"
+	m, _ = press(t, m, "ctrl+d")
+	assert.NotNil(t, m.dialog)
+	m.dialog = nil
+
+	// :repos opened by itself keeps asking which box.
+	_ = m.openView(reposView)
+	m, _ = press(t, m, "enter")
+	assert.False(t, m.tasking)
+	assert.NotNil(t, m.dialog)
 }

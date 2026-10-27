@@ -57,6 +57,10 @@ var k9s = struct {
 		"failed":   lipgloss.NewStyle().Foreground(lipgloss.Color("203")),
 		"private":  lipgloss.NewStyle().Foreground(lipgloss.Color("220")),
 		"archived": lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
+		// :agents' CLAUDE column: green at work, yellow waiting for you.
+		"working": lipgloss.NewStyle().Foreground(lipgloss.Color("46")),
+		"blocked": lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Bold(true),
+		"done":    lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Bold(true),
 	},
 }
 
@@ -96,7 +100,7 @@ func (m tuiModel) showHeader() bool { return m.height >= tuiMinForHeader }
 
 // promptHeight is the prompt line, when one is open.
 func (m tuiModel) promptHeight() int {
-	if m.filtering || m.commanding || m.filter.Value() != "" {
+	if m.filtering || m.commanding || m.tasking || m.filter.Value() != "" {
 		return 1
 	}
 	return 0
@@ -134,12 +138,7 @@ func (m tuiModel) View() string {
 // headerView is k9s's top block: info on the left, the view's hotkeys
 // in the middle, the logo on the right.
 func (m tuiModel) headerView() string {
-	return renderHeader(m.infoBlock(), m.hotkeyBlock, m.width)
-}
-
-// renderHeader lays out a header: info on the left, hotkeys (drawn for
-// the width left over) in the middle, the logo on the right.
-func renderHeader(info []string, hotkeys func(width int) []string, width int) string {
+	info := m.infoBlock()
 	logo := make([]string, len(tuiLogo))
 	for i, l := range tuiLogo {
 		logo[i] = k9s.logo.Render(l)
@@ -149,18 +148,18 @@ func renderHeader(info []string, hotkeys func(width int) []string, width int) st
 		infoW = max(infoW, lipgloss.Width(l))
 	}
 	logoW := lipgloss.Width(tuiLogo[0])
-	keysW := width - infoW - logoW - 4
+	keysW := m.width - infoW - logoW - 4
 	var cols []string
 	cols = append(cols, strings.Join(padLines(info, infoW, tuiHeaderHeight), "\n"))
 	if keysW >= 16 {
-		cols = append(cols, strings.Join(padLines(hotkeys(keysW), keysW, tuiHeaderHeight), "\n"))
+		cols = append(cols, strings.Join(padLines(m.hotkeyBlock(keysW), keysW, tuiHeaderHeight), "\n"))
 	}
-	if width >= infoW+logoW+2 {
+	if m.width >= infoW+logoW+2 {
 		cols = append(cols, strings.Join(padLines(logo, logoW, tuiHeaderHeight), "\n"))
 	}
 	rows := strings.Split(lipgloss.JoinHorizontal(lipgloss.Top, joinWithGap(cols, "  ")...), "\n")
 	for i := range rows {
-		rows[i] = fit(rows[i], width)
+		rows[i] = fit(rows[i], m.width)
 	}
 	return strings.Join(rows, "\n")
 }
@@ -246,11 +245,6 @@ func (m tuiModel) hotkeyBlock(width int) []string {
 		keys = []hotkey{{"j/k", "scroll"}, {"g/G", "top/bottom"}, {"y", "json"}, {"s", "shell"}, {"a", "claude"}}
 	}
 	keys = append(keys, commonHotkeys...)
-	return hotkeyLines(keys, width)
-}
-
-// hotkeyLines draws keys in as many columns of tuiHeaderHeight as fit.
-func hotkeyLines(keys []hotkey, width int) []string {
 	// Column width from the widest entry.
 	keyW, labelW := 0, 0
 	for _, k := range keys {
@@ -282,6 +276,8 @@ func (m tuiModel) promptView() string {
 		return fit(k9s.prompt.Render(":")+" "+m.command.View(), m.width)
 	case m.filtering:
 		return fit(k9s.prompt.Render("/")+" "+m.filter.View(), m.width)
+	case m.tasking:
+		return fit(k9s.prompt.Render(">")+" "+m.task.View(), m.width)
 	}
 	return fit(k9s.prompt.Render("/")+" "+m.filter.Value()+"  "+k9s.dim.Render("(esc clears)"), m.width)
 }
@@ -305,12 +301,6 @@ func (m tuiModel) boxView() string {
 	default:
 		title, lines = m.table(w, inner)
 	}
-	return renderBox(title, lines, w, inner)
-}
-
-// renderBox draws a bordered box w cells wide inside, inner lines high,
-// with title in its top border.
-func renderBox(title string, lines []string, w, inner int) string {
 	var b strings.Builder
 	top := "─ " + title + " "
 	b.WriteString(k9s.border.Render("┌") + fitPlain(top, w) + k9s.border.Render(strings.Repeat("─", max(w-lipgloss.Width(top), 0))+"┐") + "\n")
@@ -507,23 +497,17 @@ func (m tuiModel) crumbsView() string {
 	if m.create != nil {
 		chips = append(chips, k9s.crumbActive.Render(" <create> "))
 	}
-	return renderCrumbs(chips, m.flash, m.flashErr, m.width)
-}
-
-// renderCrumbs is the crumbs line: the chips, and the flash at the right.
-func renderCrumbs(chips []string, flash string, flashErr bool, width int) string {
 	left := strings.Join(chips, " ")
-	if flash == "" {
-		return fit(left, width)
+	if m.flash == "" {
+		return fit(left, m.width)
 	}
-	if flashErr {
-		flash = k9s.flashErr.Render("✘ " + flash)
-	} else {
-		flash = k9s.flash.Render(flash)
+	flash := k9s.flash.Render(m.flash)
+	if m.flashErr {
+		flash = k9s.flashErr.Render("✘ " + m.flash)
 	}
-	gap := width - lipgloss.Width(left) - lipgloss.Width(flash) - 1
+	gap := m.width - lipgloss.Width(left) - lipgloss.Width(flash) - 1
 	if gap < 1 {
-		return fit(left+" "+flash, width)
+		return fit(left+" "+flash, m.width)
 	}
 	return left + strings.Repeat(" ", gap) + flash
 }
