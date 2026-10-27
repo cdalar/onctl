@@ -663,6 +663,10 @@ var tuiNeedsInit = func() bool {
 	return err != nil
 }
 
+// tuiInitArgs is the `onctl init` the tui runs: it has asked already, so
+// not the project-folder question init would add.
+var tuiInitArgs = []string{"init", "--global"}
+
 // askInit offers to run `onctl init` before switching to name; once it
 // has run the tui switches, as if enter had been pressed again.
 func (m tuiModel) askInit(name string) (tea.Model, tea.Cmd) {
@@ -670,7 +674,7 @@ func (m tuiModel) askInit(name string) (tea.Model, tea.Cmd) {
 		[]string{"onctl isn't set up yet: no .onctl directory in this directory or your home.", fmt.Sprintf("`onctl init` creates it; then the tui switches to %s.", name)},
 		func(m tuiModel) (tea.Model, tea.Cmd) {
 			m.initThen = name
-			return m.runChild("init", "", []string{"init"})
+			return m.runChild("init", "", tuiInitArgs)
 		})
 	return m, nil
 }

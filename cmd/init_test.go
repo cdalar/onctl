@@ -17,6 +17,20 @@ func TestInitCmd_CommandProperties(t *testing.T) {
 	assert.NotNil(t, initCmd.Run)
 }
 
+// The tui asks "run onctl init?" itself, so the init it runs must not
+// follow with init's own project-folder question: its arguments have to
+// be ones init accepts and that turn the question off.
+func TestTUIInitArgsSkipProjectQuestion(t *testing.T) {
+	orig := initGlobalOnly
+	defer func() { initGlobalOnly = orig }()
+	initGlobalOnly = false
+	if len(tuiInitArgs) == 0 || tuiInitArgs[0] != "init" {
+		t.Fatalf("tuiInitArgs = %v, want init's", tuiInitArgs)
+	}
+	assert.NoError(t, initCmd.ParseFlags(tuiInitArgs[1:]))
+	assert.True(t, initGlobalOnly, "the tui's init would ask about a project folder again")
+}
+
 func TestInitializeOnctlEnv_NewDirectory(t *testing.T) {
 	// Skip interactive prompts during testing
 	originalSkip := skipInteractivePrompt
