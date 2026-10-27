@@ -166,6 +166,14 @@ func (herdrMux) setup() string {
 // is installed with the workspace, by which time the Claude
 // configuration is on the box.
 //
+// All of that, from the server check to the pane, runs under a lock on
+// the box (flock, where there is one): two runs at once would otherwise
+// both find no workspace and make one each -- two Claudes in one
+// directory, under one label, which focus can't take -- or one's server
+// restart would close the workspace the other just made. The lock is let
+// go before attaching, and the server doesn't inherit it. A label already
+// on two workspaces attaches to the first.
+//
 // A pane whose process ends is closed; an attached client then shows a
 // plain shell workspace (detach with Ctrl-b q), and the server stays for
 // the box's other sessions -- a box outlives its runs here.
@@ -182,12 +190,14 @@ func (herdrMux) start(s taskSession, line string, detached bool) string {
 		pane = "sh " + shellQuote(cmdFile) + "; [ ! -e " + shellQuote(stop) + " ] || herdr server stop"
 	}
 	script := muxMarkScript("herdr") + `
+(umask 077 && mkdir -p ` + shellQuote(muxRunDir) + `) && exec 9>` + shellQuote(muxRunDir+"/herdr.lock") + ` || exit 1
+if command -v flock >/dev/null; then flock 9; fi
 if ! herdr workspace list >/dev/null 2>&1; then
-  (cd / && setsid herdr server >/dev/null 2>&1 </dev/null &)
+  (cd / && setsid herdr server >/dev/null 2>&1 </dev/null 9>&- &)
   n=0; until herdr workspace list >/dev/null 2>&1; do n=$((n+1)); [ "$n" -lt 100 ] || { echo "herdr's server didn't start" >&2; exit 1; }; sleep 0.1; done
   for w in $(herdr workspace list 2>/dev/null | grep -o '"workspace_id":"[^"]*"' | sed 's/.*:"//; s/"$//'); do herdr workspace close "$w" >/dev/null 2>&1; done
 fi
-ws=$(herdr workspace list 2>/dev/null | grep -o ` + shellQuote(`"label":"`+s.name+`"[^}]*"workspace_id":"[^"]*"`) + ` | sed 's/.*"workspace_id":"//; s/"$//')
+ws=$(herdr workspace list 2>/dev/null | grep -o ` + shellQuote(`"label":"`+s.name+`"[^}]*"workspace_id":"[^"]*"`) + ` | sed 's/.*"workspace_id":"//; s/"$//' | head -n 1)
 if [ -n "$ws" ]; then herdr workspace focus "$ws" >/dev/null || exit 1
 else
   herdr integration install claude >/dev/null 2>&1 || true
@@ -195,7 +205,8 @@ else
   p=$(herdr workspace create --cwd ` + shellQuote(s.dir) + ` --label ` + shellQuote(s.name) + ` --focus | sed -n 's/.*"root_pane":{[^}]*"pane_id":"\([^"]*\)".*/\1/p')
   [ -n "$p" ] || { echo "couldn't make a herdr workspace for ` + s.name + `" >&2; exit 1; }
   herdr pane run "$p" ` + shellQuote(pane) + ` >/dev/null || exit 1
-fi`
+fi
+exec 9>&-`
 	if !detached {
 		script += "\nexec herdr"
 	}

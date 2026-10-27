@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,8 +29,10 @@ case "$1 $2" in
   done
   printf '{"id":"cli:workspace:list","result":{"type":"workspace_list","workspaces":[%s]}}\n' "$ws" ;;
 "server ") touch "$d/up" ;;
+"workspace focus") [ "${3#w}" -le "$(wc -l <"$d/labels")" ] 2>/dev/null || { echo "no workspace $3" >&2; exit 1; } ;;
 "workspace close") grep -v "^$(sed -n "${3#w}p" "$d/labels")$" "$d/labels" >"$d/labels.new"; mv "$d/labels.new" "$d/labels" ;;
 "workspace create")
+  [ -f "$d/slow" ] && sleep 0.5
   while [ $# -gt 0 ]; do [ "$1" = --label ] && l=$2; shift; done
   echo "$l" >>"$d/labels"; n=$(wc -l <"$d/labels" | tr -d ' ')
   printf '{"id":"cli:workspace:create","result":{"root_pane":{"agent_status":"unknown","cwd":"/x","focused":true,"pane_id":"w%s:p1","tab_id":"w%s:t1","workspace_id":"w%s"},"type":"workspace_created"}}\n' "$n" "$n" "$n" ;;
@@ -158,6 +161,61 @@ func TestHerdrStartEphemeral(t *testing.T) {
 	}
 	if _, err := os.Stat(runDir + "/claude.stop"); err == nil {
 		t.Error("a detached start made a stop file")
+	}
+}
+
+// TestHerdrStartConcurrent: two runs starting the same session at once
+// must make one workspace between them -- two would be two Claudes in
+// one directory, under a label focus can't take. (Needs flock, as boxes
+// have; macOS doesn't.)
+func TestHerdrStartConcurrent(t *testing.T) {
+	if _, err := exec.LookPath("flock"); err != nil {
+		t.Skip("no flock here")
+	}
+	log := fakeHerdr(t)
+	boxPaths(t)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(log), "slow"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	script := (herdrMux{}).start(newTaskSession("/w/app", ""), "exec claude", true)
+	errs := make(chan error, 2)
+	for range 2 {
+		go func() {
+			out, err := exec.Command("sh", "-c", script).CombinedOutput()
+			if err != nil {
+				err = fmt.Errorf("%v: %s", err, out)
+			}
+			errs <- err
+		}()
+	}
+	for range 2 {
+		if err := <-errs; err != nil {
+			t.Error(err)
+		}
+	}
+	if n := strings.Count(readFile(t, log), "workspace create"); n != 1 {
+		t.Errorf("%d workspaces made for one session:\n%s", n, readFile(t, log))
+	}
+}
+
+// TestHerdrStartDuplicateLabel: a box that has two workspaces under one
+// label already (from before the lock) attaches to the first, rather
+// than failing on every attach until one is closed by hand.
+func TestHerdrStartDuplicateLabel(t *testing.T) {
+	log := fakeHerdr(t)
+	boxPaths(t)
+	d := filepath.Dir(log)
+	for name, body := range map[string]string{"up": "", "labels": "claude\nclaude\n"} {
+		if err := os.WriteFile(filepath.Join(d, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := exec.Command("sh", "-c", (herdrMux{}).start(newTaskSession("/w/app", ""), "exec claude", true)).CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if calls := readFile(t, log); !strings.Contains(calls, "workspace focus w1\n") || strings.Contains(calls, "workspace create") {
+		t.Errorf("should focus the first workspace:\n%s", calls)
 	}
 }
 
