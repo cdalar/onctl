@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRootCmd_CommandProperties(t *testing.T) {
@@ -136,4 +138,17 @@ func TestRootErrorsPrintOnce(t *testing.T) {
 	assert.True(t, rootCmd.SilenceErrors)
 	err := flagError(claudeCmd, errors.New("unknown flag: --kep"))
 	assert.EqualError(t, err, "unknown flag: --kep\nRun 'onctl claude --help' for usage.")
+}
+
+// TestBareRootIsTUI: `onctl` alone opens the tui, so it must be runnable
+// (cobra prints help for a root without RunE); off a terminal, as here,
+// it still prints the help instead of failing, so scripts and pipes keep
+// working and `onctl --help` stays the way to the command list.
+func TestBareRootIsTUI(t *testing.T) {
+	require.NotNil(t, rootCmd.RunE)
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	defer rootCmd.SetOut(nil)
+	assert.NoError(t, rootCmd.RunE(rootCmd, nil))
+	assert.Contains(t, out.String(), "Available Commands")
 }
