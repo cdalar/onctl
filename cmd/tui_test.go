@@ -356,6 +356,39 @@ func TestTUIListAndKeys(t *testing.T) {
 	if m.dialog != nil || hasAction(cmd) != nil {
 		t.Errorf("enter: dialog=%v", m.dialog)
 	}
+	// The arrows move the highlight between yes and no without answering;
+	// enter on no (where it starts, and where right leaves it) declines.
+	m, _ = press(t, m, "ctrl+d")
+	m, cmd = press(t, m, "right")
+	if m.dialog == nil || cmd != nil {
+		t.Fatalf("right closed the dialog or acted: dialog=%v", m.dialog)
+	}
+	m, cmd = press(t, m, "enter")
+	if m.dialog != nil || hasAction(cmd) != nil {
+		t.Errorf("right, enter: dialog=%v", m.dialog)
+	}
+	m, _ = press(t, m, "ctrl+d")
+	m, _ = press(t, m, "left")
+	m, _ = press(t, m, "right")
+	m, cmd = press(t, m, "enter")
+	if m.dialog != nil || hasAction(cmd) != nil {
+		t.Errorf("left, right, enter: dialog=%v", m.dialog)
+	}
+	// left onto yes, then enter, sends it -- the same as y below.
+	m, _ = press(t, m, "ctrl+d")
+	m, _ = press(t, m, "left")
+	m, cmd = press(t, m, "enter")
+	if m.pending["booting"] != "destroy" {
+		t.Fatalf("left, enter: pending=%v", m.pending)
+	}
+	if am := hasAction(cmd); am == nil || am.err != nil {
+		t.Fatalf("left, enter: destroy's result: %#v", am)
+	}
+	if got := strings.Join(f.calls, ", "); got != "destroy booting" {
+		t.Errorf("left, enter: provider saw %q", got)
+	}
+	f.calls = nil
+	delete(m.pending, "booting")
 	// y sends it.
 	m, _ = press(t, m, "ctrl+d")
 	m, cmd = press(t, m, "y")
@@ -970,6 +1003,20 @@ func TestTUIRepos(t *testing.T) {
 		if cmd == nil || m.dialog != nil || m.flash != "" {
 			t.Errorf("enter, %s: cmd=%v dialog=%v flash=%q", k, cmd != nil, m.dialog != nil, m.flash)
 		}
+	}
+	// The highlight starts on cancel, so enter alone cancels; left onto a
+	// choice and enter picks it, as its key would.
+	m, _ = press(t, m, "enter")
+	m, cmd = press(t, m, "enter")
+	if cmd != nil || m.dialog != nil {
+		t.Errorf("enter, enter: cmd=%v dialog=%v", cmd != nil, m.dialog != nil)
+	}
+	m, _ = press(t, m, "enter")
+	m, _ = press(t, m, "left")
+	m, _ = press(t, m, "left")
+	m, cmd = press(t, m, "enter")
+	if cmd == nil || m.dialog != nil {
+		t.Errorf("enter, left, left, enter: cmd=%v dialog=%v", cmd != nil, m.dialog != nil)
 	}
 	// With the repo's box there, the dialog says so.
 	m.vms = []cloud.Vm{{Name: "claude-onctl", Status: "running"}}

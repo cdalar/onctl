@@ -466,15 +466,24 @@ func dialogKeys(d *tuiDialog) string {
 	if d.alert {
 		return k9s.hotKey.Render("<enter>") + " OK"
 	}
-	if len(d.choices) == 0 {
-		return k9s.hotKey.Render("<y>") + " yes   " + k9s.hotKey.Render("<n>") + " no"
+	var buttons [][2]string // key, label
+	if d.yes != nil {
+		buttons = [][2]string{{"y", "yes"}, {"n", "no"}}
+	} else {
+		for _, c := range d.choices {
+			buttons = append(buttons, [2]string{c.key, c.label})
+		}
+		buttons = append(buttons, [2]string{"esc", "cancel"})
 	}
 	var parts []string
-	for _, c := range d.choices {
-		parts = append(parts, k9s.hotKey.Render("<"+c.key+">")+" "+c.label)
+	for i, b := range buttons {
+		if i == d.sel {
+			parts = append(parts, k9s.selected.Render(" <"+b[0]+"> "+b[1]+" "))
+		} else {
+			parts = append(parts, " "+k9s.hotKey.Render("<"+b[0]+">")+" "+b[1]+" ")
+		}
 	}
-	parts = append(parts, k9s.hotKey.Render("<esc>")+" cancel")
-	return strings.Join(parts, "   ")
+	return strings.Join(parts, " ")
 }
 
 // pageTitle is the top page's own title, for a dialog over it.
