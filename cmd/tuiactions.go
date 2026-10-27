@@ -603,20 +603,44 @@ func (m tuiModel) askDestroy() (tea.Model, tea.Cmd) {
 	if v, ok := m.pending[vm.Name]; ok {
 		return m, m.fail("%s is being %s", vm.Name, pastTense(v))
 	}
-	name := vm.Name
-	m.ask(fmt.Sprintf("Destroy %s?", name),
-		[]string{fmt.Sprintf("This will permanently destroy VM %q and all its data.", name), "This cannot be undone."},
-		func(m tuiModel) (tea.Model, tea.Cmd) {
-			vm := m.vm(name)
-			if vm == nil {
-				return m, nil
-			}
-			p := m.p
-			return m.act(vm, "destroy", -1, func() (string, error) {
-				return "", p.Destroy(cloud.Vm{Name: name})
-			})
-		})
+	name, snapshot := vm.Name, m.isSnapshot(vm)
+	title := fmt.Sprintf("Destroy %s?", name)
+	body := []string{fmt.Sprintf("This will permanently destroy VM %q and all its data.", name), "This cannot be undone."}
+	if snapshot {
+		title = fmt.Sprintf("Delete %s's snapshot?", name)
+		body = []string{
+			fmt.Sprintf("%s is paused: all that's left of it is a snapshot (and the public IP kept for it).", name),
+			"Deleting the snapshot means it can never be resumed. This cannot be undone.",
+		}
+	}
+	m.ask(title, body, func(m tuiModel) (tea.Model, tea.Cmd) {
+		vm := m.vm(name)
+		if vm == nil {
+			return m, nil
+		}
+		return m.act(vm, "destroy", -1, destroyCall(m.p, name, snapshot))
+	})
 	return m, nil
+}
+
+// isSnapshot tells whether vm is paused on a provider where that leaves
+// only a snapshot (Hetzner), which destroy says, and deletes as such.
+// Exactly "paused", ListPaused's: a powered-off server ("off") is filed
+// with the paused ones too, but it's still a server.
+func (m tuiModel) isSnapshot(vm *cloud.Vm) bool {
+	_, ok := m.p.(cloud.SnapshotDestroyer)
+	return ok && vm.Status == "paused"
+}
+
+// destroyCall is the provider call destroying the VM named name: its
+// snapshot's deletion when that's all there is of it.
+func destroyCall(p cloud.CloudProviderInterface, name string, snapshot bool) func() (string, error) {
+	if sd, ok := p.(cloud.SnapshotDestroyer); ok && snapshot {
+		return func() (string, error) {
+			return "deleted " + name + "'s snapshot", sd.DestroySnapshot(name)
+		}
+	}
+	return func() (string, error) { return "", p.Destroy(cloud.Vm{Name: name}) }
 }
 
 // markedVMs is the names of the marked VMs still listed, in list order.
@@ -634,23 +658,37 @@ func (m tuiModel) markedVMs() []string {
 // destroy of each; one that's busy with something else is left alone.
 func (m tuiModel) askDestroyMarked() (tea.Model, tea.Cmd) {
 	names := m.markedVMs()
+	snapshots := map[string]bool{}
 	body := []string{fmt.Sprintf("This will permanently destroy these %d VMs and all their data:", len(names))}
 	for _, name := range names {
-		body = append(body, "  "+name)
+		line := "  " + name
+		if vm := m.vm(name); vm != nil && m.isSnapshot(vm) {
+			snapshots[name] = true
+			line += "  (paused: only a snapshot)"
+		}
+		body = append(body, line)
 	}
-	m.ask(fmt.Sprintf("Destroy %d VMs?", len(names)), append(body, "This cannot be undone."),
+	title := fmt.Sprintf("Destroy %d VMs?", len(names))
+	switch len(snapshots) {
+	case 0:
+	case len(names):
+		title = fmt.Sprintf("Delete %d snapshots?", len(names))
+	default:
+		title = fmt.Sprintf("Destroy %d VMs, %d of them snapshots?", len(names), len(snapshots))
+	}
+	if len(snapshots) > 0 {
+		body = append(body, "A paused one is only a snapshot (and the public IP kept for it): deleted, it can never be resumed.")
+	}
+	m.ask(title, append(body, "This cannot be undone."),
 		func(m tuiModel) (tea.Model, tea.Cmd) {
 			m.marked = map[string]bool{}
-			p := m.p
 			var cmds []tea.Cmd
 			for _, name := range names {
 				vm := m.vm(name)
 				if vm == nil {
 					continue
 				}
-				next, cmd := m.act(vm, "destroy", -1, func() (string, error) {
-					return "", p.Destroy(cloud.Vm{Name: name})
-				})
+				next, cmd := m.act(vm, "destroy", -1, destroyCall(m.p, name, snapshots[name]))
 				m, cmds = next.(tuiModel), append(cmds, cmd)
 			}
 			return m, tea.Batch(cmds...)
