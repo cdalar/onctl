@@ -126,8 +126,27 @@ func TestHerdrStartEphemeral(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
-	if calls := readFile(t, log); !strings.Contains(calls, "pane run w1:p1 sh "+shellQuote(runDir+"/claude.cmd")+"; herdr server stop\n") {
-		t.Errorf("ephemeral pane must stop the server after Claude:\n%s", calls)
+	stopFile := runDir + "/claude.stop"
+	pane := "sh " + shellQuote(runDir+"/claude.cmd") + "; [ ! -e " + shellQuote(stopFile) + " ] || herdr server stop"
+	if calls := readFile(t, log); !strings.Contains(calls, "pane run w1:p1 "+pane+"\n") {
+		t.Errorf("ephemeral pane:\n%s", calls)
+	}
+	// Claude exiting (here: claude not found) runs the rest of the pane.
+	if out, err := exec.Command("sh", "-c", pane).CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if !strings.HasSuffix(readFile(t, log), "server stop\n") {
+		t.Error("ephemeral pane must stop the server after Claude, so the attached client returns and the box can go")
+	}
+	// A run that detaches keeps its box and removes the stop file
+	// (herdrStopFile): the box's other sessions must outlive this one.
+	if err := os.Remove(stopFile); err != nil {
+		t.Fatal(err)
+	}
+	before := readFile(t, log)
+	_ = exec.Command("sh", "-c", pane).Run()
+	if strings.Contains(strings.TrimPrefix(readFile(t, log), before), "server stop") {
+		t.Error("a kept box's pane stopped herdr's server, killing its other sessions")
 	}
 	log = fakeHerdr(t)
 	_, runDir = boxPaths(t)
@@ -136,6 +155,28 @@ func TestHerdrStartEphemeral(t *testing.T) {
 	}
 	if calls := readFile(t, log); strings.Contains(calls, "server stop") || !strings.Contains(calls, "pane run w1:p1 exec sh "+shellQuote(runDir+"/claude.cmd")+"\n") {
 		t.Errorf("a detached start must leave the server running:\n%s", calls)
+	}
+	if _, err := os.Stat(runDir + "/claude.stop"); err == nil {
+		t.Error("a detached start made a stop file")
+	}
+}
+
+// TestClaudeSessions: --mux against the box's other multiplexer is
+// refused while any Claude session runs there, not just the one being
+// started -- starting moves the box's record, and the others would be
+// looked for in the wrong place (shown stopped, started a second time).
+// Sessions that aren't Claude's don't count.
+func TestClaudeSessions(t *testing.T) {
+	got := claudeSessions(tmuxMux{}, "work 1700000000\nclaude-auth 1700000001\nclaudex 1700000002\nclaude 1700000003\n")
+	if strings.Join(got, ",") != "claude,claude-auth" {
+		t.Errorf("tmux: %v", got)
+	}
+	list := `{"result":{"workspaces":[{"agent_status":"idle","label":"claude-auth","workspace_id":"w1"},{"agent_status":"-","label":"notes","workspace_id":"w2"}]}}`
+	if got := claudeSessions(herdrMux{}, list); strings.Join(got, ",") != "claude-auth" {
+		t.Errorf("herdr: %v", got)
+	}
+	if got := claudeSessions(herdrMux{}, ""); len(got) != 0 {
+		t.Errorf("no server: %v", got)
 	}
 }
 
