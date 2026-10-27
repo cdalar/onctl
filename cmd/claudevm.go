@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -49,6 +50,43 @@ func vmClaudeImage() string {
 		return acClaudeImage
 	}
 	return ""
+}
+
+// goImage is image's counterpart with Go, for a project with a go.mod:
+// claude-agent becomes claude-agent-go. Other images (a cloud VM's) are
+// kept.
+func goImage(image string) string {
+	switch image {
+	case claudeDefaultImage:
+		return claudeGoImage
+	case acClaudeImage:
+		return acClaudeGoImage
+	}
+	return image
+}
+
+// projectHasGoMod tells whether the project Claude will work on has a
+// go.mod at its top: --repo's on GitHub, else the local project's.
+func projectHasGoMod(ctx context.Context) bool {
+	if claudeRepo != "" {
+		repo, err := parseRepo(claudeRepo)
+		return err == nil && repoHasGoMod(ctx, repo)
+	}
+	dir, err := projectDir()
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(filepath.Join(dir, "go.mod"))
+	return err == nil
+}
+
+// repoHasGoMod asks GitHub whether repo has a go.mod at its top; when
+// it can't tell (no gh, no answer), it's taken not to.
+var repoHasGoMod = func(ctx context.Context, repo string) bool {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	_, err := ghAPI(ctx, "repos/"+repo+"/contents/go.mod")
+	return err == nil
 }
 
 // forwardHelpersCheck tells whether a VM has the box image's GitHub

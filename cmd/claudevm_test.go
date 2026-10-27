@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -100,6 +101,45 @@ func TestVMClaudeImage(t *testing.T) {
 	provider = &cloud.ProviderHetzner{}
 	assert.Equal(t, "", vmClaudeImage(), "a cloud VM takes its provider's configured image")
 	assert.False(t, onAC())
+}
+
+// TestGoImage: a project with a go.mod gets the Go image wherever the
+// default is claude-agent (a box, or ac's ghcr one), so Claude can build
+// and test it without installing Go on a small box first. A cloud VM's
+// image ("" or one asked for) has no Go counterpart and is kept.
+func TestGoImage(t *testing.T) {
+	assert.Equal(t, "claude-agent-go", goImage(claudeDefaultImage))
+	assert.Equal(t, "ghcr.io/boxctl-io/claude-agent-go:latest", goImage(acClaudeImage))
+	assert.Equal(t, "", goImage(""))
+	assert.Equal(t, "ubuntu-24.04", goImage("ubuntu-24.04"))
+}
+
+// TestProjectHasGoMod: the go.mod is looked for where the project comes
+// from -- the local project, or with --repo the repository on GitHub,
+// never the directory onctl happens to run in.
+func TestProjectHasGoMod(t *testing.T) {
+	savedProject, savedRepo, savedAsk := claudeProject, claudeRepo, repoHasGoMod
+	t.Cleanup(func() { claudeProject, claudeRepo, repoHasGoMod = savedProject, savedRepo, savedAsk })
+	var asked []string
+	repoHasGoMod = func(_ context.Context, repo string) bool {
+		asked = append(asked, repo)
+		return repo == "acme/api"
+	}
+
+	goDir, plainDir := t.TempDir(), t.TempDir()
+	assert.NoError(t, os.WriteFile(filepath.Join(goDir, "go.mod"), []byte("module x\n"), 0o600))
+	claudeProject = goDir
+	assert.True(t, projectHasGoMod(context.Background()))
+	claudeProject = plainDir
+	assert.False(t, projectHasGoMod(context.Background()))
+	assert.Empty(t, asked, "a local project isn't looked up on GitHub")
+
+	claudeProject = goDir // --repo wins over the local project
+	claudeRepo = "acme/web"
+	assert.False(t, projectHasGoMod(context.Background()))
+	claudeRepo = "acme/api.git"
+	assert.True(t, projectHasGoMod(context.Background()))
+	assert.Equal(t, []string{"acme/web", "acme/api"}, asked)
 }
 
 // TestVMGitHubWithoutHelpers: without the box image's helpers the
