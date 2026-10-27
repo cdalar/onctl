@@ -642,7 +642,12 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(m.fail("%s %s: %s", verb, what, reason), m.refresh())
 		}
 		if msg.verb == "create" {
-			return m, tea.Batch(m.say("created %s", what), m.refresh())
+			// To :vms, wherever it was asked from (:images, :sizes), on the
+			// new VM: all of them shown, so no filter hides it.
+			list := m.openView(vmsView)
+			m.stateFilter = 0
+			m.top().selected = msg.name
+			return m, tea.Batch(m.say("created %s", what), list, m.refresh())
 		}
 		if msg.verb == "start" {
 			return m, tea.Batch(m.say("Claude is working on %s; you're notified when it waits for you", what), m.refresh(), m.list("agents"))

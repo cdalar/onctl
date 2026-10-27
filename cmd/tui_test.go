@@ -1365,3 +1365,28 @@ func TestTUIDestroyMarked(t *testing.T) {
 		t.Errorf("marks kept after destroying: %v", m.marked)
 	}
 }
+
+// A VM created from :images (or :sizes) is shown where VMs are: the tui
+// goes to :vms with the new VM under the cursor, whatever filter was on.
+// A create that failed leaves you where you were, to try again.
+func TestTUICreateGoesToVMs(t *testing.T) {
+	tuiFlashFor = time.Millisecond
+	m := listed(t, tuiFixture(), 140, 40)
+	m.stateFilter = 2 // paused only: would hide a new, running VM
+	_ = m.openView(imagesView)
+
+	next, _ := m.Update(tuiChildDoneMsg{verb: "create", name: "db", err: errors.New("exit status 1")})
+	m = ack(t, next.(tuiModel))
+	if m.top().view != imagesView {
+		t.Fatalf("a failed create left :images for %s", m.top().view.name)
+	}
+
+	next, _ = m.Update(tuiChildDoneMsg{verb: "create", name: "db"})
+	m = next.(tuiModel)
+	if m.top().view != vmsView || len(m.pages) != 1 {
+		t.Fatalf("after create: on %s (%d pages), want :vms", m.top().view.name, len(m.pages))
+	}
+	if r := m.currentRow(); r == nil || r.key != "db" {
+		t.Errorf("cursor on %v, want the new VM db", r)
+	}
+}
