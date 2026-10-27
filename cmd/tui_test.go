@@ -1447,3 +1447,28 @@ func TestTUIDestroySnapshot(t *testing.T) {
 		t.Errorf("provider saw %q", got)
 	}
 }
+
+// The provider picked in the tui is what the next bare `onctl` opens on,
+// so it's not asked every time; a file naming a provider onctl doesn't
+// have (an old version's, a typo) falls back to asking, not to an error.
+func TestTUIProviderRemembered(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	if got := loadTUIProvider(); got != "" {
+		t.Fatalf("nothing picked yet: got %q", got)
+	}
+	saveTUIProvider("hetzner")
+	if got := loadTUIProvider(); got != "hetzner" {
+		t.Fatalf("after picking hetzner: got %q", got)
+	}
+	saveTUIProvider("ac")
+	if got := loadTUIProvider(); got != "ac" {
+		t.Fatalf("after switching to ac: got %q", got)
+	}
+	path, _ := tuiProviderPath()
+	if err := os.WriteFile(path, []byte("nope\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadTUIProvider(); got != "" {
+		t.Errorf("unknown provider in the file: got %q, want it asked again", got)
+	}
+}
