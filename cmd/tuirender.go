@@ -57,6 +57,10 @@ var k9s = struct {
 		"failed":   lipgloss.NewStyle().Foreground(lipgloss.Color("203")),
 		"private":  lipgloss.NewStyle().Foreground(lipgloss.Color("220")),
 		"archived": lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
+		// :agents' CLAUDE column: green at work, yellow waiting for you.
+		"working": lipgloss.NewStyle().Foreground(lipgloss.Color("46")),
+		"blocked": lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Bold(true),
+		"done":    lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Bold(true),
 	},
 }
 
@@ -96,7 +100,7 @@ func (m tuiModel) showHeader() bool { return m.height >= tuiMinForHeader }
 
 // promptHeight is the prompt line, when one is open.
 func (m tuiModel) promptHeight() int {
-	if m.filtering || m.commanding || m.filter.Value() != "" {
+	if m.filtering || m.commanding || m.tasking || m.filter.Value() != "" {
 		return 1
 	}
 	return 0
@@ -272,6 +276,8 @@ func (m tuiModel) promptView() string {
 		return fit(k9s.prompt.Render(":")+" "+m.command.View(), m.width)
 	case m.filtering:
 		return fit(k9s.prompt.Render("/")+" "+m.filter.View(), m.width)
+	case m.tasking:
+		return fit(k9s.prompt.Render(">")+" "+m.task.View(), m.width)
 	}
 	return fit(k9s.prompt.Render("/")+" "+m.filter.Value()+"  "+k9s.dim.Render("(esc clears)"), m.width)
 }
@@ -453,6 +459,9 @@ func (m tuiModel) dialogTitleAndLines(w, inner int) (string, []string) {
 
 // dialogKeys is the dialog's last line: its keys and what they do.
 func dialogKeys(d *tuiDialog) string {
+	if d.alert {
+		return k9s.hotKey.Render("<enter>") + " OK"
+	}
 	if len(d.choices) == 0 {
 		return k9s.hotKey.Render("<y>") + " yes   " + k9s.hotKey.Render("<n>") + " no"
 	}

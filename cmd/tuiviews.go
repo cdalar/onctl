@@ -63,7 +63,7 @@ var commonHotkeys = []hotkey{
 	{":", "command"}, {"/", "filter"}, {"?", "help"}, {"esc", "back"}, {"ctrl-c", "quit"},
 }
 
-var tuiViews = []*tableView{vmsView, imagesView, sizesView, providersView, reposView}
+var tuiViews = []*tableView{vmsView, agentsView, imagesView, sizesView, providersView, reposView}
 
 // findView is the view `:name` means, nil for none.
 func findView(name string) *tableView {

@@ -15,6 +15,7 @@ import (
 	bspinner "github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -38,7 +39,7 @@ var tuiCmd = &cobra.Command{
 	Short: "Browse and manage your VMs in a k9s-style terminal UI",
 	Long: `Opens a live, full-screen view of your VMs, laid out like k9s.
 
-  :vms :images :sizes :repos   switch view (also :q, :help, :create)
+  :vms :agents :images :sizes :repos   switch view (also :q, :help, :create)
   :provider [name]      switch cloud provider (a list to pick from without a name)
   :claude [vm]          run Claude Code on a VM (onctl claude --box vm; the project's box without one)
   /text        filter the rows; esc clears
@@ -49,6 +50,9 @@ var tuiCmd = &cobra.Command{
   enter        in :repos (your GitHub repos, newest push first, from gh), start Claude
                on a box of this provider with the repo cloned (onctl claude --repo):
                a new box, or the repo's own box, is asked
+  :agents      Claude sessions on boxes, with herdr's status and their PRs; n starts
+               one (pick a repo, say the task), enter attaches, P pushes and opens
+               a PR, o opens it. You get a desktop notification when Claude waits
   c            create a VM (name, image and type are asked; runs onctl create)
   p / r        pause / resume
   ctrl-d       destroy the VM (asks first)
@@ -195,11 +199,12 @@ var tuiFlashFor = 5 * time.Second
 // Messages from the commands the model runs.
 type (
 	tuiListMsg struct {
-		resource string // vms, images, sizes, repos
+		resource string // vms, images, sizes, repos, agents
 		vms      []cloud.Vm
 		images   []cloud.CloudImage
 		sizes    []cloud.CloudSize
 		repos    []ghRepo
+		agents   []agentSession
 		err      error
 	}
 	tuiActionMsg struct {
@@ -254,13 +259,15 @@ type page struct {
 	refresh func(m *tuiModel) []string
 }
 
-// tuiDialog is a modal: a y/N question (yes), or a choice between a
-// few keys (choices). Any other key closes it.
+// tuiDialog is a modal: a y/N question (yes), a choice between a few
+// keys (choices), or an error to acknowledge (alert). Any other key
+// closes it.
 type tuiDialog struct {
 	title   string
 	body    []string
 	yes     func(m tuiModel) (tea.Model, tea.Cmd)
 	choices []tuiChoice
+	alert   bool
 }
 
 // tuiChoice is one key of a choice dialog and what it does.
@@ -280,6 +287,12 @@ type tuiModel struct {
 	loaded  map[string]bool  // resources listed at least once
 	loading map[string]bool  // listings in flight
 	listErr map[string]error // why a resource's last listing failed
+
+	agents        []agentSession    // :agents (tuiagents.go)
+	agentStatuses map[string]string // each box's status at the last poll; nil before the first
+	tasking       bool              // typing a new session's task
+	task          textinput.Model
+	taskRepo      string
 
 	pages       []page // the navigation stack; the last is shown
 	stateFilter stateFilter
@@ -315,8 +328,11 @@ func newTUI(p cloud.CloudProviderInterface) tuiModel {
 	f.CharLimit = 80
 	cmd := textinput.New()
 	cmd.Prompt = ""
-	cmd.Placeholder = "vms, images, sizes, repos, create, claude, provider, help, q"
+	cmd.Placeholder = "vms, agents, images, sizes, repos, create, claude, provider, help, q"
 	cmd.CharLimit = 80
+	task := textinput.New()
+	task.Prompt = ""
+	task.CharLimit = 2000
 	sp := bspinner.New(bspinner.WithSpinner(bspinner.Spinner{Frames: tuiSpinnerFrames, FPS: 80 * time.Millisecond}))
 	sp.Style = k9s.logo
 	return tuiModel{
@@ -328,6 +344,7 @@ func newTUI(p cloud.CloudProviderInterface) tuiModel {
 		stateFilter: showAllVMs,
 		filter:      f,
 		command:     cmd,
+		task:        task,
 		pending:     map[string]string{},
 		spin:        sp,
 	}
@@ -379,6 +396,8 @@ func (m *tuiModel) list(resource string) tea.Cmd {
 			msg.images, msg.err = tuiListImages(p)
 		case "sizes":
 			msg.sizes, msg.err = tuiListSizes(p)
+		case "agents":
+			msg.agents, msg.err = pollAgents()
 		}
 		return msg
 	}
@@ -409,6 +428,11 @@ func tuiListSizes(p cloud.CloudProviderInterface) ([]cloud.CloudSize, error) {
 // not on every tick: they hardly change, and some providers list them
 // through several API calls.
 func (m *tuiModel) refresh() tea.Cmd {
+	if m.loaded["agents"] {
+		// Once :agents has been opened its boxes are polled in every
+		// view, so a Claude waiting for you is noticed wherever you are.
+		return tea.Batch(m.list("vms"), m.list("agents"), m.spinIfBusy())
+	}
 	return tea.Batch(m.list("vms"), m.spinIfBusy())
 }
 
@@ -447,8 +471,31 @@ func (m *tuiModel) say(format string, a ...any) tea.Cmd {
 }
 
 // fail flashes an error.
+// fail shows an error in a popup until it's acknowledged -- the crumbs
+// line cuts a long one off, and a flash goes before it can be read --
+// and flashes it too.
 func (m *tuiModel) fail(format string, a ...any) tea.Cmd {
-	return m.setFlash(fmt.Sprintf(format, a...), true)
+	s := fmt.Sprintf(format, a...)
+	m.dialog = &tuiDialog{title: "Error", body: wrapLines(s, m.alertWidth()), alert: true}
+	return m.setFlash(s, true)
+}
+
+// alertWidth is how wide an error popup's text is: at most 76 columns,
+// less on a narrow screen.
+func (m *tuiModel) alertWidth() int {
+	if m.width == 0 {
+		return 76
+	}
+	return max(min(m.width-12, 76), 20)
+}
+
+// wrapLines breaks s into lines of at most width columns, at spaces.
+func wrapLines(s string, width int) []string {
+	lines := strings.Split(lipgloss.NewStyle().Width(width).Render(s), "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(l, " ")
+	}
+	return lines
 }
 
 func (m *tuiModel) setFlash(s string, isErr bool) tea.Cmd {
@@ -483,7 +530,11 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tuiFlashMsg:
-		return m, m.setFlash(msg.text, msg.isErr)
+		if msg.isErr {
+			// Why a provider switch failed: as any error, in a popup.
+			return m, m.fail("%s", msg.text)
+		}
+		return m, m.setFlash(msg.text, false)
 
 	case tuiListMsg:
 		delete(m.loading, msg.resource)
@@ -493,7 +544,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		delete(m.listErr, msg.resource)
 		var cmd tea.Cmd
 		if msg.err != nil {
-			cmd = m.fail("listing %s: %v", msg.resource, msg.err)
+			// Only flashed: a listing fails again on every refresh, and the
+			// table says why it's empty.
+			cmd = m.setFlash(fmt.Sprintf("listing %s: %v", msg.resource, msg.err), true)
 			m.listErr[msg.resource] = msg.err
 			// One of List/ListPaused failing still leaves the other's
 			// VMs worth showing; the catalogs are all or nothing.
@@ -513,6 +566,8 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "repos":
 			m.repos = msg.repos
 			m.reposAt = time.Now()
+		case "agents":
+			m.gotAgents(msg.agents)
 		}
 		// A describe/json page follows its VM.
 		for i := range m.pages {
@@ -564,6 +619,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.verb == "create" {
 			return m, tea.Batch(m.say("created %s", what), m.refresh())
 		}
+		if msg.verb == "start" {
+			return m, tea.Batch(m.say("Claude is working on %s; you're notified when it waits for you", what), m.refresh(), m.list("agents"))
+		}
 		return m, m.refresh()
 
 	case tuiClaudeDoneMsg:
@@ -609,6 +667,8 @@ func (m *tuiModel) updateInputs(msg tea.Msg) tea.Cmd {
 		m.filter, cmd = m.filter.Update(msg)
 	case m.commanding:
 		m.command, cmd = m.command.Update(msg)
+	case m.tasking:
+		m.task, cmd = m.task.Update(msg)
 	case m.create != nil:
 		cmd = m.create.update(msg)
 	}
@@ -656,7 +716,7 @@ func (m *tuiModel) currentVM() *cloud.Vm {
 	switch {
 	case t.kind == pageText:
 		name = t.vm
-	case t.view == vmsView:
+	case t.view == vmsView || t.view == agentsView:
 		if r := m.currentRow(); r != nil {
 			name = r.key
 		}

@@ -14,6 +14,7 @@ import (
 
 	"github.com/cdalar/onctl/pkg/cloud"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // tuiFakeProvider is a CloudProviderInterface (with sizes and images)
@@ -210,6 +211,20 @@ func press(t *testing.T, m tuiModel, key string) (tuiModel, tea.Cmd) {
 	return next.(tuiModel), cmd
 }
 
+// ack is OK on the error popup a refusal opens -- the error stays, in
+// full, until it's acknowledged -- after which keys act again.
+func ack(t *testing.T, m tuiModel) tuiModel {
+	t.Helper()
+	if m.dialog == nil || !m.dialog.alert || !strings.Contains(m.View(), "<enter> OK") {
+		t.Fatalf("no error popup (flash %q)", m.flash)
+	}
+	m, _ = press(t, m, "enter")
+	if m.dialog != nil {
+		t.Fatal("OK didn't close the error popup")
+	}
+	return m
+}
+
 // typeIn sends s one key at a time.
 func typeIn(t *testing.T, m tuiModel, s string) tuiModel {
 	t.Helper()
@@ -278,11 +293,13 @@ func TestTUIListAndKeys(t *testing.T) {
 	if hasAction(cmd) != nil || !m.flashErr || !strings.Contains(m.flash, "not running") {
 		t.Errorf("p on a paused VM: flash=%q", m.flash)
 	}
+	m = ack(t, m)
 	// So is ssh.
 	m, cmd = press(t, m, "s")
 	if cmd == nil || !strings.Contains(m.flash, "resume it first") {
 		t.Errorf("s on a paused VM: cmd=%v flash=%q", cmd, m.flash)
 	}
+	m = ack(t, m)
 	// Resuming is sent, the way resume.go does it (the SSH key first),
 	// and the VM is pending meanwhile.
 	m, cmd = press(t, m, "r")
@@ -302,9 +319,10 @@ func TestTUIListAndKeys(t *testing.T) {
 	f.calls = nil
 	// Keys on a pending VM are refused until it's done.
 	m, _ = press(t, m, "ctrl+d")
-	if m.dialog != nil || !strings.Contains(m.flash, "being resumed") {
-		t.Errorf("ctrl+d on a pending VM: dialog=%v flash=%q", m.dialog, m.flash)
+	if !strings.Contains(m.flash, "being resumed") {
+		t.Errorf("ctrl+d on a pending VM: flash=%q", m.flash)
 	}
+	m = ack(t, m) // the refusal, not destroy's question
 	next, _ = m.Update(*am)
 	m = next.(tuiModel)
 	if _, ok := m.pending["old-paused"]; ok || m.flash != am.result {
@@ -447,6 +465,7 @@ func TestTUIListAndKeys(t *testing.T) {
 	if !m.flashErr || !strings.Contains(m.flash, "unknown command") {
 		t.Errorf(":pods: flash=%q", m.flash)
 	}
+	m = ack(t, m)
 	m, _ = press(t, m, ":")
 	m = typeIn(t, m, "q")
 	_, cmd = press(t, m, "enter")
@@ -601,6 +620,7 @@ func TestTUIProviderSwitch(t *testing.T) {
 	if !m.flashErr || !strings.Contains(m.flash, "unknown provider") || m.switchTo != "" {
 		t.Errorf(":provider nope: flash=%q switchTo=%q", m.flash, m.switchTo)
 	}
+	m = ack(t, m)
 	m, _ = run(m, "provider hetzner")
 	if m.flashErr || m.flash != "already on hetzner" || m.switchTo != "" {
 		t.Errorf(":provider hetzner: flash=%q switchTo=%q", m.flash, m.switchTo)
@@ -764,6 +784,7 @@ func TestTUICreateForm(t *testing.T) {
 	if m.create == nil || !strings.Contains(m.flash, "still listing") {
 		t.Errorf("early enter: flash=%q", m.flash)
 	}
+	m = ack(t, m)
 	for _, msg := range runCmd(cmd) {
 		if c, ok := msg.(tuiCatalogMsg); ok {
 			next, _ := m.Update(c)
@@ -798,6 +819,10 @@ func TestTUICreateForm(t *testing.T) {
 	m, cmd = press(t, m, "enter")
 	if m.create == nil || cmd == nil || !strings.Contains(m.flash, "already exists") {
 		t.Errorf("enter with an existing name: flash=%q", m.flash)
+	}
+	m = ack(t, m)
+	if m.create == nil {
+		t.Fatal("OK on the refusal closed the form too")
 	}
 	form.name.SetValue("my-vm")
 	m, cmd = press(t, m, "enter")
@@ -1139,5 +1164,51 @@ func TestTUIProviderChoices(t *testing.T) {
 		if w, ok := want[name]; ok && !strings.Contains(items[i], w) {
 			t.Errorf("%s choice = %q, want it to say %q", name, items[i], w)
 		}
+	}
+}
+
+// An error opens a popup with the whole message, wrapped -- the crumbs
+// line cut the end off one like a provider's setup hint, where the part
+// you need is -- and stays until OK. A listing that fails isn't one: it
+// fails again on every refresh, so it's only flashed, and the table says
+// why it's empty.
+func TestTUIErrorPopup(t *testing.T) {
+	tuiFlashFor = time.Millisecond
+	m := listed(t, tuiFixture(), 100, 30)
+	long := `switching to gcp: gcp.project is required: set --project, edit .onctl/onctl.yaml, or run "gcloud config set project <id>"`
+	m.fail("%s", long)
+	view := regexp.MustCompile(`\x1b\[[0-9;]*m`).ReplaceAllString(m.View(), "")
+	var text []string
+	for _, l := range strings.Split(view, "\n") {
+		if i := strings.Index(l, "│  "); i >= 0 && strings.Count(l, "│") >= 3 {
+			text = append(text, strings.TrimSpace(strings.Trim(l[i:], "│ ")))
+		}
+	}
+	joined := strings.Join(text, " ")
+	if !strings.Contains(joined, "Error") || !strings.Contains(joined, `"gcloud config set project <id>"`) {
+		t.Errorf("the popup doesn't hold the whole error:\n%s", view)
+	}
+	for _, l := range m.dialog.body {
+		if lipgloss.Width(l) > m.alertWidth() {
+			t.Errorf("line wider than the popup: %q", l)
+		}
+	}
+	m = ack(t, m)
+
+	// Why a :provider switch failed comes in when the tui starts again
+	// (the screenshot that asked for this): a popup too.
+	next, _ := m.Update(tuiFlashMsg{text: long, isErr: true})
+	m = next.(tuiModel)
+	m = ack(t, m)
+	next, _ = m.Update(tuiFlashMsg{text: "switched to ac"})
+	m = next.(tuiModel)
+	if m.dialog != nil || m.flash != "switched to ac" {
+		t.Errorf("a switch that worked: dialog=%v flash=%q", m.dialog, m.flash)
+	}
+
+	next, _ = m.Update(tuiListMsg{resource: "vms", err: errors.New("token expired")})
+	m = next.(tuiModel)
+	if m.dialog != nil || !m.flashErr || !strings.Contains(m.flash, "token expired") {
+		t.Errorf("a failed listing: dialog=%v flash=%q", m.dialog, m.flash)
 	}
 }
