@@ -1098,3 +1098,36 @@ func TestTUIActionRefreshes(t *testing.T) {
 		}
 	}
 }
+
+// The startup pick shows each provider's full name next to the short one,
+// so a reader who doesn't know "ac" sees "Apple Container"; a provider
+// added to cloudProviderList without a title would show up blank.
+func TestTUIProviderChoices(t *testing.T) {
+	items := providerChoices()
+	if len(items) != len(cloudProviderList) {
+		t.Fatalf("got %d choices for %d providers", len(items), len(cloudProviderList))
+	}
+	for i, name := range cloudProviderList {
+		title := providerPlaces[name].title
+		if title == "" {
+			t.Errorf("provider %q has no full name", name)
+		}
+		if !strings.HasPrefix(items[i], name+" ") || !strings.Contains(items[i], title) {
+			t.Errorf("choice %d = %q, want %q and its full name", i, items[i], name)
+		}
+	}
+	// Each line says where the machines run, so the pick tells a
+	// container on this laptop from a cloud bill or a hosted service.
+	want := map[string]string{
+		"ac":     "Apple Container",
+		"fc":     "local",
+		"aws":    "cloud, BYO account",
+		"boxes":  "cloud, SaaS",
+		"static": "remote, BYO host",
+	}
+	for i, name := range cloudProviderList {
+		if w, ok := want[name]; ok && !strings.Contains(items[i], w) {
+			t.Errorf("%s choice = %q, want it to say %q", name, items[i], w)
+		}
+	}
+}

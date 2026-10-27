@@ -20,6 +20,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/term"
 )
 
 var (
@@ -61,6 +62,13 @@ var (
 			// scripts (docs/static/get*.sh) run it before `onctl init`.
 			if cmd.Parent().Name() == "completion" {
 				return nil
+			}
+			if cmd == tuiCmd && providerFlag == "" && os.Getenv("ONCTL_CLOUD") == "" && term.IsTerminal(int(os.Stdin.Fd())) {
+				name, err := askProvider()
+				if err != nil {
+					return err
+				}
+				providerFlag = name
 			}
 			if isClaudeCommand(cmd) {
 				providerFlag = claudeProvider(providerFlag, os.Getenv("ONCTL_CLOUD"))
