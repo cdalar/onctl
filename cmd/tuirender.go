@@ -459,6 +459,9 @@ func (m tuiModel) dialogTitleAndLines(w, inner int) (string, []string) {
 
 // dialogKeys is the dialog's last line: its keys and what they do.
 func dialogKeys(d *tuiDialog) string {
+	if d.alert {
+		return k9s.hotKey.Render("<enter>") + " OK"
+	}
 	if len(d.choices) == 0 {
 		return k9s.hotKey.Render("<y>") + " yes   " + k9s.hotKey.Render("<n>") + " no"
 	}

@@ -152,7 +152,9 @@ var agentConns = struct {
 	m map[string]*boxSSH
 }{m: map[string]*boxSSH{}}
 
-func agentConn(ctx context.Context, name string) *boxSSH {
+// agentConn is the connection to the box named name, nil when it can't
+// be reached. A variable for tests.
+var agentConn = func(ctx context.Context, name string) *boxSSH {
 	agentConns.Lock()
 	b, tried := agentConns.m[name]
 	agentConns.Unlock()

@@ -15,6 +15,7 @@ import (
 	bspinner "github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -243,13 +244,15 @@ type page struct {
 	refresh func(m *tuiModel) []string
 }
 
-// tuiDialog is a modal: a y/N question (yes), or a choice between a
-// few keys (choices). Any other key closes it.
+// tuiDialog is a modal: a y/N question (yes), a choice between a few
+// keys (choices), or an error to acknowledge (alert). Any other key
+// closes it.
 type tuiDialog struct {
 	title   string
 	body    []string
 	yes     func(m tuiModel) (tea.Model, tea.Cmd)
 	choices []tuiChoice
+	alert   bool
 }
 
 // tuiChoice is one key of a choice dialog and what it does.
@@ -453,8 +456,31 @@ func (m *tuiModel) say(format string, a ...any) tea.Cmd {
 }
 
 // fail flashes an error.
+// fail shows an error in a popup until it's acknowledged -- the crumbs
+// line cuts a long one off, and a flash goes before it can be read --
+// and flashes it too.
 func (m *tuiModel) fail(format string, a ...any) tea.Cmd {
-	return m.setFlash(fmt.Sprintf(format, a...), true)
+	s := fmt.Sprintf(format, a...)
+	m.dialog = &tuiDialog{title: "Error", body: wrapLines(s, m.alertWidth()), alert: true}
+	return m.setFlash(s, true)
+}
+
+// alertWidth is how wide an error popup's text is: at most 76 columns,
+// less on a narrow screen.
+func (m *tuiModel) alertWidth() int {
+	if m.width == 0 {
+		return 76
+	}
+	return max(min(m.width-12, 76), 20)
+}
+
+// wrapLines breaks s into lines of at most width columns, at spaces.
+func wrapLines(s string, width int) []string {
+	lines := strings.Split(lipgloss.NewStyle().Width(width).Render(s), "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(l, " ")
+	}
+	return lines
 }
 
 func (m *tuiModel) setFlash(s string, isErr bool) tea.Cmd {
@@ -489,7 +515,11 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tuiFlashMsg:
-		return m, m.setFlash(msg.text, msg.isErr)
+		if msg.isErr {
+			// Why a provider switch failed: as any error, in a popup.
+			return m, m.fail("%s", msg.text)
+		}
+		return m, m.setFlash(msg.text, false)
 
 	case tuiListMsg:
 		delete(m.loading, msg.resource)
@@ -499,7 +529,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		delete(m.listErr, msg.resource)
 		var cmd tea.Cmd
 		if msg.err != nil {
-			cmd = m.fail("listing %s: %v", msg.resource, msg.err)
+			// Only flashed: a listing fails again on every refresh, and the
+			// table says why it's empty.
+			cmd = m.setFlash(fmt.Sprintf("listing %s: %v", msg.resource, msg.err), true)
 			m.listErr[msg.resource] = msg.err
 			// One of List/ListPaused failing still leaves the other's
 			// VMs worth showing; the catalogs are all or nothing.

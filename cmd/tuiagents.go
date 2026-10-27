@@ -180,7 +180,7 @@ func (m tuiModel) attachAgent(s agentSession) (tea.Model, tea.Cmd) {
 // it, its URL flashed.
 func (m tuiModel) openPR(s agentSession) tea.Cmd {
 	return func() tea.Msg {
-		msg := tuiActionMsg{name: s.box, verb: "open a pull request from"}
+		msg := tuiActionMsg{name: s.box, verb: "push"}
 		b := agentConn(context.Background(), s.box)
 		if b == nil {
 			msg.err = errUnreachable
