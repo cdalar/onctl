@@ -15,6 +15,7 @@ import (
 	bspinner "github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -115,6 +116,33 @@ func switchProvider(name string) error {
 	}
 	initProvider(name)
 	return nil
+}
+
+// askProvider is `onctl tui` with neither -p nor ONCTL_CLOUD: the
+// provider is picked from a list, each with its full name and where it
+// runs ("ac  Apple Container  local"), instead of guessed from the
+// credentials in the environment.
+func askProvider() (string, error) {
+	prompt := promptui.Select{
+		Label: "Which provider do you want to work on",
+		Items: providerChoices(),
+		Size:  len(cloudProviderList),
+	}
+	i, _, err := prompt.Run()
+	if err != nil {
+		return "", err
+	}
+	return cloudProviderList[i], nil
+}
+
+// providerChoices are askProvider's lines, in cloudProviderList's order.
+func providerChoices() []string {
+	var items []string
+	for _, name := range cloudProviderList {
+		p := providerPlaces[name]
+		items = append(items, fmt.Sprintf("%-8s %-25s %s", name, p.title, p.kind.offering()))
+	}
+	return items
 }
 
 func init() {
