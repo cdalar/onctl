@@ -621,8 +621,18 @@ func TestTUIProviderSwitch(t *testing.T) {
 	if m.top().view != providersView || keys(m.rows()) != strings.Join(cloudProviderList, " ") {
 		t.Errorf(":provider: view=%v rows=%q", m.top().view, keys(m.rows()))
 	}
-	if view := m.View(); !strings.Contains(view, "Providers["+strconv.Itoa(len(cloudProviderList))+"]") || !strings.Contains(view, "hetzner  *") {
+	// Each provider by its full name and where it runs -- "ac" or "ch"
+	// alone tells you nothing -- the current one marked.
+	if view := regexp.MustCompile(`\x1b\[[0-9;]*m`).ReplaceAllString(m.View(), ""); !strings.Contains(view, "Providers["+strconv.Itoa(len(cloudProviderList))+"]") ||
+		!regexp.MustCompile(`hetzner +Hetzner Cloud +cloud, BYO account +\*`).MatchString(view) ||
+		!regexp.MustCompile(`ac +Apple Container +local `).MatchString(view) {
 		t.Errorf(":provider view:\n%s", view)
+	}
+	// A provider added without a full name would show as "-" here.
+	for _, r := range m.rows() {
+		if r.cells[1] == "-" {
+			t.Errorf("provider %s has no full name in providerPlaces", r.key)
+		}
 	}
 	m, _ = press(t, m, "j")
 	m, _ = press(t, m, "j") // azure

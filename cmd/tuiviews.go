@@ -181,7 +181,7 @@ var providersView = &tableView{
 	aliases:  []string{"provider", "ctx", "cloud", "clouds"},
 	title:    "Providers",
 	resource: "",
-	columns:  []column{{"NAME", 'N'}, {"CURRENT", 0}},
+	columns:  []column{{"NAME", 'N'}, {"PROVIDER", 'P'}, {"WHERE", 'W'}, {"CURRENT", 0}},
 	stateCol: -1,
 	empty:    "No providers.",
 	hotkeys:  []hotkey{{"enter", "switch to provider"}},
@@ -192,7 +192,10 @@ var providersView = &tableView{
 			if name == cloudProvider {
 				current = "*"
 			}
-			rows = append(rows, tableRow{key: name, cells: []string{name, current}})
+			// The full name and where it runs, as the pick onctl tui
+			// starts with shows them (providerChoices).
+			p := providerPlaces[name]
+			rows = append(rows, tableRow{key: name, cells: []string{name, orDash(p.title), p.kind.offering(), current}})
 		}
 		return rows
 	},
