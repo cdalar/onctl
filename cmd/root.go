@@ -63,12 +63,10 @@ var (
 			if cmd.Parent().Name() == "completion" {
 				return nil
 			}
+			// onctl tui with neither -p nor ONCTL_CLOUD: no provider yet, the
+			// tui asks for one on its providers list (picking, in tui.go).
 			if cmd == tuiCmd && providerFlag == "" && os.Getenv("ONCTL_CLOUD") == "" && term.IsTerminal(int(os.Stdin.Fd())) {
-				name, err := askProvider()
-				if err != nil {
-					return err
-				}
-				providerFlag = name
+				return nil
 			}
 			if isClaudeCommand(cmd) {
 				providerFlag = claudeProvider(providerFlag, os.Getenv("ONCTL_CLOUD"))

@@ -129,6 +129,13 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 	if len(words) == 0 {
 		return m, nil
 	}
+	if m.picking {
+		switch words[0] {
+		case "q", "quit", "exit", "help", "h", "?", "provider", "providers", "ctx", "cloud":
+		default:
+			return m, m.fail("pick a provider first (enter on one)")
+		}
+	}
 	switch words[0] {
 	case "q", "quit", "exit":
 		return m, tea.Quit
@@ -188,6 +195,9 @@ func (m tuiModel) handleFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m tuiModel) handleDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	d := m.dialog
 	m.dialog = nil
+	if d.alert {
+		m.flash = "" // the popup said it; don't show it again once it's closed
+	}
 	s := msg.String()
 	for _, c := range d.choices {
 		if s == c.key {
@@ -213,9 +223,20 @@ func (m *tuiModel) choose(title string, body []string, choices ...tuiChoice) {
 
 // --- table keys -----------------------------------------------------------
 
+// pickingKeys are the table keys that work before a provider is picked:
+// moving, filtering, help, back/quit and enter on a provider.
+var pickingKeys = map[string]bool{
+	"up": true, "k": true, "down": true, "j": true, "pgup": true, "ctrl+b": true,
+	"pgdown": true, "ctrl+f": true, "home": true, "g": true, "end": true, "G": true,
+	":": true, "/": true, "?": true, "esc": true, "q": true, "enter": true,
+}
+
 func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	t := m.top()
 	key := msg.String()
+	if m.picking && !pickingKeys[key] {
+		return m, nil
+	}
 	if t.view == agentsView {
 		if next, cmd, ok := m.handleAgentsKey(key); ok {
 			return next, cmd
@@ -626,8 +647,36 @@ func (m tuiModel) switchProvider(name string) (tea.Model, tea.Cmd) {
 	if name == cloudProvider {
 		return m, m.say("already on %s", name)
 	}
+	// boxes needs no onctl.yaml (see initState); the others fail without
+	// a .onctl directory, so offer the `onctl init` they ask for.
+	if name != "boxes" && tuiNeedsInit() {
+		return m.askInit(name)
+	}
 	m.switchTo = name
 	return m, tea.Quit
+}
+
+// tuiNeedsInit reports that no .onctl directory exists yet (a variable so
+// tests needn't depend on the home directory they run in).
+var tuiNeedsInit = func() bool {
+	_, err := resolveConfigDir()
+	return err != nil
+}
+
+// tuiInitArgs is the `onctl init` the tui runs: it has asked already, so
+// not the project-folder question init would add.
+var tuiInitArgs = []string{"init", "--global"}
+
+// askInit offers to run `onctl init` before switching to name; once it
+// has run the tui switches, as if enter had been pressed again.
+func (m tuiModel) askInit(name string) (tea.Model, tea.Cmd) {
+	m.ask("Run onctl init?",
+		[]string{"onctl isn't set up yet: no .onctl directory in this directory or your home.", fmt.Sprintf("`onctl init` creates it; then the tui switches to %s.", name)},
+		func(m tuiModel) (tea.Model, tea.Cmd) {
+			m.initThen = name
+			return m.runChild("init", "", tuiInitArgs)
+		})
+	return m, nil
 }
 
 // runChild runs this binary again with args in the foreground (the

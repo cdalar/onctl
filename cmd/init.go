@@ -28,6 +28,11 @@ var legacyProviderConfigFiles = []string{"aws.yaml", "azure.yaml", "fc.yaml", "g
 // skipInteractivePrompt is used to skip interactive prompts during testing
 var skipInteractivePrompt = false
 
+// initGlobalOnly is init's --global: only the home .onctl, without asking
+// about a project-based one (the tui runs init this way, having asked
+// already).
+var initGlobalOnly bool
+
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "init onctl environment",
@@ -36,6 +41,10 @@ var initCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 	},
+}
+
+func init() {
+	initCmd.Flags().BoolVar(&initGlobalOnly, "global", false, "only set up the global ~/.onctl; don't ask about a project-based .onctl folder")
 }
 
 func initializeOnctlEnv() error {
@@ -94,7 +103,7 @@ func initializeOnctlEnv() error {
 
 	// Ask user if they want to create a project-based .onctl folder
 	// Only prompt if in interactive mode (TTY available) or skipInteractivePrompt is false
-	if !skipInteractivePrompt && isInteractive() {
+	if !skipInteractivePrompt && !initGlobalOnly && isInteractive() {
 		fmt.Printf("\nDo you want to create a project-based .onctl folder in the current directory?\n")
 		fmt.Printf("Project config will override global config settings.\n")
 		if yesNo() {

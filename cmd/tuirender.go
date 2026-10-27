@@ -501,7 +501,8 @@ func (m tuiModel) crumbsView() string {
 		chips = append(chips, k9s.crumbActive.Render(" <create> "))
 	}
 	left := strings.Join(chips, " ")
-	if m.flash == "" {
+	// An error popup already says it; the flash below would repeat it.
+	if m.flash == "" || (m.dialog != nil && m.dialog.alert) {
 		return fit(left, m.width)
 	}
 	flash := k9s.flash.Render(m.flash)

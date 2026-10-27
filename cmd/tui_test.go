@@ -94,6 +94,15 @@ func withCloudProvider(t *testing.T, name string) {
 	t.Cleanup(func() { cloudProvider = orig })
 }
 
+// withInitNeeded says whether the machine has no .onctl directory yet, as
+// far as the tui's switch to a provider is concerned.
+func withInitNeeded(t *testing.T, needed bool) {
+	t.Helper()
+	orig := tuiNeedsInit
+	tuiNeedsInit = func() bool { return needed }
+	t.Cleanup(func() { tuiNeedsInit = orig })
+}
+
 func keys(rows []tableRow) string {
 	var out []string
 	for _, r := range rows {
@@ -487,9 +496,10 @@ func TestTUIListError(t *testing.T) {
 	m.pages = []page{{kind: pageTable, view: imagesView, sortCol: -1}}
 	next, _ = m.Update(tuiListMsg{resource: "images", err: errors.New("no api token")})
 	m = next.(tuiModel)
-	// The flash says so now, and the table says so after the flash is
-	// gone: a failed listing is not "Loading…" for ever.
-	if !m.flashErr || m.flash != "listing images: no api token" || !m.loaded["images"] ||
+	// The popup says so now, and the table says so after it's closed: a
+	// failed listing is not "Loading…" for ever.
+	m = ack(t, m)
+	if m.flash != "" || !m.loaded["images"] ||
 		!strings.Contains(m.View(), "Listing images failed: no api token") {
 		t.Errorf("flash=%q loaded=%v view:\n%s", m.flash, m.loaded, m.View())
 	}
@@ -501,7 +511,7 @@ func TestTUIListError(t *testing.T) {
 	}
 	next, _ = m.Update(tuiListMsg{resource: "vms", vms: []cloud.Vm{{Name: "web", Status: "running"}}, err: errors.New("snapshots: 403")})
 	m = next.(tuiModel)
-	if len(m.vms) != 1 || !m.loaded["vms"] || !strings.Contains(m.flash, "snapshots: 403") {
+	if len(m.vms) != 1 || !m.loaded["vms"] || m.dialog == nil || !strings.Contains(m.flash, "snapshots: 403") {
 		t.Errorf("partial listing: vms=%d loaded=%v flash=%q", len(m.vms), m.loaded, m.flash)
 	}
 }
@@ -610,6 +620,7 @@ func TestTUIClaudeKeys(t *testing.T) {
 func TestTUIProviderSwitch(t *testing.T) {
 	tuiFlashFor = time.Millisecond
 	withCloudProvider(t, "hetzner")
+	withInitNeeded(t, false)
 	m := listed(t, tuiFixture(), 120, 40)
 	run := func(m tuiModel, line string) (tuiModel, tea.Cmd) {
 		m, _ = press(t, m, ":")
@@ -1134,44 +1145,113 @@ func TestTUIActionRefreshes(t *testing.T) {
 	}
 }
 
-// The startup pick shows each provider's full name next to the short one,
-// so a reader who doesn't know "ac" sees "Apple Container"; a provider
-// added to cloudProviderList without a title would show up blank.
-func TestTUIProviderChoices(t *testing.T) {
-	items := providerChoices()
-	if len(items) != len(cloudProviderList) {
-		t.Fatalf("got %d choices for %d providers", len(items), len(cloudProviderList))
+// Without -p or ONCTL_CLOUD the tui opens on the providers list instead
+// of a prompt before it: each row has the full name and where it runs
+// (a reader who doesn't know "ac" sees "Apple Container"), enter on one
+// quits for tuiCmd to start again there, and nothing that needs a
+// provider -- listing, :vms, create -- is attempted before then.
+func TestTUIPickProvider(t *testing.T) {
+	tuiFlashFor = time.Millisecond
+	withCloudProvider(t, "")
+	withInitNeeded(t, false)
+	m := newTUI(nil)
+	m.picking = true
+	m.pages = []page{{kind: pageTable, view: providersView, sortCol: -1}}
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = next.(tuiModel)
+	if cmd := m.Init(); cmd != nil && len(runCmd(cmd)) != 0 {
+		t.Errorf("Init while picking did something: %v", runCmd(cmd))
 	}
-	for i, name := range cloudProviderList {
-		title := providerPlaces[name].title
-		if title == "" {
-			t.Errorf("provider %q has no full name", name)
-		}
-		if !strings.HasPrefix(items[i], name+" ") || !strings.Contains(items[i], title) {
-			t.Errorf("choice %d = %q, want %q and its full name", i, items[i], name)
+	if got, want := keys(m.rows()), strings.Join(cloudProviderList, " "); got != want {
+		t.Fatalf("rows = %q, want %q", got, want)
+	}
+	for _, r := range m.rows() {
+		if r.cells[1] == "-" {
+			t.Errorf("provider %q has no full name", r.key)
 		}
 	}
-	// Each line says where the machines run, so the pick tells a
-	// container on this laptop from a cloud bill or a hosted service.
-	want := map[string]string{
-		"ac":     "Apple Container",
-		"fc":     "local",
-		"aws":    "cloud, BYO account",
-		"boxes":  "cloud, SaaS",
-		"static": "remote, BYO host",
+	if cmd := m.refresh(); cmd != nil {
+		t.Error("refresh while picking listed something")
 	}
-	for i, name := range cloudProviderList {
-		if w, ok := want[name]; ok && !strings.Contains(items[i], w) {
-			t.Errorf("%s choice = %q, want it to say %q", name, items[i], w)
-		}
+
+	m, _ = press(t, m, "c")
+	if m.create != nil {
+		t.Error("c opened the create form before a provider was picked")
+	}
+	m, _ = press(t, m, ":")
+	m = typeIn(t, m, "vms")
+	m, _ = press(t, m, "enter")
+	if !m.flashErr || !strings.Contains(m.flash, "pick a provider") || m.top().view != providersView {
+		t.Errorf(":vms while picking: flash=%q view=%s", m.flash, m.top().view.name)
+	}
+	m = ack(t, m)
+
+	m, _ = press(t, m, "j")
+	m, cmd := press(t, m, "enter")
+	if m.switchTo != cloudProviderList[1] || cmd == nil {
+		t.Fatalf("enter: switchTo=%q cmd=%v", m.switchTo, cmd)
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Error("enter on a provider didn't quit")
+	}
+}
+
+// Picking a provider on a machine without a .onctl directory offers the
+// `onctl init` it would otherwise fail with; yes runs it, and once it has
+// finished the tui goes on to the provider that was picked. boxes needs
+// no config, so it isn't asked.
+func TestTUIInitBeforeSwitch(t *testing.T) {
+	tuiFlashFor = time.Millisecond
+	withCloudProvider(t, "")
+	withInitNeeded(t, true)
+	m := newTUI(nil)
+	m.picking = true
+	m.pages = []page{{kind: pageTable, view: providersView, sortCol: -1}}
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = next.(tuiModel)
+
+	next, cmd := m.switchProvider("boxes")
+	if b := next.(tuiModel); b.switchTo != "boxes" || b.dialog != nil || cmd == nil {
+		t.Errorf("boxes: switchTo=%q dialog=%v, want it switched without asking", b.switchTo, b.dialog)
+	}
+
+	next, cmd = m.switchProvider("aws")
+	m = next.(tuiModel)
+	if m.dialog == nil || !strings.Contains(m.dialog.title, "onctl init") || m.switchTo != "" || cmd != nil {
+		t.Fatalf("aws: dialog=%v switchTo=%q cmd=%v, want the init question", m.dialog, m.switchTo, cmd)
+	}
+	// Anything but y declines: nothing runs, nothing switches.
+	declined, cmd := press(t, m, "n")
+	if declined.dialog != nil || declined.switchTo != "" || declined.initThen != "" || cmd != nil {
+		t.Error("n didn't leave things as they were")
+	}
+	m, cmd = press(t, m, "y")
+	if m.initThen != "aws" || cmd == nil {
+		t.Fatalf("y: initThen=%q cmd=%v, want onctl init started for aws", m.initThen, cmd)
+	}
+
+	// init failed: its reason in a popup, no switch.
+	failed, _ := m.Update(tuiChildDoneMsg{verb: "init", err: errors.New("exit status 1"), stderr: "Error: no home\n"})
+	f := failed.(tuiModel)
+	if f.switchTo != "" || f.dialog == nil || !strings.Contains(strings.Join(f.dialog.body, " "), "no home") || f.initThen != "" {
+		t.Errorf("init failure: switchTo=%q dialog=%v", f.switchTo, f.dialog)
+	}
+	// init done: on to the provider picked.
+	done, cmd := m.Update(tuiChildDoneMsg{verb: "init"})
+	d := done.(tuiModel)
+	if d.switchTo != "aws" || cmd == nil {
+		t.Fatalf("init done: switchTo=%q cmd=%v", d.switchTo, cmd)
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Error("init done didn't quit for the switch")
 	}
 }
 
 // An error opens a popup with the whole message, wrapped -- the crumbs
 // line cut the end off one like a provider's setup hint, where the part
-// you need is -- and stays until OK. A listing that fails isn't one: it
-// fails again on every refresh, so it's only flashed, and the table says
-// why it's empty.
+// you need is -- and stays until OK. A listing that fails is one the
+// first time; it fails again on every refresh, so the same failure after
+// that is only flashed, and the table says why it's empty.
 func TestTUIErrorPopup(t *testing.T) {
 	tuiFlashFor = time.Millisecond
 	m := listed(t, tuiFixture(), 100, 30)
@@ -1208,7 +1288,37 @@ func TestTUIErrorPopup(t *testing.T) {
 
 	next, _ = m.Update(tuiListMsg{resource: "vms", err: errors.New("token expired")})
 	m = next.(tuiModel)
+	if m.dialog == nil || !strings.Contains(strings.Join(m.dialog.body, " "), "token expired") {
+		t.Fatalf("a failed listing: dialog=%v flash=%q", m.dialog, m.flash)
+	}
+	m = ack(t, m)
+	// The refresh that fails the same way doesn't open it again...
+	next, _ = m.Update(tuiListMsg{resource: "vms", err: errors.New("token expired")})
+	m = next.(tuiModel)
 	if m.dialog != nil || !m.flashErr || !strings.Contains(m.flash, "token expired") {
-		t.Errorf("a failed listing: dialog=%v flash=%q", m.dialog, m.flash)
+		t.Errorf("the same failure again: dialog=%v flash=%q", m.dialog, m.flash)
+	}
+	// ...nor does it cover a question that is open, but it does once that is
+	// answered...
+	m.ask("Destroy web?", []string{"sure?"}, nil)
+	m.listErrShown = map[string]string{}
+	next, _ = m.Update(tuiListMsg{resource: "vms", err: errors.New("token expired")})
+	m = next.(tuiModel)
+	if m.dialog == nil || m.dialog.title != "Destroy web?" {
+		t.Errorf("a failed listing replaced the open question: %v", m.dialog)
+	}
+	m.dialog = nil
+	next, _ = m.Update(tuiListMsg{resource: "vms", err: errors.New("token expired")})
+	m = next.(tuiModel)
+	if m.dialog == nil || !m.dialog.alert {
+		t.Errorf("the failure after the question: dialog=%v", m.dialog)
+	}
+	m = ack(t, m)
+	// ...and a listing that works lets the next failure open it.
+	next, _ = m.Update(tuiListMsg{resource: "vms", vms: []cloud.Vm{{Name: "web", Status: "running"}}})
+	next, _ = next.Update(tuiListMsg{resource: "vms", err: errors.New("token expired")})
+	m = next.(tuiModel)
+	if m.dialog == nil || !m.dialog.alert {
+		t.Errorf("a failure after a good listing: dialog=%v", m.dialog)
 	}
 }

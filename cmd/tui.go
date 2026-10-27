@@ -16,7 +16,6 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -67,6 +66,12 @@ var tuiCmd = &cobra.Command{
 		var flashErr bool
 		for {
 			m := newTUI(provider)
+			// No provider asked for (bare `onctl`, no -p or ONCTL_CLOUD): the tui
+			// opens on the providers list, and enter on one restarts it there.
+			if provider == nil {
+				m.picking = true
+				m.pages = []page{{kind: pageTable, view: providersView, sortCol: -1}}
+			}
 			m.startFlash, m.startFlashErr = flash, flashErr
 			restore := quietLogs()
 			final, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
@@ -117,33 +122,6 @@ func switchProvider(name string) error {
 	}
 	initProvider(name)
 	return nil
-}
-
-// askProvider is `onctl tui` with neither -p nor ONCTL_CLOUD: the
-// provider is picked from a list, each with its full name and where it
-// runs ("ac  Apple Container  local"), instead of guessed from the
-// credentials in the environment.
-func askProvider() (string, error) {
-	prompt := promptui.Select{
-		Label: "Which provider do you want to work on",
-		Items: providerChoices(),
-		Size:  len(cloudProviderList),
-	}
-	i, _, err := prompt.Run()
-	if err != nil {
-		return "", err
-	}
-	return cloudProviderList[i], nil
-}
-
-// providerChoices are askProvider's lines, in cloudProviderList's order.
-func providerChoices() []string {
-	var items []string
-	for _, name := range cloudProviderList {
-		p := providerPlaces[name]
-		items = append(items, fmt.Sprintf("%-8s %-25s %s", name, p.title, p.kind.offering()))
-	}
-	return items
 }
 
 func init() {
@@ -287,6 +265,10 @@ type tuiModel struct {
 	loaded  map[string]bool  // resources listed at least once
 	loading map[string]bool  // listings in flight
 	listErr map[string]error // why a resource's last listing failed
+	// listErrShown is the error text of each resource's failing listing the
+	// popup has been opened for, so a refresh that fails the same way
+	// doesn't open it again every 15 seconds.
+	listErrShown map[string]string
 
 	agents        []agentSession    // :agents (tuiagents.go)
 	agentStatuses map[string]string // each box's status at the last poll; nil before the first
@@ -316,6 +298,12 @@ type tuiModel struct {
 	// switchTo is the provider `:provider` asked for; set, the tui
 	// quits and tuiCmd starts it again on that provider.
 	switchTo string
+	// picking is the tui opened without a provider: only the providers
+	// list (and :q, :help) work until one is picked.
+	picking bool
+	// initThen is the provider to switch to once the `onctl init` the tui
+	// ran has finished.
+	initThen string
 
 	width, height int
 	refreshedAt   time.Time
@@ -336,24 +324,28 @@ func newTUI(p cloud.CloudProviderInterface) tuiModel {
 	sp := bspinner.New(bspinner.WithSpinner(bspinner.Spinner{Frames: tuiSpinnerFrames, FPS: 80 * time.Millisecond}))
 	sp.Style = k9s.logo
 	return tuiModel{
-		p:           p,
-		loaded:      map[string]bool{},
-		loading:     map[string]bool{},
-		listErr:     map[string]error{},
-		pages:       []page{{kind: pageTable, view: vmsView, sortCol: -1}},
-		stateFilter: showAllVMs,
-		filter:      f,
-		command:     cmd,
-		task:        task,
-		pending:     map[string]string{},
-		spin:        sp,
+		p:            p,
+		loaded:       map[string]bool{},
+		loading:      map[string]bool{},
+		listErr:      map[string]error{},
+		listErrShown: map[string]string{},
+		pages:        []page{{kind: pageTable, view: vmsView, sortCol: -1}},
+		stateFilter:  showAllVMs,
+		filter:       f,
+		command:      cmd,
+		task:         task,
+		pending:      map[string]string{},
+		spin:         sp,
 	}
 }
 
 var tuiSpinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 func (m tuiModel) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.list("vms"), m.tick(), m.spin.Tick}
+	var cmds []tea.Cmd
+	if !m.picking {
+		cmds = append(cmds, m.list("vms"), m.tick(), m.spin.Tick)
+	}
 	if m.startFlash != "" {
 		flash := tuiFlashMsg{text: m.startFlash, isErr: m.startFlashErr}
 		cmds = append(cmds, func() tea.Msg { return flash })
@@ -428,6 +420,9 @@ func tuiListSizes(p cloud.CloudProviderInterface) ([]cloud.CloudSize, error) {
 // not on every tick: they hardly change, and some providers list them
 // through several API calls.
 func (m *tuiModel) refresh() tea.Cmd {
+	if m.picking {
+		return nil
+	}
 	if m.loaded["agents"] {
 		// Once :agents has been opened its boxes are polled in every
 		// view, so a Claude waiting for you is noticed wherever you are.
@@ -438,6 +433,9 @@ func (m *tuiModel) refresh() tea.Cmd {
 
 // refreshAll is R: the VMs and the top page's catalog too.
 func (m *tuiModel) refreshAll() tea.Cmd {
+	if m.picking {
+		return nil
+	}
 	cmds := []tea.Cmd{m.list("vms")}
 	if t := m.top(); t.kind == pageTable && t.view.resource != "vms" {
 		cmds = append(cmds, m.list(t.view.resource))
@@ -543,10 +541,21 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loaded[msg.resource] = true
 		delete(m.listErr, msg.resource)
 		var cmd tea.Cmd
-		if msg.err != nil {
-			// Only flashed: a listing fails again on every refresh, and the
-			// table says why it's empty.
-			cmd = m.setFlash(fmt.Sprintf("listing %s: %v", msg.resource, msg.err), true)
+		if msg.err == nil {
+			delete(m.listErrShown, msg.resource)
+		} else {
+			// A popup the first time it fails, like any error. A listing
+			// fails again on every refresh, so the same failure after that
+			// is only flashed (the table says why it's empty), and one
+			// that comes while a question or a form is open waits for the
+			// next refresh rather than replacing it.
+			text := fmt.Sprintf("listing %s: %v", msg.resource, msg.err)
+			if m.dialog == nil && m.create == nil && m.listErrShown[msg.resource] != text {
+				m.listErrShown[msg.resource] = text
+				cmd = m.fail("%s", text)
+			} else {
+				cmd = m.setFlash(text, true)
+			}
 			m.listErr[msg.resource] = msg.err
 			// One of List/ListPaused failing still leaves the other's
 			// VMs worth showing; the catalogs are all or nothing.
@@ -591,6 +600,19 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.say("%s", result), m.refresh())
 
 	case tuiChildDoneMsg:
+		if msg.verb == "init" {
+			name := m.initThen
+			m.initThen = ""
+			if msg.err != nil {
+				reason := strings.TrimPrefix(lastLine(msg.stderr), "Error: ")
+				if reason == "" {
+					reason = msg.err.Error()
+				}
+				return m, m.fail("onctl init: %s", reason)
+			}
+			m.switchTo = name
+			return m, tea.Quit
+		}
 		what := msg.name
 		if what == "" {
 			what = "a VM"

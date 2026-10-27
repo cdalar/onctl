@@ -9,7 +9,7 @@ current view's hotkeys, one table, and a crumbs line. It refreshes every 15
 seconds, and every action in it runs the matching `onctl` command.
 
 ```bash
-onctl tui                # the current provider (ONCTL_CLOUD, or -p)
+onctl tui                # the current provider (ONCTL_CLOUD, or -p); without one, pick from the providers list
 onctl tui -p hetzner
 onctl                    # the same as onctl tui; onctl --help for the commands
 ```
@@ -81,7 +81,9 @@ web` switches and filters in one go.
 ![The GitHub repos view](/img/tui/repos.png)
 
 - `:provider` lists the clouds onctl knows, the current one marked; `enter`
-  switches the tui to that one. `:provider hetzner` switches directly.
+  switches the tui to that one. `:provider hetzner` switches directly. On a
+  machine with no `.onctl` directory yet it first offers to run `onctl init`
+  (not for `boxes`, which needs no config).
 - `:create`, `:ssh <vm>` and `:claude [vm]` are the key actions as commands.
 - `R` refreshes now. VMs refresh on their own every 15 seconds; images,
   sizes and repos are listed when their view opens and on `R`.
