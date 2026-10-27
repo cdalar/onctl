@@ -195,6 +195,9 @@ func (m tuiModel) handleFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m tuiModel) handleDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	d := m.dialog
 	m.dialog = nil
+	if d.alert {
+		m.flash = "" // the popup said it; don't show it again once it's closed
+	}
 	s := msg.String()
 	for _, c := range d.choices {
 		if s == c.key {
