@@ -297,6 +297,9 @@ type tuiModel struct {
 	// picking is the tui opened without a provider: only the providers
 	// list (and :q, :help) work until one is picked.
 	picking bool
+	// initThen is the provider to switch to once the `onctl init` the tui
+	// ran has finished.
+	initThen string
 
 	width, height int
 	refreshedAt   time.Time
@@ -581,6 +584,19 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.say("%s", result), m.refresh())
 
 	case tuiChildDoneMsg:
+		if msg.verb == "init" {
+			name := m.initThen
+			m.initThen = ""
+			if msg.err != nil {
+				reason := strings.TrimPrefix(lastLine(msg.stderr), "Error: ")
+				if reason == "" {
+					reason = msg.err.Error()
+				}
+				return m, m.fail("onctl init: %s", reason)
+			}
+			m.switchTo = name
+			return m, tea.Quit
+		}
 		what := msg.name
 		if what == "" {
 			what = "a VM"

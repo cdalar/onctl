@@ -647,8 +647,32 @@ func (m tuiModel) switchProvider(name string) (tea.Model, tea.Cmd) {
 	if name == cloudProvider {
 		return m, m.say("already on %s", name)
 	}
+	// boxes needs no onctl.yaml (see initState); the others fail without
+	// a .onctl directory, so offer the `onctl init` they ask for.
+	if name != "boxes" && tuiNeedsInit() {
+		return m.askInit(name)
+	}
 	m.switchTo = name
 	return m, tea.Quit
+}
+
+// tuiNeedsInit reports that no .onctl directory exists yet (a variable so
+// tests needn't depend on the home directory they run in).
+var tuiNeedsInit = func() bool {
+	_, err := resolveConfigDir()
+	return err != nil
+}
+
+// askInit offers to run `onctl init` before switching to name; once it
+// has run the tui switches, as if enter had been pressed again.
+func (m tuiModel) askInit(name string) (tea.Model, tea.Cmd) {
+	m.ask("Run onctl init?",
+		[]string{"onctl isn't set up yet: no .onctl directory in this directory or your home.", fmt.Sprintf("`onctl init` creates it; then the tui switches to %s.", name)},
+		func(m tuiModel) (tea.Model, tea.Cmd) {
+			m.initThen = name
+			return m.runChild("init", "", []string{"init"})
+		})
+	return m, nil
 }
 
 // runChild runs this binary again with args in the foreground (the

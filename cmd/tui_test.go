@@ -94,6 +94,15 @@ func withCloudProvider(t *testing.T, name string) {
 	t.Cleanup(func() { cloudProvider = orig })
 }
 
+// withInitNeeded says whether the machine has no .onctl directory yet, as
+// far as the tui's switch to a provider is concerned.
+func withInitNeeded(t *testing.T, needed bool) {
+	t.Helper()
+	orig := tuiNeedsInit
+	tuiNeedsInit = func() bool { return needed }
+	t.Cleanup(func() { tuiNeedsInit = orig })
+}
+
 func keys(rows []tableRow) string {
 	var out []string
 	for _, r := range rows {
@@ -610,6 +619,7 @@ func TestTUIClaudeKeys(t *testing.T) {
 func TestTUIProviderSwitch(t *testing.T) {
 	tuiFlashFor = time.Millisecond
 	withCloudProvider(t, "hetzner")
+	withInitNeeded(t, false)
 	m := listed(t, tuiFixture(), 120, 40)
 	run := func(m tuiModel, line string) (tuiModel, tea.Cmd) {
 		m, _ = press(t, m, ":")
@@ -1142,6 +1152,7 @@ func TestTUIActionRefreshes(t *testing.T) {
 func TestTUIPickProvider(t *testing.T) {
 	tuiFlashFor = time.Millisecond
 	withCloudProvider(t, "")
+	withInitNeeded(t, false)
 	m := newTUI(nil)
 	m.picking = true
 	m.pages = []page{{kind: pageTable, view: providersView, sortCol: -1}}
@@ -1181,6 +1192,57 @@ func TestTUIPickProvider(t *testing.T) {
 	}
 	if _, ok := cmd().(tea.QuitMsg); !ok {
 		t.Error("enter on a provider didn't quit")
+	}
+}
+
+// Picking a provider on a machine without a .onctl directory offers the
+// `onctl init` it would otherwise fail with; yes runs it, and once it has
+// finished the tui goes on to the provider that was picked. boxes needs
+// no config, so it isn't asked.
+func TestTUIInitBeforeSwitch(t *testing.T) {
+	tuiFlashFor = time.Millisecond
+	withCloudProvider(t, "")
+	withInitNeeded(t, true)
+	m := newTUI(nil)
+	m.picking = true
+	m.pages = []page{{kind: pageTable, view: providersView, sortCol: -1}}
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = next.(tuiModel)
+
+	next, cmd := m.switchProvider("boxes")
+	if b := next.(tuiModel); b.switchTo != "boxes" || b.dialog != nil || cmd == nil {
+		t.Errorf("boxes: switchTo=%q dialog=%v, want it switched without asking", b.switchTo, b.dialog)
+	}
+
+	next, cmd = m.switchProvider("aws")
+	m = next.(tuiModel)
+	if m.dialog == nil || !strings.Contains(m.dialog.title, "onctl init") || m.switchTo != "" || cmd != nil {
+		t.Fatalf("aws: dialog=%v switchTo=%q cmd=%v, want the init question", m.dialog, m.switchTo, cmd)
+	}
+	// Anything but y declines: nothing runs, nothing switches.
+	declined, cmd := press(t, m, "n")
+	if declined.dialog != nil || declined.switchTo != "" || declined.initThen != "" || cmd != nil {
+		t.Error("n didn't leave things as they were")
+	}
+	m, cmd = press(t, m, "y")
+	if m.initThen != "aws" || cmd == nil {
+		t.Fatalf("y: initThen=%q cmd=%v, want onctl init started for aws", m.initThen, cmd)
+	}
+
+	// init failed: its reason in a popup, no switch.
+	failed, _ := m.Update(tuiChildDoneMsg{verb: "init", err: errors.New("exit status 1"), stderr: "Error: no home\n"})
+	f := failed.(tuiModel)
+	if f.switchTo != "" || f.dialog == nil || !strings.Contains(strings.Join(f.dialog.body, " "), "no home") || f.initThen != "" {
+		t.Errorf("init failure: switchTo=%q dialog=%v", f.switchTo, f.dialog)
+	}
+	// init done: on to the provider picked.
+	done, cmd := m.Update(tuiChildDoneMsg{verb: "init"})
+	d := done.(tuiModel)
+	if d.switchTo != "aws" || cmd == nil {
+		t.Fatalf("init done: switchTo=%q cmd=%v", d.switchTo, cmd)
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Error("init done didn't quit for the switch")
 	}
 }
 
