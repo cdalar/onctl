@@ -52,6 +52,11 @@ const (
 	// starts in seconds instead of installing them all. Only ac: the other
 	// VM providers take their cloud's images, not OCI ones.
 	acClaudeImage = "ghcr.io/boxctl-io/claude-agent:latest"
+	// claudeGoImage and acClaudeGoImage are claude-agent plus Go and gcc
+	// (images/claude-agent-go), for a project with a go.mod: Claude
+	// builds and tests it without installing Go first.
+	claudeGoImage   = "claude-agent-go"
+	acClaudeGoImage = "ghcr.io/boxctl-io/claude-agent-go:latest"
 	// claudeReadyTimeout bounds waiting for a new or resumed box to boot.
 	claudeReadyTimeout = 3 * time.Minute
 	// claudeDefaultIdleTTL is the idle TTL of a box created for Claude.
@@ -111,6 +116,10 @@ key, installs tmux, git and Claude Code, and from there on it's the same.
 onctl -p ac claude (Apple containers, on a Mac) boots the image a box
 has, ghcr.io/boxctl-io/claude-agent, so nothing is installed. A VM is
 paused and resumed with onctl pause/resume, not on its own.
+
+Without --image, a project with a go.mod at its top (with --repo, the
+repository's on GitHub) gets claude-agent-go instead of claude-agent, on
+a box or on ac: the same image plus Go and gcc.
 
 Claude runs in tmux, so it keeps going when you detach (Ctrl-b d) or the
 connection drops; onctl claude --box <name> comes back to it. --mux herdr
@@ -196,6 +205,9 @@ func runClaude(cmd *cobra.Command, args []string) error {
 		if !cmd.Flags().Changed("image") {
 			claudeImage = vmClaudeImage()
 		}
+	}
+	if !cmd.Flags().Changed("image") && projectHasGoMod(cmd.Context()) {
+		claudeImage = goImage(claudeImage)
 	}
 	if claudeRepo != "" {
 		return runRepo(cmd, args)
