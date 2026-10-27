@@ -1390,3 +1390,60 @@ func TestTUICreateGoesToVMs(t *testing.T) {
 		t.Errorf("cursor on %v, want the new VM db", r)
 	}
 }
+
+// tuiSnapshotProvider is a provider whose paused VMs are only a snapshot,
+// as Hetzner's are.
+type tuiSnapshotProvider struct{ *tuiFakeProvider }
+
+func (f tuiSnapshotProvider) DestroySnapshot(name string) error {
+	f.calls = append(f.calls, "delete snapshot "+name)
+	return nil
+}
+
+// Where a paused VM is only a snapshot, destroy says so before deleting
+// it -- it can never be resumed after -- and deletes the snapshot, not a
+// server that isn't there. A powered-off server (AWS's "stopped", filed
+// with the paused ones) is still a server, destroyed as one.
+func TestTUIDestroySnapshot(t *testing.T) {
+	f := tuiFixture()
+	m := newTUI(tuiSnapshotProvider{f})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
+	m = next.(tuiModel)
+	next, _ = m.Update(m.list("vms")())
+	m = next.(tuiModel)
+
+	m.top().selected = "old-paused"
+	m, _ = press(t, m, "ctrl+d")
+	v := m.View()
+	if !strings.Contains(v, "Delete old-paused's snapshot?") || !strings.Contains(v, "all that's left of it is a snapshot") || !strings.Contains(v, "never be resumed") {
+		t.Fatalf("ctrl+d on a paused VM:\n%s", v)
+	}
+	m, cmd := press(t, m, "y")
+	am := hasAction(cmd)
+	if am == nil || am.err != nil || am.result != "deleted old-paused's snapshot" {
+		t.Fatalf("result: %#v", am)
+	}
+	if got := strings.Join(f.calls, ", "); got != "delete snapshot old-paused" {
+		t.Errorf("provider saw %q", got)
+	}
+	f.calls = nil
+	next, _ = m.Update(*am)
+	m = next.(tuiModel)
+
+	// Marked together: the question counts and names the snapshot.
+	for _, name := range []string{"web", "old-paused", "stopped-aws"} {
+		m.top().selected = name
+		m, _ = press(t, m, " ")
+	}
+	m, _ = press(t, m, "ctrl+d")
+	v = m.View()
+	if !strings.Contains(v, "Destroy 3 VMs, 1 of them snapshots?") || !strings.Contains(v, "old-paused  (paused: only a snapshot)") || strings.Contains(v, "stopped-aws  (paused") {
+		t.Fatalf("ctrl+d with marks:\n%s", v)
+	}
+	m, cmd = press(t, m, "y")
+	runCmd(cmd)
+	sort.Strings(f.calls)
+	if got := strings.Join(f.calls, ", "); got != "delete snapshot old-paused, destroy stopped-aws, destroy web" {
+		t.Errorf("provider saw %q", got)
+	}
+}

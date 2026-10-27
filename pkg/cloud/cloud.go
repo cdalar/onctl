@@ -199,6 +199,14 @@ type Restarter interface {
 	Restart(server Vm, opts RestartOptions) (Vm, error)
 }
 
+// SnapshotDestroyer is implemented by providers whose paused VMs are only
+// a snapshot -- Hetzner's pause deletes the server -- so Destroy, which
+// deletes servers, can't reach them. Deleting the snapshot means the VM
+// can never be resumed, so callers say it's a snapshot and ask first.
+type SnapshotDestroyer interface {
+	DestroySnapshot(name string) error
+}
+
 // RestartOptions changes how a VM comes back from Restart.
 type RestartOptions struct {
 	// KernelImage, when set, is the kernel the VM boots from now on (and on

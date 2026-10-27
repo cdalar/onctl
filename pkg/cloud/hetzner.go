@@ -90,30 +90,63 @@ func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 	return mapHetznerServer(*result.Server), nil
 }
 
+// Destroy deletes the server. A paused VM has none (Pause deleted it):
+// what's left is a snapshot, which only DestroySnapshot deletes.
 func (p ProviderHetzner) Destroy(server Vm) error {
 	log.Println("[DEBUG] Destroy server: ", server)
 	if server.ID == "" && server.Name != "" {
 		log.Println("[DEBUG] Server ID is empty")
 		log.Println("[DEBUG] Server name: " + server.Name)
-		s, err := p.GetByName(server.Name)
-		if err != nil || s.ID == "" {
-			log.Println("[DEBUG] Server not found")
+		s, _, err := p.Client.Server.GetByName(context.TODO(), server.Name)
+		if err != nil {
 			return err
 		}
-		log.Println("[DEBUG] Server found ID: " + s.ID)
-		server.ID = s.ID
+		if s == nil {
+			return fmt.Errorf("no server named %q", server.Name)
+		}
+		log.Println("[DEBUG] Server found ID: ", s.ID)
+		server.ID = strconv.FormatInt(s.ID, 10)
 	}
 	id, err := strconv.ParseInt(server.ID, 10, 64)
 	if err != nil {
-		log.Fatalln(err)
+		return fmt.Errorf("server ID %q: %w", server.ID, err)
 	}
 	_, _, err = p.Client.Server.DeleteWithResult(context.TODO(), &hcloud.Server{
 		ID: id,
 	})
+	return err
+}
+
+// DestroySnapshot deletes what Pause left of the server named name: its
+// pause snapshots and the primary IPs kept for it (unassigned ones only,
+// so an IP a running server has is never taken). The VM can't be resumed
+// after it.
+func (p ProviderHetzner) DestroySnapshot(name string) error {
+	images, err := p.Client.Image.AllWithOpts(context.TODO(), hcloud.ImageListOpts{
+		Type:     []hcloud.ImageType{hcloud.ImageTypeSnapshot},
+		ListOpts: hcloud.ListOpts{LabelSelector: labelSnapshot + "=" + name},
+	})
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
-	return nil
+	ips := p.findReservedPrimaryIPs(name)
+	if len(images) == 0 && len(ips) == 0 {
+		return fmt.Errorf("no paused VM (snapshot) named %q", name)
+	}
+	var errs []error
+	for _, img := range images {
+		log.Println("[DEBUG] deleting pause snapshot: ", img.ID)
+		if _, err := p.Client.Image.Delete(context.TODO(), img); err != nil {
+			errs = append(errs, fmt.Errorf("deleting snapshot %d: %w", img.ID, err))
+		}
+	}
+	for _, ip := range ips {
+		log.Println("[DEBUG] deleting preserved primary IP: ", ip.IP)
+		if _, err := p.Client.PrimaryIP.Delete(context.TODO(), ip); err != nil {
+			errs = append(errs, fmt.Errorf("deleting primary IP %s: %w", ip.IP, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // Labels used to tie a pause snapshot (and its preserved primary IPs) back to a
