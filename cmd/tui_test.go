@@ -1174,8 +1174,8 @@ func TestTUIPickProvider(t *testing.T) {
 	}
 	m = ack(t, m)
 
-	m, cmd := press(t, m, "j")
-	m, cmd = press(t, m, "enter")
+	m, _ = press(t, m, "j")
+	m, cmd := press(t, m, "enter")
 	if m.switchTo != cloudProviderList[1] || cmd == nil {
 		t.Fatalf("enter: switchTo=%q cmd=%v", m.switchTo, cmd)
 	}
