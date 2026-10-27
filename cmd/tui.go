@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -90,6 +91,8 @@ var tuiCmd = &cobra.Command{
 			flash, flashErr = "switched to "+name, false
 			if err := switchProvider(name); err != nil {
 				flash, flashErr = err.Error(), true
+			} else {
+				saveTUIProvider(name)
 			}
 		}
 	},
@@ -123,6 +126,50 @@ func switchProvider(name string) error {
 	}
 	initProvider(name)
 	return nil
+}
+
+// tuiProviderPath, ~/.onctl/tui-provider, holds the provider last
+// picked in the tui, which the next `onctl` opens on when neither -p
+// nor ONCTL_CLOUD says one.
+func tuiProviderPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".onctl", "tui-provider"), nil
+}
+
+// loadTUIProvider is the provider last picked in the tui; "" when none
+// was, or the file names one onctl no longer has.
+func loadTUIProvider() string {
+	path, err := tuiProviderPath()
+	if err != nil {
+		return ""
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	name := strings.TrimSpace(string(b))
+	if !tools.Contains(cloudProviderList, name) {
+		return ""
+	}
+	return name
+}
+
+// saveTUIProvider remembers name for the next tui. Failing to is only
+// logged: the provider is picked again next time.
+func saveTUIProvider(name string) {
+	path, err := tuiProviderPath()
+	if err == nil {
+		err = os.MkdirAll(filepath.Dir(path), 0o755)
+	}
+	if err == nil {
+		err = os.WriteFile(path, []byte(name+"\n"), 0o644)
+	}
+	if err != nil {
+		log.Println("[DEBUG] saving the tui's provider:", err)
+	}
 }
 
 func init() {
