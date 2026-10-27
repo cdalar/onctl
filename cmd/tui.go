@@ -294,6 +294,10 @@ type tuiDialog struct {
 	yes     func(m tuiModel) (tea.Model, tea.Cmd)
 	choices []tuiChoice
 	alert   bool
+	// sel is the highlighted button, which arrows move and enter presses:
+	// yes, no for a question; each choice, then cancel, for a choice. It
+	// starts on the last -- no, cancel -- so enter alone still declines.
+	sel int
 }
 
 // tuiChoice is one key of a choice dialog and what it does.

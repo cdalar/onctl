@@ -199,26 +199,57 @@ func (m tuiModel) handleDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.flash = "" // the popup said it; don't show it again once it's closed
 	}
 	s := msg.String()
+	if !d.alert {
+		last := dialogButtons(d) - 1
+		switch s {
+		case "left", "shift+tab":
+			d.sel = max(d.sel-1, 0)
+			m.dialog = d
+			return m, nil
+		case "right", "tab":
+			d.sel = min(d.sel+1, last)
+			m.dialog = d
+			return m, nil
+		case "enter":
+			// The highlighted button; it starts on no/cancel, so enter
+			// alone is still no, as in destroy's own [y/N].
+			if d.yes != nil && d.sel == 0 {
+				return d.yes(m)
+			}
+			if d.sel < len(d.choices) {
+				return d.choices[d.sel].do(m)
+			}
+			return m, nil
+		}
+	}
 	for _, c := range d.choices {
 		if s == c.key {
 			return c.do(m)
 		}
 	}
-	// y alone says yes, as in destroy's own [y/N]: enter is no.
 	if d.yes != nil && (s == "y" || s == "Y") {
 		return d.yes(m)
 	}
 	return m, nil
 }
 
+// dialogButtons is how many buttons d has: yes and no for a question,
+// each choice and cancel for a choice.
+func dialogButtons(d *tuiDialog) int {
+	if d.yes != nil {
+		return 2
+	}
+	return len(d.choices) + 1
+}
+
 // ask opens a y/N question.
 func (m *tuiModel) ask(title string, body []string, yes func(m tuiModel) (tea.Model, tea.Cmd)) {
-	m.dialog = &tuiDialog{title: title, body: body, yes: yes}
+	m.dialog = &tuiDialog{title: title, body: body, yes: yes, sel: 1}
 }
 
 // choose opens a choice between a few keys; any other key cancels.
 func (m *tuiModel) choose(title string, body []string, choices ...tuiChoice) {
-	m.dialog = &tuiDialog{title: title, body: body, choices: choices}
+	m.dialog = &tuiDialog{title: title, body: body, choices: choices, sel: len(choices)}
 }
 
 // --- table keys -----------------------------------------------------------
