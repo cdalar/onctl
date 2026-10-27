@@ -172,11 +172,14 @@ func (herdrMux) setup() string {
 func (herdrMux) start(s taskSession, line string, detached bool) string {
 	cmdFile := muxRunDir + "/" + s.name + ".cmd"
 	pane := "exec sh " + shellQuote(cmdFile)
+	stop := ""
 	if !detached && s.ephemeral {
 		// The run deletes the box once Claude exits, so the attached
 		// client (exec herdr, below) has to return then: stopping the
-		// server does that. A kept box's server outlives the session.
-		pane = "sh " + shellQuote(cmdFile) + "; herdr server stop"
+		// server does that. A kept box's server outlives the session --
+		// a run that detaches keeps its box, and removes the stop file.
+		stop = herdrStopFile(s)
+		pane = "sh " + shellQuote(cmdFile) + "; [ ! -e " + shellQuote(stop) + " ] || herdr server stop"
 	}
 	script := muxMarkScript("herdr") + `
 if ! herdr workspace list >/dev/null 2>&1; then
@@ -188,7 +191,7 @@ ws=$(herdr workspace list 2>/dev/null | grep -o ` + shellQuote(`"label":"`+s.nam
 if [ -n "$ws" ]; then herdr workspace focus "$ws" >/dev/null || exit 1
 else
   herdr integration install claude >/dev/null 2>&1 || true
-  (umask 077 && mkdir -p ` + shellQuote(muxRunDir) + ` && printf '%s\n' ` + shellQuote(line) + ` >` + shellQuote(cmdFile) + `) || exit 1
+  (umask 077 && mkdir -p ` + shellQuote(muxRunDir) + ` && printf '%s\n' ` + shellQuote(line) + ` >` + shellQuote(cmdFile) + stopTouch(stop) + `) || exit 1
   p=$(herdr workspace create --cwd ` + shellQuote(s.dir) + ` --label ` + shellQuote(s.name) + ` --focus | sed -n 's/.*"root_pane":{[^}]*"pane_id":"\([^"]*\)".*/\1/p')
   [ -n "$p" ] || { echo "couldn't make a herdr workspace for ` + s.name + `" >&2; exit 1; }
   herdr pane run "$p" ` + shellQuote(pane) + ` >/dev/null || exit 1
@@ -197,6 +200,19 @@ fi`
 		script += "\nexec herdr"
 	}
 	return script
+}
+
+// herdrStopFile, while it exists, has an ephemeral session's pane stop
+// herdr's server when Claude exits.
+func herdrStopFile(s taskSession) string { return muxRunDir + "/" + s.name + ".stop" }
+
+// stopTouch is shell, after the command file is written, that makes the
+// stop file -- none when there's no stop.
+func stopTouch(stop string) string {
+	if stop == "" {
+		return ""
+	}
+	return " && : >" + shellQuote(stop)
 }
 
 // running: the session's workspace exists. A workspace goes when its

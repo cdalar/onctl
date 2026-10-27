@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -332,6 +333,13 @@ func runClaude(cmd *cobra.Command, args []string) error {
 		defer cancel()
 		if sessionRunning(sctx, box, sess) {
 			t.ephemeral = false
+			if _, ok := mux.(herdrMux); ok {
+				// Its pane would still stop herdr's server when Claude
+				// exits, and the box's other sessions with it.
+				if err := box.run(sctx, "rm -f "+shellQuote(herdrStopFile(sess)), nil); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: couldn't keep herdr's server past this session on %s: %v\n", name, err)
+				}
+			}
 			fmt.Fprintf(os.Stderr, "Claude is still running on %s, so it's kept -- attach with: %s\n", name, attachHint(sess, name))
 		}
 	}
@@ -514,9 +522,12 @@ func openClaudeBox(ctx context.Context, create, setTTL bool) (*claudeTarget, err
 
 // useBoxMux makes the box's multiplexer -- the one its sessions were
 // started in, recorded on it by mux.start -- the run's, unless --mux was
-// given: then a session running in the other one is refused, rather than
-// started again beside it. A box with no record (nothing started yet, or
-// from before the record) takes --mux or its default.
+// given: then it's refused while any Claude session runs in the other
+// one. Not just this run's: starting would move the record, and later
+// runs would look for the others in the wrong multiplexer -- claude ls
+// shows them stopped, and attaching starts a second Claude beside one.
+// A box with no record (nothing started yet, or from before the record)
+// takes --mux or its default.
 func useBoxMux(ctx context.Context, box *boxSSH, dir, name string) error {
 	if name == "" || name == mux.name() {
 		return nil
@@ -529,10 +540,27 @@ func useBoxMux(ctx context.Context, box *boxSSH, dir, name string) error {
 		mux = other
 		return nil
 	}
-	if box.run(ctx, other.running(newTaskSession(dir, claudeTask)), nil) == nil {
-		return fmt.Errorf("Claude is running in %s on %s -- attach with --mux %s, or quit it first", name, box.name, name)
+	out, err := box.output(ctx, other.list())
+	if err != nil {
+		return fmt.Errorf("listing %s sessions on %s: %w", name, box.name, err)
+	}
+	if running := claudeSessions(other, string(out)); len(running) > 0 {
+		return fmt.Errorf("Claude is running in %s on %s (%s) -- use --mux %s, or quit them first", name, box.name, strings.Join(running, ", "), name)
 	}
 	return nil
+}
+
+// claudeSessions is the Claude sessions in m's list output, sorted --
+// claude and claude-<task>, not whatever else runs in the multiplexer.
+func claudeSessions(m multiplexer, out string) []string {
+	var names []string
+	for name := range m.parseList(out) {
+		if name == claudeSession || strings.HasPrefix(name, claudeSession+"-") {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 // connectClaudeBox is openClaudeBox's boxes half: the box resumed or
