@@ -135,10 +135,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # The latest stable release (edge, a prerelease, is never "latest"):
+          # the notes list every PR merged since it, GitHub's way.
+          stable=$(gh release view --repo cdalar/onctl --json tagName -q .tagName)
           gh release delete edge --yes --cleanup-tag --repo cdalar/onctl 2>/dev/null || true
           gh release create edge dist/*.tar.gz dist/checksums.txt \
             --repo cdalar/onctl \
             --target "${{ github.sha }}" \
             --title "edge ($(date -u +%Y-%m-%d))" \
             --notes "Automated, unsigned build of main @ ${{ github.sha }}. Not a tagged release -- see the Releases page for stable, signed versions." \
+            --generate-notes --notes-start-tag "$stable" \
             --prerelease

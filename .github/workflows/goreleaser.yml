@@ -36,6 +36,13 @@ jobs:
           gpg --list-secret-keys
           fingerprint=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ { print $10; exit }')
           echo "GPG_FINGERPRINT=$fingerprint" >> "$GITHUB_ENV"
+      - name: Find the previous published release
+        # Not the previous tag: a tag whose release failed (v0.1.32, v0.1.34)
+        # has no release page, so notes counted from it would leave its PRs
+        # out of every release.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "GORELEASER_PREVIOUS_TAG=$(gh release view --repo cdalar/onctl --json tagName -q .tagName)" >> "$GITHUB_ENV"
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
