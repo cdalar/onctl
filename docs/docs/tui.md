@@ -11,6 +11,7 @@ seconds, and every action in it runs the matching `onctl` command.
 ```bash
 onctl tui                # the current provider (ONCTL_CLOUD, or -p)
 onctl tui -p hetzner
+onctl                    # the same as onctl tui; onctl --help for the commands
 ```
 
 ![onctl tui: the VMs view](/img/tui/vms.png)

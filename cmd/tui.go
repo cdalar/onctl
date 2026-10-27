@@ -144,6 +144,21 @@ func providerChoices() []string {
 
 func init() {
 	rootCmd.AddCommand(tuiCmd)
+	rootCmd.RunE = runBareRoot
+}
+
+// runBareRoot is `onctl` with no subcommand: the tui, as `onctl tui`
+// (the provider is asked, or taken from -p/ONCTL_CLOUD). Off a terminal
+// -- a pipe, a script -- it prints the help, which `onctl --help`
+// always does.
+func runBareRoot(cmd *cobra.Command, args []string) error {
+	if !term.IsTerminal(int(os.Stdout.Fd())) || !term.IsTerminal(int(os.Stdin.Fd())) {
+		return cmd.Help()
+	}
+	if err := rootCmd.PersistentPreRunE(tuiCmd, args); err != nil {
+		return err
+	}
+	return tuiCmd.RunE(tuiCmd, args)
 }
 
 // quietLogs keeps the provider code's log lines (main.go sends them to
