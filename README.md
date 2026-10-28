@@ -37,7 +37,7 @@ initialize project. this will create a `.onctl` directory. check configuration f
 onctl environment initialized
 ```
 
-export `ONCTL_CLOUD` to set Cloud Provider. 
+export `ONCTL_CLOUD` to set Cloud Provider (or pass `-p <provider>` to any command). 
 ```
 ❯ export ONCTL_CLOUD=hetzner
 ```
@@ -70,7 +70,8 @@ Welcome to Ubuntu 22.04.3 LTS (GNU/Linux 5.15.0-89-generic x86_64)
 root@onctl-test:~# 
 ```
 
-Or browse and manage your VMs in a k9s-style terminal UI: `s` opens a shell, `a` runs Claude Code on the VM (`onctl claude`), `c` creates, `p`/`r` pause and resume, `ctrl-d` destroys, `:images` and `:sizes` show what the provider offers, `:repos` lists your GitHub repositories and `enter` starts Claude on a box with one cloned (`onctl claude --repo`), `:provider` switches clouds, `?` lists every key.
+Or browse and manage your VMs in a k9s-style terminal UI: `s` opens a shell, `a` runs Claude Code on the VM (`onctl claude`), `c` creates, `p`/`r` pause and resume, `space` marks VMs and `ctrl-d` destroys the marked ones (or the one under the cursor), `:images` and `:sizes` show what the provider offers, `:repos` lists your GitHub repositories and `enter` starts Claude on a box with one cloned (`onctl claude --repo`), `:provider` switches clouds, `?` lists every key.
+Running `onctl` with no subcommand opens it too:
 ```
 ❯ onctl tui
 ```
@@ -141,25 +142,60 @@ needs an initialized `.onctl` directory and working credentials.
 # Enjoy ✅
 
 ```
-❯ onctl
+❯ onctl --help
 onctl is a tool to manage cross platform resources in cloud
 
 Usage:
+  onctl [flags]
   onctl [command]
 
+Examples:
+  # List all VMs
+  onctl ls
+
+  # Create a VM with docker installed
+  onctl create -n test -a docker/docker.sh
+
+  # SSH into a VM
+  onctl ssh test
+
+  # Destroy a VM
+  onctl destroy test
+
 Available Commands:
-  completion  Generate the autocompletion script for the specified shell
-  create      Create a VM
-  destroy     Destroy VM(s)
-  help        Help about any command
-  import      Import an existing server so it can be managed with ssh/ls
-  init        init onctl environment
-  ls          List VMs
-  ssh         Spawn an SSH connection to a VM
-  version     Print the version number of onctl
+  action       Execute a custom action from GitHub
+  claude       Run Claude Code on a box, with this project on it
+  completion   Generate the autocompletion script for the specified shell
+  create       Create a VM
+  deploy       Deploy a Docker image to a remote VM
+  destroy      Destroy VM(s)
+  env          Manage environments
+  help         Help about any command
+  images       List available OS images for the current cloud provider
+  import       Import an existing server so it can be managed with ssh/ls
+  init         init onctl environment
+  login        Log in to hosted boxes (-p boxes) with a personal token
+  logout       Forget the saved boxes token
+  ls           List VMs
+  pause        Snapshot and delete a VM to stop compute cost (keeps its IP)
+  port-forward Forward local ports to ports on a VM, over ssh
+  restart      Cold-boot a VM again from its own disk, optionally on a new kernel (fc)
+  resume       Recreate a paused VM from its snapshot
+  sizes        List the VM sizes the current provider offers (what --type takes)
+  ssh          Spawn an SSH connection to a VM
+  ssh-proxy    Relay stdin/stdout to a VM's port through the provider (for ssh's ProxyCommand)
+  templates    Manage onctl templates
+  tui          Browse and manage your VMs in a k9s-style terminal UI
+  version      Print the version number of onctl
 
 Flags:
-  -h, --help   help for onctl
+  -c, --config string                             Path to onctl.yaml configuration file (overrides the .onctl directory lookup)
+  -h, --help                                      help for onctl
+      --project gcloud config get-value project   GCP: project ID (falls back to gcloud config get-value project when the onctl.yaml placeholder is present)
+  -p, --provider string                           cloud provider: aws, hetzner, azure, gcp, ovh, fc, ch, ac, static, boxes (overrides ONCTL_CLOUD)
+      --resource-group string                     Azure: resource group (required for the azure provider; falls back to the az CLI's configured default group, if any)
+      --service-name string                       OVH: Public Cloud project service name (required for the ovh provider)
+      --subscription-id az account show           Azure: subscription ID (required for the azure provider; falls back to az account show)
 
 Use "onctl [command] --help" for more information about a command.
 ```
