@@ -1026,6 +1026,40 @@ func (p ProviderFC) Resume(server Vm) (Vm, error) {
 		return Vm{}, fmt.Errorf("snapshot memory file for %q: %w", server.Name, err)
 	}
 
+	dir := p.vmDir(server.Name)
+	snap, err := os.ReadFile(vm.SnapshotStatePath)
+	if err != nil {
+		return Vm{}, fmt.Errorf("snapshot state file for %q: %w", server.Name, err)
+	}
+	from, err := snapshotTakenIn(snap, filepath.Join(p.Config.StateDir, "vms"), dir)
+	if err != nil {
+		return Vm{}, fmt.Errorf("microVM %q: %w", server.Name, err)
+	}
+	var mounts []FCBindMount
+	if from != "" {
+		// The copy's metadata can still name files in from -- boxctl-vms's
+		// import rewrites some paths but not the vsock or cache disk's --
+		// and none of them may be used, let alone removed: another VM may
+		// live there.
+		for _, path := range []*string{&vm.RootfsPath, &vm.CachePath, &vm.VsockPath, &vm.SocketPath, &vm.KernelImage} {
+			if rel, err := filepath.Rel(from, *path); *path != "" && err == nil && !strings.HasPrefix(rel, "..") {
+				*path = filepath.Join(dir, rel)
+			}
+		}
+		// The mount needs a directory to go on. One made here stays empty
+		// on the host and goes once the load is done; removing it then
+		// detaches the process's mount, which no longer matters -- it
+		// holds its files open, and every path it keeps using is this
+		// VM's own by then.
+		if _, err := os.Stat(from); os.IsNotExist(err) {
+			if err := os.Mkdir(from, 0755); err != nil {
+				return Vm{}, fmt.Errorf("microVM %q: %w", server.Name, err)
+			}
+			defer func() { _ = os.Remove(from) }()
+		}
+		mounts = []FCBindMount{{Source: dir, Target: from}}
+	}
+
 	bridge := p.Config.Bridge
 	if bridge == "" {
 		bridge = "fcbr0"
@@ -1044,34 +1078,6 @@ func (p ProviderFC) Resume(server Vm) (Vm, error) {
 	}
 	if err := p.Net.CreateTap(tapDevice, bridge); err != nil {
 		return Vm{}, fmt.Errorf("failed to create tap device: %w", err)
-	}
-
-	dir := p.vmDir(server.Name)
-	snap, err := os.ReadFile(vm.SnapshotStatePath)
-	if err != nil {
-		_ = p.Net.DeleteTap(tapDevice)
-		return Vm{}, fmt.Errorf("snapshot state file for %q: %w", server.Name, err)
-	}
-	from, err := snapshotTakenIn(snap, filepath.Join(p.Config.StateDir, "vms"), dir)
-	if err != nil {
-		_ = p.Net.DeleteTap(tapDevice)
-		return Vm{}, fmt.Errorf("microVM %q: %w", server.Name, err)
-	}
-	var mounts []FCBindMount
-	if from != "" {
-		// The mount needs a directory to go on. One made here stays empty
-		// on the host and goes once the load is done; removing it then
-		// detaches the process's mount, which no longer matters -- it
-		// holds its files open, and every path it keeps using is this
-		// VM's own by then.
-		if _, err := os.Stat(from); os.IsNotExist(err) {
-			if err := os.Mkdir(from, 0755); err != nil {
-				_ = p.Net.DeleteTap(tapDevice)
-				return Vm{}, fmt.Errorf("microVM %q: %w", server.Name, err)
-			}
-			defer func() { _ = os.Remove(from) }()
-		}
-		mounts = []FCBindMount{{Source: dir, Target: from}}
 	}
 
 	logFile := filepath.Join(dir, "fc.log")

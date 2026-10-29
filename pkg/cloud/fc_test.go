@@ -1098,6 +1098,11 @@ func pauseAsCopyOf(t *testing.T, p ProviderFC, name, orig string) {
 	o := p.vmDir(orig)
 	snap := "\x07\x10" + o + "/rootfs.ext4" + o + "/v.sock" + o + "/vmlinuxYconsole=ttyS0"
 	require.NoError(t, os.WriteFile(filepath.Join(p.vmDir(name), "snapshot.snap"), []byte(snap), 0600))
+	// boxctl-vms's import rewrites the rootfs path, not the vsock's.
+	meta, err := loadFCMetadata(p.metadataPath(name))
+	require.NoError(t, err)
+	meta.VsockPath = filepath.Join(o, "v.sock")
+	require.NoError(t, saveFCMetadata(p.metadataPath(name), meta))
 }
 
 func TestProviderFC_Resume_SnapshotFromAnotherDir(t *testing.T) {
@@ -1118,6 +1123,9 @@ func TestProviderFC_Resume_SnapshotFromAnotherDir(t *testing.T) {
 	got, err := p.GetByName("copy")
 	require.NoError(t, err)
 	assert.Equal(t, "running", got.Status)
+	meta, err := loadFCMetadata(p.metadataPath("copy"))
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(dir, "v.sock"), meta.VsockPath, "recorded as its own from now on")
 }
 
 func TestProviderFC_Resume_SnapshotFromLiveVMLeavesItAlone(t *testing.T) {
@@ -1125,6 +1133,8 @@ func TestProviderFC_Resume_SnapshotFromLiveVMLeavesItAlone(t *testing.T) {
 	shortStateDir(t, &p)
 	_, err := p.Deploy(Vm{Name: "orig"})
 	require.NoError(t, err)
+	liveSock := filepath.Join(p.vmDir("orig"), "v.sock")
+	require.NoError(t, os.WriteFile(liveSock, nil, 0600))
 	before, err := os.ReadDir(p.vmDir("orig"))
 	require.NoError(t, err)
 	pauseAsCopyOf(t, p, "copy", "orig")
@@ -1136,6 +1146,7 @@ func TestProviderFC_Resume_SnapshotFromLiveVMLeavesItAlone(t *testing.T) {
 	after, err := os.ReadDir(p.vmDir("orig"))
 	require.NoError(t, err)
 	assert.Equal(t, before, after, "the original VM's directory is untouched")
+	assert.FileExists(t, liveSock, "its vsock socket isn't taken for a stale one")
 }
 
 func TestProviderFC_Resume_RepointFailureStopsVMM(t *testing.T) {
