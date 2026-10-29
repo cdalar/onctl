@@ -1004,7 +1004,9 @@ func (p ProviderFC) Pause(server Vm, hot bool) error {
 // alone, so another VM still living there is never touched -- loaded
 // paused, its drives pointed at this VM's own files, and only then resumed.
 // The next Pause records those, but not the kernel path the boot source
-// keeps, so a moved VM takes this route on every resume.
+// keeps: a moved VM whose kernel is in its own directory takes this route
+// on every resume. Firecracker's drive_overrides (firecracker-microvm/
+// firecracker#5774, unreleased as of 1.17) would replace the mount.
 func (p ProviderFC) Resume(server Vm) (Vm, error) {
 	vm, err := loadFCMetadata(p.metadataPath(server.Name))
 	if err != nil {
