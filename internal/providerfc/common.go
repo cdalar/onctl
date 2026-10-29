@@ -263,7 +263,7 @@ func NewProcessManager(binPath string) cloud.FCProcess {
 }
 
 func (m ProcessManager) Start(socketPath string, cfg cloud.FCVMConfig, logFile string) (int, error) {
-	pid, err := m.spawn(socketPath, logFile)
+	pid, err := m.spawn(socketPath, logFile, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -274,15 +274,25 @@ func (m ProcessManager) Start(socketPath string, cfg cloud.FCVMConfig, logFile s
 	return pid, nil
 }
 
-func (m ProcessManager) StartBare(socketPath, logFile string) (int, error) {
-	return m.spawn(socketPath, logFile)
+func (m ProcessManager) StartBare(socketPath, logFile string, mounts []cloud.FCBindMount) (int, error) {
+	return m.spawn(socketPath, logFile, mounts)
 }
+
+// bindMountScript makes its argument pairs' bind mounts, then execs the
+// last two: the firecracker binary and its API socket. Run under
+// `unshare --mount --propagation slave`, so the mounts are the process's
+// alone while mounts made on the host still reach it.
+const bindMountScript = `set -e
+while [ "$#" -gt 2 ]; do mount --bind "$1" "$2"; shift 2; done
+exec "$1" --api-sock "$2"`
 
 // spawn launches the firecracker binary bound to socketPath and waits for
 // its API socket to come up, without configuring or booting it — the
 // shared first half of both Start (config comes from an FCVMConfig) and
-// StartBare (config comes from a snapshot loaded separately).
-func (m ProcessManager) spawn(socketPath, logFile string) (int, error) {
+// StartBare (config comes from a snapshot loaded separately). With mounts,
+// firecracker starts in a mount namespace of its own that has them; the
+// unshare and sh in between exec, so the PID is still firecracker's.
+func (m ProcessManager) spawn(socketPath, logFile string, mounts []cloud.FCBindMount) (int, error) {
 	_ = os.Remove(socketPath)
 
 	// 0600: guest serial console output can contain sensitive boot/runtime
@@ -294,6 +304,13 @@ func (m ProcessManager) spawn(socketPath, logFile string) (int, error) {
 	defer func() { _ = logFd.Close() }()
 
 	cmd := exec.Command(m.BinPath, "--api-sock", socketPath)
+	if len(mounts) > 0 {
+		args := []string{"--mount", "--propagation", "slave", "--", "sh", "-c", bindMountScript, "sh"}
+		for _, mt := range mounts {
+			args = append(args, mt.Source, mt.Target)
+		}
+		cmd = exec.Command("unshare", append(args, m.BinPath, socketPath)...)
+	}
 	cmd.Stdout = logFd
 	cmd.Stderr = logFd
 	setSysProcAttr(cmd)
@@ -402,7 +419,7 @@ func (APIClient) CreateSnapshot(socketPath, snapshotPath, memFilePath string) er
 	})
 }
 
-func (APIClient) LoadSnapshot(socketPath, snapshotPath, memFilePath string, resume bool, overrides []cloud.FCNetworkOverride) error {
+func (APIClient) LoadSnapshot(socketPath, snapshotPath, memFilePath string, resume bool, overrides []cloud.FCNetworkOverride, vsockPath string) error {
 	client := unixHTTPClientWithTimeout(socketPath, snapshotAPITimeout)
 	body := map[string]any{
 		"snapshot_path": snapshotPath,
@@ -416,7 +433,18 @@ func (APIClient) LoadSnapshot(socketPath, snapshotPath, memFilePath string, resu
 		}
 		body["network_overrides"] = netOverrides
 	}
+	if vsockPath != "" {
+		body["vsock_override"] = map[string]string{"uds_path": vsockPath}
+	}
 	return fcRequest(client, http.MethodPut, "/snapshot/load", body)
+}
+
+func (APIClient) UpdateDrive(socketPath, driveID, pathOnHost string) error {
+	client := unixHTTPClient(socketPath)
+	return fcRequest(client, http.MethodPatch, "/drives/"+driveID, map[string]string{
+		"drive_id":     driveID,
+		"path_on_host": pathOnHost,
+	})
 }
 
 // LinuxNetworkManager is the real cloud.NetworkManager implementation,
