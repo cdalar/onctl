@@ -21,16 +21,17 @@ import (
 
 // fakeFCProcess is a test double for FCProcess.
 type fakeFCProcess struct {
-	pid            int
-	startCalls     int
-	startCfgs      []FCVMConfig
-	startErr       error
-	startBareCalls int
-	startBareErr   error
-	stopCalls      []int
-	running        map[int]bool
-	notOwned       map[int]bool
-	stopErr        error
+	pid             int
+	startCalls      int
+	startCfgs       []FCVMConfig
+	startErr        error
+	startBareCalls  int
+	startBareMounts [][]FCBindMount
+	startBareErr    error
+	stopCalls       []int
+	running         map[int]bool
+	notOwned        map[int]bool
+	stopErr         error
 }
 
 func (f *fakeFCProcess) Start(_ string, cfg FCVMConfig, _ string) (int, error) {
@@ -46,8 +47,9 @@ func (f *fakeFCProcess) Start(_ string, cfg FCVMConfig, _ string) (int, error) {
 	return f.pid, nil
 }
 
-func (f *fakeFCProcess) StartBare(_ string, _ string) (int, error) {
+func (f *fakeFCProcess) StartBare(_ string, _ string, mounts []FCBindMount) (int, error) {
 	f.startBareCalls++
+	f.startBareMounts = append(f.startBareMounts, mounts)
 	if f.startBareErr != nil {
 		return 0, f.startBareErr
 	}
@@ -81,7 +83,11 @@ type fakeFCAPI struct {
 	snapshotCalls     []string // "snapshotPath|memFilePath"
 	createSnapshotErr error
 	loadCalls         []string // "snapshotPath|memFilePath"
+	loadResume        []bool
+	loadVsockPaths    []string
 	loadSnapshotErr   error
+	driveUpdates      []string // "driveID|pathOnHost"
+	updateDriveErr    error
 	setStateErr       error
 }
 
@@ -101,9 +107,16 @@ func (f *fakeFCAPI) CreateSnapshot(_ string, snapshotPath, memFilePath string) e
 	return os.WriteFile(memFilePath, []byte("mem"), 0600)
 }
 
-func (f *fakeFCAPI) LoadSnapshot(_ string, snapshotPath, memFilePath string, _ bool, _ []FCNetworkOverride) error {
+func (f *fakeFCAPI) LoadSnapshot(_ string, snapshotPath, memFilePath string, resume bool, _ []FCNetworkOverride, vsockPath string) error {
 	f.loadCalls = append(f.loadCalls, snapshotPath+"|"+memFilePath)
+	f.loadResume = append(f.loadResume, resume)
+	f.loadVsockPaths = append(f.loadVsockPaths, vsockPath)
 	return f.loadSnapshotErr
+}
+
+func (f *fakeFCAPI) UpdateDrive(_ string, driveID, pathOnHost string) error {
+	f.driveUpdates = append(f.driveUpdates, driveID+"|"+pathOnHost)
+	return f.updateDriveErr
 }
 
 // fakeNetworkManager is a test double for NetworkManager.
@@ -1072,6 +1085,102 @@ func TestProviderFC_Resume_RemovesStaleVsock(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, api.loadCalls, 1)
 	assert.NoFileExists(t, stale, "the restored VMM binds it afresh")
+}
+
+// pauseAsCopyOf pauses VM name with a snapshot like one taken in VM
+// orig's directory, as a VM restored under a new name has: firecracker's
+// bitcode puts the recorded paths' bytes back to back.
+func pauseAsCopyOf(t *testing.T, p ProviderFC, name, orig string) {
+	t.Helper()
+	_, err := p.Deploy(Vm{Name: name})
+	require.NoError(t, err)
+	require.NoError(t, p.Pause(Vm{Name: name}, true))
+	o := p.vmDir(orig)
+	snap := "\x07\x10" + o + "/rootfs.ext4" + o + "/v.sock" + o + "/vmlinuxYconsole=ttyS0"
+	require.NoError(t, os.WriteFile(filepath.Join(p.vmDir(name), "snapshot.snap"), []byte(snap), 0600))
+}
+
+func TestProviderFC_Resume_SnapshotFromAnotherDir(t *testing.T) {
+	p, proc, api, _, _ := newTestFCProvider(t)
+	shortStateDir(t, &p)
+	pauseAsCopyOf(t, p, "copy", "orig")
+
+	_, err := p.Resume(Vm{Name: "copy"})
+	require.NoError(t, err)
+	dir, orig := p.vmDir("copy"), p.vmDir("orig")
+	require.Len(t, proc.startBareMounts, 1)
+	assert.Equal(t, []FCBindMount{{Source: dir, Target: orig}}, proc.startBareMounts[0])
+	assert.Equal(t, []bool{false}, api.loadResume, "loaded paused, to repoint its drives first")
+	assert.Equal(t, []string{filepath.Join(dir, "v.sock")}, api.loadVsockPaths)
+	assert.Equal(t, []string{"rootfs|" + filepath.Join(dir, "rootfs.ext4")}, api.driveUpdates)
+	assert.Equal(t, "Resumed", api.states[len(api.states)-1])
+	assert.NoDirExists(t, orig, "the mount point made for the load is gone")
+	got, err := p.GetByName("copy")
+	require.NoError(t, err)
+	assert.Equal(t, "running", got.Status)
+}
+
+func TestProviderFC_Resume_SnapshotFromLiveVMLeavesItAlone(t *testing.T) {
+	p, proc, api, _, _ := newTestFCProvider(t)
+	shortStateDir(t, &p)
+	_, err := p.Deploy(Vm{Name: "orig"})
+	require.NoError(t, err)
+	before, err := os.ReadDir(p.vmDir("orig"))
+	require.NoError(t, err)
+	pauseAsCopyOf(t, p, "copy", "orig")
+
+	_, err = p.Resume(Vm{Name: "copy"})
+	require.NoError(t, err)
+	assert.Equal(t, []FCBindMount{{Source: p.vmDir("copy"), Target: p.vmDir("orig")}}, proc.startBareMounts[len(proc.startBareMounts)-1])
+	assert.Len(t, api.driveUpdates, 1)
+	after, err := os.ReadDir(p.vmDir("orig"))
+	require.NoError(t, err)
+	assert.Equal(t, before, after, "the original VM's directory is untouched")
+}
+
+func TestProviderFC_Resume_RepointFailureStopsVMM(t *testing.T) {
+	p, proc, api, netm, _ := newTestFCProvider(t)
+	shortStateDir(t, &p)
+	pauseAsCopyOf(t, p, "copy", "orig")
+	api.updateDriveErr = errors.New("boom")
+
+	_, err := p.Resume(Vm{Name: "copy"})
+	require.Error(t, err)
+	assert.NotEmpty(t, proc.stopCalls)
+	assert.NotEmpty(t, netm.deleted)
+	assert.NoDirExists(t, p.vmDir("orig"))
+}
+
+func TestProviderFC_Resume_OwnSnapshotNeedsNoMount(t *testing.T) {
+	p, proc, api, _, _ := newTestFCProvider(t)
+	shortStateDir(t, &p)
+	_, err := p.Deploy(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	require.NoError(t, p.Pause(Vm{Name: "test-vm"}, true))
+	d := p.vmDir("test-vm")
+	require.NoError(t, os.WriteFile(filepath.Join(d, "snapshot.snap"), []byte(d+"/rootfs.ext4"+d+"/v.sock"), 0600))
+
+	_, err = p.Resume(Vm{Name: "test-vm"})
+	require.NoError(t, err)
+	assert.Equal(t, [][]FCBindMount{nil}, proc.startBareMounts)
+	assert.Equal(t, []bool{true}, api.loadResume)
+	assert.Equal(t, []string{""}, api.loadVsockPaths)
+	assert.Empty(t, api.driveUpdates)
+}
+
+func TestSnapshotTakenIn(t *testing.T) {
+	root := "/s/vms"
+	got, err := snapshotTakenIn([]byte("x/s/vms/a/rootfs.ext4/s/vms/a/kernel"), root, "/s/vms/b")
+	require.NoError(t, err)
+	assert.Equal(t, "/s/vms/a", got)
+	got, err = snapshotTakenIn([]byte("/s/vms/b/rootfs.ext4"), root, "/s/vms/b")
+	require.NoError(t, err)
+	assert.Empty(t, got)
+	got, err = snapshotTakenIn([]byte("no paths"), root, "/s/vms/b")
+	require.NoError(t, err)
+	assert.Empty(t, got)
+	_, err = snapshotTakenIn([]byte("/s/vms/a/rootfs.ext4/s/vms/c/x"), root, "/s/vms/b")
+	assert.Error(t, err)
 }
 
 func TestProviderFC_Restart_GivesOldVMVsock(t *testing.T) {

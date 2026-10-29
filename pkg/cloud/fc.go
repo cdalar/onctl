@@ -9,6 +9,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -158,8 +160,15 @@ type FCProcess interface {
 	// configuring or booting it — used for snapshot restore, where the full
 	// device configuration comes from the snapshot itself via
 	// FCAPI.LoadSnapshot rather than from an FCVMConfig. Returns the PID of
-	// the running process.
-	StartBare(socketPath, logFile string) (pid int, err error)
+	// the running process. mounts, if any, are bind mounts for this process
+	// alone, made in a mount namespace of its own (see Resume).
+	StartBare(socketPath, logFile string, mounts []FCBindMount) (pid int, err error)
+}
+
+// FCBindMount makes Source visible at Target to one firecracker process.
+type FCBindMount struct {
+	Source string
+	Target string
 }
 
 // FCAPI issues runtime control requests to a running firecracker
@@ -178,8 +187,11 @@ type FCAPI interface {
 	// socketPath. overrides re-maps snapshotted network interfaces to
 	// host-local TAP devices, which never survive a snapshot/restore since
 	// they're host-side only. If resume is true the VM's vCPUs are resumed
-	// immediately after load.
-	LoadSnapshot(socketPath, snapshotPath, memFilePath string, resume bool, overrides []FCNetworkOverride) error
+	// immediately after load. vsockPath, if not empty, replaces the
+	// snapshotted vsock device's socket path.
+	LoadSnapshot(socketPath, snapshotPath, memFilePath string, resume bool, overrides []FCNetworkOverride, vsockPath string) error
+	// UpdateDrive points a loaded microVM's drive driveID at pathOnHost.
+	UpdateDrive(socketPath, driveID, pathOnHost string) error
 }
 
 // FCNetworkOverride re-maps a snapshotted network interface to a host-local
@@ -983,6 +995,16 @@ func (p ProviderFC) Pause(server Vm, hot bool) error {
 // in. Works unmodified against a vmDir copied in from another host, which
 // is the whole point — the snapshot + rootfs image is a fully portable
 // microVM.
+//
+// A vmDir copied in under another name needs more: a snapshot records its
+// drives' and vsock socket's absolute paths, in the VM directory it was
+// taken in, and firecracker can override a vsock path at load but not a
+// drive's. So when the snapshot names another VM's directory, the process
+// is started with this VM's directory bind-mounted over that one -- for it
+// alone, so another VM still living there is never touched -- loaded
+// paused, its drives pointed at this VM's own files, and only then resumed.
+// The next Pause records those, but not the kernel path the boot source
+// keeps, so a moved VM takes this route on every resume.
 func (p ProviderFC) Resume(server Vm) (Vm, error) {
 	vm, err := loadFCMetadata(p.metadataPath(server.Name))
 	if err != nil {
@@ -1024,22 +1046,60 @@ func (p ProviderFC) Resume(server Vm) (Vm, error) {
 		return Vm{}, fmt.Errorf("failed to create tap device: %w", err)
 	}
 
-	logFile := filepath.Join(p.vmDir(server.Name), "fc.log")
+	dir := p.vmDir(server.Name)
+	snap, err := os.ReadFile(vm.SnapshotStatePath)
+	if err != nil {
+		_ = p.Net.DeleteTap(tapDevice)
+		return Vm{}, fmt.Errorf("snapshot state file for %q: %w", server.Name, err)
+	}
+	from, err := snapshotTakenIn(snap, filepath.Join(p.Config.StateDir, "vms"), dir)
+	if err != nil {
+		_ = p.Net.DeleteTap(tapDevice)
+		return Vm{}, fmt.Errorf("microVM %q: %w", server.Name, err)
+	}
+	var mounts []FCBindMount
+	if from != "" {
+		// The mount needs a directory to go on. One made here stays empty
+		// on the host and goes once the load is done; removing it then
+		// detaches the process's mount, which no longer matters -- it
+		// holds its files open, and every path it keeps using is this
+		// VM's own by then.
+		if _, err := os.Stat(from); os.IsNotExist(err) {
+			if err := os.Mkdir(from, 0755); err != nil {
+				_ = p.Net.DeleteTap(tapDevice)
+				return Vm{}, fmt.Errorf("microVM %q: %w", server.Name, err)
+			}
+			defer func() { _ = os.Remove(from) }()
+		}
+		mounts = []FCBindMount{{Source: dir, Target: from}}
+	}
+
+	logFile := filepath.Join(dir, "fc.log")
 	// The snapshot brings the vsock device back on the path it was taken
-	// with -- this VM's own, since vmDir moves with it.
+	// with -- this VM's own, unless it moved (above).
 	removeStaleVsock(vm.VsockPath)
-	pid, err := p.Process.StartBare(vm.SocketPath, logFile)
+	pid, err := p.Process.StartBare(vm.SocketPath, logFile, mounts)
 	if err != nil {
 		_ = p.Net.DeleteTap(tapDevice)
 		return Vm{}, fmt.Errorf("failed to start microVM process: %w", err)
 	}
 
-	if err := p.API.LoadSnapshot(vm.SocketPath, vm.SnapshotStatePath, vm.SnapshotMemFilePath, true, []FCNetworkOverride{
-		{IfaceID: "eth0", TapDevice: tapDevice},
-	}); err != nil {
+	overrides := []FCNetworkOverride{{IfaceID: "eth0", TapDevice: tapDevice}}
+	vsockPath := ""
+	if from != "" && vm.VsockPath != "" && strings.Contains(string(snap), filepath.Join(from, filepath.Base(vm.VsockPath))) {
+		vsockPath = vm.VsockPath
+	}
+	if err := p.API.LoadSnapshot(vm.SocketPath, vm.SnapshotStatePath, vm.SnapshotMemFilePath, from == "", overrides, vsockPath); err != nil {
 		_ = p.Process.Stop(pid)
 		_ = p.Net.DeleteTap(tapDevice)
 		return Vm{}, fmt.Errorf("failed to load microVM snapshot: %w", err)
+	}
+	if from != "" {
+		if err := p.repointMovedDrives(vm, snap, from); err != nil {
+			_ = p.Process.Stop(pid)
+			_ = p.Net.DeleteTap(tapDevice)
+			return Vm{}, fmt.Errorf("microVM %q: %w", server.Name, err)
+		}
 	}
 
 	vm.PID = pid
@@ -1054,6 +1114,48 @@ func (p ProviderFC) Resume(server Vm) (Vm, error) {
 		return Vm{}, fmt.Errorf("microVM %q resumed but failed to save metadata: %w", server.Name, err)
 	}
 	return mapFCVM(vm), nil
+}
+
+// repointMovedDrives points the drives of vm, loaded paused from a
+// snapshot taken in directory from, at vm's own files, then resumes it.
+func (p ProviderFC) repointMovedDrives(vm fcVM, snap []byte, from string) error {
+	drives := map[string]string{"rootfs": vm.RootfsPath}
+	if vm.CachePath != "" && strings.Contains(string(snap), filepath.Join(from, filepath.Base(vm.CachePath))) {
+		drives["cache"] = vm.CachePath
+	}
+	for id, path := range drives {
+		if err := p.API.UpdateDrive(vm.SocketPath, id, path); err != nil {
+			return fmt.Errorf("failed to point drive %s at %s: %w", id, path, err)
+		}
+	}
+	if err := p.API.SetState(vm.SocketPath, "Resumed"); err != nil {
+		return fmt.Errorf("failed to resume after loading its snapshot: %w", err)
+	}
+	return nil
+}
+
+// snapshotTakenIn returns the VM directory under vmsRoot that snapshot
+// snap was taken in, when that isn't dir, or "" when it is (or names
+// none). Firecracker's snapshot format (bitcode) stores strings' bytes back
+// to back, so a path's end can't be found -- but a VM directory's name
+// always ends at the next "/".
+func snapshotTakenIn(snap []byte, vmsRoot, dir string) (string, error) {
+	re := regexp.MustCompile(regexp.QuoteMeta(vmsRoot+"/") + `([A-Za-z0-9._-]+)/`)
+	var found []string
+	for _, m := range re.FindAllSubmatch(snap, -1) {
+		d := filepath.Join(vmsRoot, string(m[1]))
+		if d != filepath.Clean(dir) && !slices.Contains(found, d) {
+			found = append(found, d)
+		}
+	}
+	switch len(found) {
+	case 0:
+		return "", nil
+	case 1:
+		return found[0], nil
+	default:
+		return "", fmt.Errorf("its snapshot names several other VMs' directories (%s), so it can't be resumed; `onctl restart` cold-boots it from its own disk", strings.Join(found, ", "))
+	}
 }
 
 // Restart cold-boots an existing microVM from its own disk: it stops the
