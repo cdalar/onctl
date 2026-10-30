@@ -22,7 +22,7 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/term v0.47.0
-	google.golang.org/api v0.308.0
+	google.golang.org/api v0.309.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/apimachinery v0.37.1
