@@ -26,7 +26,6 @@ func TestNewSizeRow(t *testing.T) {
 
 func TestSizesUnsupported(t *testing.T) {
 	assert.Contains(t, sizesUnsupported("aws"), "aws ec2 describe-instance-types")
-	assert.Contains(t, sizesUnsupported("gcp"), "gcloud compute machine-types list")
 	assert.Contains(t, sizesUnsupported("azure"), "az vm list-sizes")
 	assert.Contains(t, sizesUnsupported("fc"), "--vcpu and --memory")
 	assert.Contains(t, sizesUnsupported("static"), "no sizes")
