@@ -3,14 +3,17 @@ package tools
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cdalar/onctl/internal/files"
@@ -146,14 +149,45 @@ func (r *Remote) WaitForSSH(timeout string) {
 	timer := time.After(duration)
 
 	r.DialTimeout = 2 * time.Second
+	var lastErr error
+	var hintSince time.Time // when the current hint-worthy failure began
+	hinted := false
 	for {
 		select {
 		case <-timer:
-			log.Fatalln("Exiting.. Timeout reached while waiting for SSH on IP " + r.IPAddress + " on port " + strconv.Itoa(r.SSHPort))
+			msg := "Exiting.. Timeout reached while waiting for SSH on IP " + r.IPAddress + " on port " + strconv.Itoa(r.SSHPort)
+			if lastErr != nil {
+				msg += ": " + lastErr.Error()
+			}
+			log.Fatalln(msg)
 			return
 		default:
-			if err := r.NewSSHConnection(); err == nil {
+			err := r.NewSSHConnection()
+			if err == nil {
 				return
+			}
+			// Log each distinct failure, not every 100ms retry of it.
+			if lastErr == nil || err.Error() != lastErr.Error() {
+				log.Println("[DEBUG] SSH not ready:", err)
+			}
+			lastErr = err
+			// The hint waits out a few seconds of the failure, in case
+			// it is a guest still coming up rather than a block.
+			hint := sshWaitHint(err, runtime.GOOS)
+			if hint == "" {
+				hintSince = time.Time{}
+			} else if hintSince.IsZero() {
+				hintSince = time.Now()
+			}
+			if hint != "" && !hinted && time.Since(hintSince) >= 3*time.Second {
+				hinted = true
+				if r.Spinner != nil {
+					r.Spinner.Stop()
+				}
+				fmt.Fprintln(os.Stderr, hint)
+				if r.Spinner != nil {
+					r.Spinner.Restart()
+				}
 			}
 			// 100ms: measured against a real firecracker microVM, a failed
 			// dial while the guest is still booting fails in well under a
@@ -164,6 +198,19 @@ func (r *Remote) WaitForSSH(timeout string) {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
+}
+
+// sshWaitHint explains a dial failure that retrying won't fix, or returns
+// "". On macOS, "no route to host" to a LAN address (an Apple container's
+// 192.168.64.0/18 vmnet, say) that /usr/bin/ssh reaches fine is Local
+// Network privacy refusing this binary: the connect fails with EHOSTUNREACH
+// until the terminal app running onctl is allowed in System Settings.
+func sshWaitHint(err error, goos string) string {
+	if goos != "darwin" || !errors.Is(err, syscall.EHOSTUNREACH) {
+		return ""
+	}
+	return "\033[33m!\033[0m SSH: no route to host. If `ssh` reaches this address but onctl can't, macOS is blocking it:\n" +
+		"  allow your terminal app in System Settings > Privacy & Security > Local Network, then run onctl again."
 }
 
 // exists returns whether the given file or directory exists
