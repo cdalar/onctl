@@ -148,6 +148,11 @@ var sshCmd = &cobra.Command{
 		log.Println("[DEBUG] privateKeyFile:", privateKeyFile)
 
 		isDirectSSH := sshOpt.ConfigFile == "" && len(applyFileFound) == 0 && len(sshOpt.DownloadFiles) == 0 && len(sshOpt.UploadFiles) == 0
+		if cloudProvider == "openshell" {
+			if err := openShellSSHCheck(applyFileFound, sshOpt.UploadFiles, sshOpt.DownloadFiles); err != nil {
+				log.Fatalln(err)
+			}
+		}
 		// Imported (static) hosts carry their own key/port from `onctl import`;
 		// skip reading the global default key — we'll load credentials from inventory below.
 		usesImportedKey := cloudProvider == "static" && sshOpt.Key == ""

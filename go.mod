@@ -5,6 +5,7 @@ go 1.26.10
 require (
 	cloud.google.com/go/compute v1.74.1
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5 v5.2.0
+	github.com/NVIDIA/OpenShell/sdk/go v0.1.6
 	github.com/aws/aws-sdk-go-v2 v1.47.5
 	github.com/aws/aws-sdk-go-v2/config v1.33.13
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.343.0

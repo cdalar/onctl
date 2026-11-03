@@ -55,7 +55,7 @@ func TestCheckCloudProvider_WithEnvVar(t *testing.T) {
 
 func TestCloudProviderList(t *testing.T) {
 	// Test that cloud provider list contains expected providers
-	expectedProviders := []string{"aws", "hetzner", "azure", "gcp", "ovh", "fc", "ch", "ac", "static", "boxes"}
+	expectedProviders := []string{"aws", "hetzner", "azure", "gcp", "ovh", "fc", "ch", "ac", "static", "boxes", "openshell"}
 	assert.Equal(t, expectedProviders, cloudProviderList)
 }
 

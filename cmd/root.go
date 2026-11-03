@@ -14,6 +14,7 @@ import (
 	"github.com/cdalar/onctl/internal/providerfc"
 	"github.com/cdalar/onctl/internal/providergcp"
 	"github.com/cdalar/onctl/internal/providerhtz"
+	"github.com/cdalar/onctl/internal/provideropenshell"
 	"github.com/cdalar/onctl/internal/providerovh"
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/cdalar/onctl/pkg/cloud"
@@ -80,6 +81,9 @@ var (
 			if err := initState(); err != nil {
 				return err
 			}
+			if isClaudeCommand(cmd) && cloudProvider == "openshell" {
+				return errClaudeOnOpenShell
+			}
 			// The images command initializes its own provider lazily.
 			if cmd.Name() != "images" {
 				initProvider(cloudProvider)
@@ -88,7 +92,7 @@ var (
 		},
 	}
 	cloudProvider     string
-	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "ovh", "fc", "ch", "ac", "static", "boxes"}
+	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "ovh", "fc", "ch", "ac", "static", "boxes", "openshell"}
 	provider          cloud.CloudProviderInterface
 	providerFlag      string
 )
@@ -140,12 +144,13 @@ func initState() error {
 	cloudProvider = checkCloudProvider()
 	log.Println("[DEBUG] Cloud: " + cloudProvider)
 	if err := ReadConfig(); err != nil {
-		// boxes needs no onctl.yaml: its defaults are built in, and its
-		// token comes from `onctl login`.
-		if cloudProvider != "boxes" {
+		// boxes and openshell need no onctl.yaml: their defaults are
+		// built in, and their credentials come from `onctl login` and the
+		// openshell CLI's gateway registration.
+		if !configOptional(cloudProvider) {
 			return err
 		}
-		log.Println("[DEBUG] boxes: no onctl.yaml, using defaults:", err)
+		log.Println("[DEBUG] "+cloudProvider+": no onctl.yaml, using defaults:", err)
 	}
 	if cloudProvider == "gcp" {
 		if err := resolveGCPProject(); err != nil {
@@ -219,6 +224,11 @@ func resolveAzureIdentifiers() error {
 		}
 	}
 	return nil
+}
+
+// configOptional reports whether provider works without an onctl.yaml.
+func configOptional(provider string) bool {
+	return provider == "boxes" || provider == "openshell"
 }
 
 // claudeProvider is the provider flag for onctl claude: boxes, which need
@@ -366,6 +376,36 @@ func initProvider(cloudProvider string) {
 				Image:    viper.GetString("boxes.vm.image"),
 				Username: viper.GetString("boxes.vm.username"),
 				OnctlBin: bin,
+			},
+		}
+	case "openshell":
+		gw, err := provideropenshell.Connect(viper.GetString("openshell.gateway"))
+		if err != nil {
+			log.Fatalln(err)
+		}
+		bin, err := os.Executable()
+		if err != nil {
+			bin = "onctl"
+		}
+		// The relay logs in as the sandbox's own user whatever is asked
+		// for; the ssh client just needs a name to send.
+		viper.SetDefault("openshell.vm.username", "sandbox")
+		// Without an onctl.yaml (see configOptional) there's no key path
+		// at all; onctl.yaml's own default lets getSSHKeyFilePaths fall
+		// back to whichever key type exists. The relay doesn't check the
+		// key, but the ssh client needs one to offer.
+		viper.SetDefault("ssh.publicKey", "~/.ssh/id_rsa.pub")
+		viper.SetDefault("ssh.privateKey", "~/.ssh/id_rsa")
+		provider = &cloud.ProviderOpenShell{
+			Sandboxes: gw.Client.Sandboxes(),
+			SSH:       gw.Client.SSH(),
+			TCP:       gw.Client.TCP(),
+			Config: cloud.OpenShellConfig{
+				Gateway:   gw.Name,
+				Workspace: viper.GetString("openshell.workspace"),
+				Image:     viper.GetString("openshell.vm.image"),
+				Username:  viper.GetString("openshell.vm.username"),
+				OnctlBin:  bin,
 			},
 		}
 	case "static":

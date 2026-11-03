@@ -768,9 +768,10 @@ func (m tuiModel) switchProvider(name string) (tea.Model, tea.Cmd) {
 	if name == cloudProvider {
 		return m, m.say("already on %s", name)
 	}
-	// boxes needs no onctl.yaml (see initState); the others fail without
-	// a .onctl directory, so offer the `onctl init` they ask for.
-	if name != "boxes" && tuiNeedsInit() {
+	// boxes and openshell need no onctl.yaml (see initState); the others
+	// fail without a .onctl directory, so offer the `onctl init` they ask
+	// for.
+	if !configOptional(name) && tuiNeedsInit() {
 		return m.askInit(name)
 	}
 	m.switchTo = name

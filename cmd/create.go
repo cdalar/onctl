@@ -239,8 +239,13 @@ var createCmd = &cobra.Command{
 				viper.Set("aws.vm.image", opt.Vm.Image)
 			}
 		}
-		if opt.Vm.Image != "" && cloudProvider != "hetzner" && cloudProvider != "aws" && cloudProvider != "ovh" && cloudProvider != "boxes" && cloudProvider != "ac" {
-			log.Fatalf("--image flag is only supported for the hetzner, aws, ovh, boxes and ac providers (current provider: %s)", cloudProvider)
+		if opt.Vm.Image != "" && cloudProvider != "hetzner" && cloudProvider != "aws" && cloudProvider != "ovh" && cloudProvider != "boxes" && cloudProvider != "ac" && cloudProvider != "openshell" {
+			log.Fatalf("--image flag is only supported for the hetzner, aws, ovh, boxes, ac and openshell providers (current provider: %s)", cloudProvider)
+		}
+		if cloudProvider == "openshell" {
+			if err := openShellCreateCheck(opt); err != nil {
+				log.Fatalln(err)
+			}
 		}
 		if cloudProvider == "boxes" {
 			if opt.Domain != "" {
@@ -331,7 +336,11 @@ var createCmd = &cobra.Command{
 		s.Stop()
 		if _, viaProvider := provider.(cloud.Dialer); viaProvider {
 			// No public address (boxes): reached through the provider.
-			fmt.Println("\033[32m✔\033[0m VM: " + vm.Name + " (private IP " + vm.PrivateIP + ")")
+			if vm.PrivateIP != "" {
+				fmt.Println("\033[32m✔\033[0m VM: " + vm.Name + " (private IP " + vm.PrivateIP + ")")
+			} else {
+				fmt.Println("\033[32m✔\033[0m VM: " + vm.Name)
+			}
 		} else {
 			fmt.Println("\033[32m✔\033[0m VM IP: " + vm.IP)
 		}
@@ -373,7 +382,7 @@ var createCmd = &cobra.Command{
 			}
 		}
 
-		if cloudProvider != "fc" && cloudProvider != "ch" && cloudProvider != "ac" && cloudProvider != "boxes" {
+		if cloudProvider != "fc" && cloudProvider != "ch" && cloudProvider != "ac" && cloudProvider != "boxes" && cloudProvider != "openshell" {
 			s.Suffix = " Waiting for VM to be ready..."
 			s.Restart()
 			remote.WaitForCloudInit(viper.GetString("vm.cloud-init.timeout"))

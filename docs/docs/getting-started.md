@@ -29,7 +29,7 @@ the global ones). Either way you end up with a directory that looks like this:
 
 `onctl.yaml` is the single source of truth for every configurable parameter
 for every provider: global settings (`vm`, `ssh`, `actions`), then a section
-each for `hetzner`, `aws`, `gcp`, `azure`, `ovh`, `fc`, `ch` and `ac`,
+each for `hetzner`, `aws`, `gcp`, `azure`, `ovh`, `fc`, `ch`, `ac` and `openshell`,
 pre-filled with working defaults. Edit the values you want to change; CLI flags
 (`onctl create --help`) still override whatever is in this file.
 `gcp.project`, `azure.subscriptionId` and `ovh.serviceName` ship as
@@ -56,13 +56,14 @@ onctl -p hetzner ls
 | `fc` | local [Firecracker](https://firecracker-microvm.github.io) microVMs | Linux with KVM, the `firecracker` binary, a kernel and rootfs image (`fc.kernelImage`, `fc.rootfsImage`) |
 | `ch` | local [Cloud Hypervisor](https://github.com/cloud-hypervisor/cloud-hypervisor) microVMs | Linux with KVM, the `cloud-hypervisor` binary, a kernel and rootfs image (`ch.kernelImage`, `ch.rootfsImage`); no pause/resume yet |
 | `ac` | local sandboxes on a Mac with [Apple container](https://github.com/apple/container): each a lightweight Linux VM on Virtualization.framework | macOS 26+, the `container` CLI and `container system start`; any OCI image via `--image` (default `ubuntu:24.04`), sshd set up on first boot; `pause`/`resume` are `container stop`/`start` |
+| `openshell` | sandboxes on an [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) gateway, with its policy enforced (outbound connections denied by default) | a gateway registered with the `openshell` CLI (`openshell gateway add`; the `openshell` template in [onctl-templates](https://github.com/cdalar/onctl-templates) sets one up on a VM); sandboxes are unprivileged, so software comes from `--image`, not `-a`; `pause`/`resume` stop and start the sandbox |
 | `static` | servers onctl didn't create, registered with `onctl import` | ssh access to them |
 
 :::note
 With `ONCTL_CLOUD` unset and no `-p`, onctl picks the first provider whose
 credentials it finds in the environment, in this order: aws, azure, gcp,
 hetzner, ovh. The local and hosted providers (`fc`, `ch`, `ac`, `boxes`,
-`static`) always have to be named. `onctl claude` is the exception: with
+`openshell`, `static`) always have to be named. `onctl claude` is the exception: with
 nothing set it uses `boxes`.
 :::
 
@@ -133,8 +134,8 @@ onctl restart my-vm      # fc only: cold-boot it from its own disk, optionally -
 ```
 
 `pause --hot` snapshots without shutting down first (faster, crash-consistent).
-On `ac`, pause and resume stop and start the container; `ch` has no
-pause/resume yet.
+On `ac`, pause and resume stop and start the container, and on `openshell`
+the sandbox; `ch` has no pause/resume yet.
 
 ## The rest
 
