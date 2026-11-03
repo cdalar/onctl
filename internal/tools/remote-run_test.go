@@ -2,11 +2,13 @@ package tools
 
 import (
 	"bufio"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -142,5 +144,19 @@ func TestApplyCommandReturnsWhenScriptExits(t *testing.T) {
 	}
 	if elapsed > 850*time.Millisecond {
 		t.Errorf("a 0.2s apply file held the session for %s", elapsed)
+	}
+}
+
+func TestSSHWaitHint(t *testing.T) {
+	unreach := &net.OpError{Op: "dial", Net: "tcp", Err: &os.SyscallError{Syscall: "connect", Err: syscall.EHOSTUNREACH}}
+	if sshWaitHint(unreach, "darwin") == "" {
+		t.Error("darwin EHOSTUNREACH: want a Local Network hint")
+	}
+	if got := sshWaitHint(unreach, "linux"); got != "" {
+		t.Errorf("linux: want no hint, got %q", got)
+	}
+	refused := &net.OpError{Op: "dial", Net: "tcp", Err: &os.SyscallError{Syscall: "connect", Err: syscall.ECONNREFUSED}}
+	if got := sshWaitHint(refused, "darwin"); got != "" {
+		t.Errorf("connection refused (guest still booting): want no hint, got %q", got)
 	}
 }
