@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"cloud.google.com/go/compute/apiv1/computepb"
+
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -111,4 +113,23 @@ func TestProviderBoxes_ListSizes(t *testing.T) {
 		{Name: "small", VCPU: 1, MemoryMiB: 1024, DiskGiB: 10},
 		{Name: "medium", VCPU: 2, MemoryMiB: 4096, DiskGiB: 20, Default: true},
 	}, sizes)
+}
+
+func TestGcpSizes(t *testing.T) {
+	str := func(s string) *string { return &s }
+	i32 := func(i int32) *int32 { return &i }
+	types := []*computepb.MachineType{
+		{Name: str("e2-standard-4"), GuestCpus: i32(4), MemoryMb: i32(16384), Architecture: str("X86_64")},
+		{Name: str("e2-medium"), GuestCpus: i32(2), MemoryMb: i32(4096), Architecture: str("X86_64")},
+		{Name: str("t2a-standard-1"), GuestCpus: i32(1), MemoryMb: i32(4096), Architecture: str("ARM64")},
+		// Deprecated types are still listed by the API but must not be offered.
+		{Name: str("n1-old"), GuestCpus: i32(1), MemoryMb: i32(3840), Deprecated: &computepb.DeprecationStatus{State: str("DEPRECATED")}},
+	}
+	sizes := gcpSizes(types, "e2-medium")
+	require.Len(t, sizes, 3)
+	assert.Equal(t, "t2a-standard-1", sizes[0].Name)
+	assert.Equal(t, "arm", sizes[0].Arch)
+	assert.Equal(t, CloudSize{Name: "e2-medium", VCPU: 2, MemoryMiB: 4096, Arch: "x86", Default: true}, sizes[1])
+	assert.Equal(t, "e2-standard-4", sizes[2].Name)
+	assert.False(t, sizes[2].Default)
 }

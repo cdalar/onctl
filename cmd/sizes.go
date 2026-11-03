@@ -47,8 +47,6 @@ func sizesUnsupported(provider string) string {
 		return "Imported (static) hosts already exist: there are no sizes to choose."
 	case "aws":
 		return "onctl sizes doesn't list AWS instance types yet. Pass one with --type (e.g. t3.medium); see them with:\n  aws ec2 describe-instance-types --query 'InstanceTypes[].InstanceType'"
-	case "gcp":
-		return "onctl sizes doesn't list GCP machine types yet. Pass one with --type (e.g. e2-medium); see them with:\n  gcloud compute machine-types list --zones <zone>"
 	case "azure":
 		return "onctl sizes doesn't list Azure VM sizes yet. Pass one with --type (e.g. Standard_B2s); see them with:\n  az vm list-sizes --location <location> -o table"
 	}

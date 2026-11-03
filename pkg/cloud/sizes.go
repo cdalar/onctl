@@ -6,7 +6,11 @@ import (
 	"sort"
 	"strconv"
 
+	compute "cloud.google.com/go/compute/apiv1"
+	"cloud.google.com/go/compute/apiv1/computepb"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"github.com/spf13/viper"
+	"google.golang.org/api/iterator"
 )
 
 var (
@@ -125,4 +129,65 @@ func sortSizes(sizes []CloudSize) {
 		}
 		return a.Name < b.Name
 	})
+}
+
+var _ SizeLister = ProviderGcp{}
+
+// ListSizes lists the GCP machine types offered in the configured zone.
+// The Compute API publishes no prices.
+func (p ProviderGcp) ListSizes() ([]CloudSize, error) {
+	ctx := context.Background()
+	client, err := compute.NewMachineTypesRESTClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = client.Close() }()
+	it := client.List(ctx, &computepb.ListMachineTypesRequest{
+		Project: viper.GetString("gcp.project"),
+		Zone:    viper.GetString("gcp.zone"),
+	})
+	var types []*computepb.MachineType
+	for {
+		mt, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("listing machine types: %w", err)
+		}
+		types = append(types, mt)
+	}
+	return gcpSizes(types, viper.GetString("gcp.type")), nil
+}
+
+// gcpSizes turns machine types into sizes, leaving out deprecated ones
+// (GCP keeps listing them, but new VMs shouldn't pick them).
+func gcpSizes(types []*computepb.MachineType, defaultType string) []CloudSize {
+	var out []CloudSize
+	for _, t := range types {
+		if s := t.GetDeprecated().GetState(); s != "" && s != "ACTIVE" {
+			continue
+		}
+		out = append(out, CloudSize{
+			Name:      t.GetName(),
+			VCPU:      int(t.GetGuestCpus()),
+			MemoryMiB: int(t.GetMemoryMb()),
+			Arch:      gcpArch(t.GetArchitecture()),
+			Default:   t.GetName() == defaultType,
+		})
+	}
+	sortSizes(out)
+	return out
+}
+
+// gcpArch maps GCP's architecture names to the ones the other providers
+// use (x86, arm).
+func gcpArch(a string) string {
+	switch a {
+	case "X86_64":
+		return "x86"
+	case "ARM64":
+		return "arm"
+	}
+	return ""
 }
