@@ -20,6 +20,7 @@ Check 🌍 https://onctl.sh for detailed documentation
 - 🌍 Simple intuitive CLI to run VMs in seconds.
 - ⛅️ One CLI for aws, azure, gcp, hetzner and ovh, plus local microVMs with Firecracker (`fc`), Cloud Hypervisor (`ch`) and, on a Mac, Apple containers (`ac`) -- no cloud account needed for those three.
 - 📦 Hosted microVMs with the `boxes` provider: no cloud account, no host to run. `onctl login` once with a token from [boxctl.io](https://boxctl.io), then `onctl create -p boxes`.
+- 🛡️ Policy-enforced sandboxes with the `openshell` provider: `onctl create -p openshell` makes a sandbox on an [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) gateway registered with the `openshell` CLI, with outbound connections denied by default. The `openshell` template sets up a gateway on any VM.
 - 🤖 `onctl claude`: run Claude Code on a box instead of your laptop, with your project on it, and get the work back as git branches. See [Claude Code on a box](./claude).
 - 🖥️ `onctl tui`: your VMs in a k9s-style terminal UI -- shell, Claude, create, pause, resume, destroy, images, sizes, GitHub repos. See [Terminal UI](./tui).
 - 🚀 Sets your public key and gives you SSH access with `onctl ssh <vm-name>`; `onctl port-forward` brings the VM's ports here.
@@ -140,7 +141,7 @@ Flags:
   -c, --config string                             Path to onctl.yaml configuration file (overrides the .onctl directory lookup)
   -h, --help                                      help for onctl
       --project gcloud config get-value project   GCP: project ID (falls back to gcloud config get-value project when the onctl.yaml placeholder is present)
-  -p, --provider string                           cloud provider: aws, hetzner, azure, gcp, ovh, fc, ch, ac, static, boxes (overrides ONCTL_CLOUD)
+  -p, --provider string                           cloud provider: aws, hetzner, azure, gcp, ovh, fc, ch, ac, static, boxes, openshell (overrides ONCTL_CLOUD)
       --resource-group string                     Azure: resource group (required for the azure provider; falls back to the az CLI's configured default group, if any)
       --service-name string                       OVH: Public Cloud project service name (required for the ovh provider)
       --subscription-id az account show           Azure: subscription ID (required for the azure provider; falls back to az account show)

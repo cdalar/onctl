@@ -36,16 +36,17 @@ func (k placeKind) offering() string {
 }
 
 var providerPlaces = map[string]providerPlace{
-	"aws":     {"Amazon Web Services", placeCloud, "Amazon Web Services"},
-	"hetzner": {"Hetzner Cloud", placeCloud, "Hetzner Cloud"},
-	"azure":   {"Microsoft Azure", placeCloud, "Microsoft Azure"},
-	"gcp":     {"Google Cloud", placeCloud, "Google Cloud"},
-	"ovh":     {"OVHcloud", placeCloud, "OVHcloud"},
-	"fc":      {"Firecracker microVM", placeLocal, "Firecracker microVM"},
-	"ch":      {"Cloud Hypervisor microVM", placeLocal, "Cloud Hypervisor microVM"},
-	"ac":      {"Apple container", placeLocal, "Apple Container"},
-	"static":  {"a static host from onctl.yaml", placeRemote, "Static host (onctl.yaml)"},
-	"boxes":   {"the boxes service", placeSaaS, "Boxes service"},
+	"aws":       {"Amazon Web Services", placeCloud, "Amazon Web Services"},
+	"hetzner":   {"Hetzner Cloud", placeCloud, "Hetzner Cloud"},
+	"azure":     {"Microsoft Azure", placeCloud, "Microsoft Azure"},
+	"gcp":       {"Google Cloud", placeCloud, "Google Cloud"},
+	"ovh":       {"OVHcloud", placeCloud, "OVHcloud"},
+	"fc":        {"Firecracker microVM", placeLocal, "Firecracker microVM"},
+	"ch":        {"Cloud Hypervisor microVM", placeLocal, "Cloud Hypervisor microVM"},
+	"ac":        {"Apple container", placeLocal, "Apple Container"},
+	"static":    {"a static host from onctl.yaml", placeRemote, "Static host (onctl.yaml)"},
+	"boxes":     {"the boxes service", placeSaaS, "Boxes service"},
+	"openshell": {"an OpenShell gateway", placeRemote, "OpenShell gateway"},
 }
 
 // creatingMessage says what is being made for name, and where.

@@ -9,6 +9,7 @@ import (
 
 	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var sshProxyCmd = &cobra.Command{
@@ -70,5 +71,14 @@ func relayStdio(conn io.ReadWriter, in io.Reader, out io.Writer) error {
 }
 
 func init() {
+	// The openshell provider's own ProxyCommand passes these, so the
+	// ssh-proxy it starts reaches the gateway and workspace the command
+	// that started it was using, not just the openshell CLI's active one.
+	sshProxyCmd.Flags().String("openshell-gateway", "", "openshell: gateway name, as the openshell CLI registered it")
+	sshProxyCmd.Flags().String("openshell-workspace", "", "openshell: workspace")
+	_ = sshProxyCmd.Flags().MarkHidden("openshell-gateway")
+	_ = sshProxyCmd.Flags().MarkHidden("openshell-workspace")
+	_ = viper.BindPFlag("openshell.gateway", sshProxyCmd.Flags().Lookup("openshell-gateway"))
+	_ = viper.BindPFlag("openshell.workspace", sshProxyCmd.Flags().Lookup("openshell-workspace"))
 	rootCmd.AddCommand(sshProxyCmd)
 }

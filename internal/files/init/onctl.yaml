@@ -133,3 +133,17 @@ ac:
   binPath: container               # path to the container CLI
   vm:
     username: root                 # ssh user (created in the sandbox if missing)
+
+# ---- OpenShell (openshell) ----
+# Sandboxes on an NVIDIA OpenShell gateway (https://github.com/NVIDIA/OpenShell),
+# with its policy enforced: outbound connections are denied by default.
+# onctl uses the gateways the openshell CLI has registered (`openshell gateway
+# add`); the onctl-templates `openshell` template sets one up on a VM and
+# prints how to register it. A sandbox is unprivileged and has no file
+# transfer, so apply files (-a) and cloud-init don't run there: put what it
+# needs in its image. Pause/resume stop and start it (files kept).
+openshell:
+  gateway: ""                      # openshell CLI gateway name; empty = its active gateway
+  workspace: default               # OpenShell workspace
+  vm:
+    image: ""                      # sandbox image (or --image); empty = the gateway's default_image
