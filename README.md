@@ -149,15 +149,30 @@ Usage:
   onctl [command]
 
 Available Commands:
-  completion  Generate the autocompletion script for the specified shell
-  create      Create a VM
-  destroy     Destroy VM(s)
-  help        Help about any command
-  import      Import an existing server so it can be managed with ssh/ls
-  init        init onctl environment
-  ls          List VMs
-  ssh         Spawn an SSH connection to a VM
-  version     Print the version number of onctl
+  action        Execute a custom action from GitHub
+  claude        Run Claude Code on a box, with this project on it
+  completion    Generate the autocompletion script for the specified shell
+  create        Create a VM
+  deploy        Deploy a Docker image to a remote VM
+  destroy       Destroy VM(s)
+  env           Manage environments
+  help          Help about any command
+  images        List available OS images for the current cloud provider
+  import        Import an existing server so it can be managed with ssh/ls
+  init          init onctl environment
+  login         Log in to hosted boxes (-p boxes) with a personal token
+  logout        Forget the saved boxes token
+  ls            List VMs
+  pause         Snapshot and delete a VM to stop compute cost (keeps its IP)
+  port-forward  Forward local ports to ports on a VM, over ssh
+  restart       Cold-boot a VM again from its own disk, optionally on a new kernel (fc)
+  resume        Recreate a paused VM from its snapshot
+  sizes         List the VM sizes the current provider offers (what --type takes)
+  ssh           Spawn an SSH connection to a VM
+  ssh-proxy     Relay stdin/stdout to a VM's port through the provider (for ssh's ProxyCommand)
+  templates     Manage onctl templates
+  tui           Browse and manage your VMs in a k9s-style terminal UI
+  version       Print the version number of onctl
 
 Flags:
   -h, --help   help for onctl
