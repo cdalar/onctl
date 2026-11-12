@@ -161,6 +161,10 @@ type CloudImage struct {
 	Type        string
 	OSFlavor    string
 	OSVersion   string
+	// Size and URL are set for an image that is a file to download (the
+	// fc provider's public catalog): its unpacked size and where to get it.
+	Size string
+	URL  string
 }
 
 // ImageLister is an optional interface for providers that support listing

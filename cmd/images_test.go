@@ -107,3 +107,29 @@ func TestImagesCmd_HetznerPath_ListError(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+// TestImagesCmd_FCPath: `onctl images -p fc` lists the public catalog
+// through its own lister, without building the fc provider -- so it works
+// on a machine that can't run Firecracker.
+func TestImagesCmd_FCPath(t *testing.T) {
+	origProvider := cloudProvider
+	origLister := fcImageLister
+	defer func() {
+		cloudProvider = origProvider
+		fcImageLister = origLister
+	}()
+
+	called := false
+	cloudProvider = "fc"
+	fcImageLister = func() cloud.ImageLister {
+		called = true
+		return fakeImageLister{images: []cloud.CloudImage{
+			{Name: "alpine", Type: "rootfs", OSFlavor: "alpine", Size: "512 MiB", URL: "https://example.test/alpine.zst"},
+		}}
+	}
+
+	assert.NotPanics(t, func() {
+		imagesCmd.Run(imagesCmd, []string{})
+	})
+	assert.True(t, called, "the fc catalog lister was not used")
+}
