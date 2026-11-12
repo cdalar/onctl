@@ -5,6 +5,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/cdalar/onctl/internal/providerfc"
 	"github.com/cdalar/onctl/internal/providerhtz"
 	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/spf13/cobra"
@@ -13,6 +14,12 @@ import (
 // hetznerImageLister returns the ImageLister to use. Overridable in tests.
 var hetznerImageLister = func() cloud.ImageLister {
 	return cloud.ProviderHetzner{Client: providerhtz.GetClient()}
+}
+
+// fcImageLister lists the images published for the fc provider.
+// Overridable in tests.
+var fcImageLister = func() cloud.ImageLister {
+	return providerfc.CatalogLister{BaseURL: providerfc.PublicCatalogURL}
 }
 
 func init() {
@@ -27,6 +34,8 @@ var imagesCmd = &cobra.Command{
 		switch cloudProvider {
 		case "hetzner":
 			lister = hetznerImageLister()
+		case "fc":
+			lister = fcImageLister()
 		case "boxes":
 			ensureProvider()
 			lister, _ = provider.(cloud.ImageLister)
@@ -45,7 +54,8 @@ var imagesCmd = &cobra.Command{
 
 // imagesTemplate is the images table, without the columns no image fills
 // in: providers know different things about an image (boxes: a name and
-// a description; Hetzner: its OS flavor and version too).
+// a description; Hetzner: its OS flavor and version too; fc: a size and
+// the URL to download it from).
 func imagesTemplate(images []cloud.CloudImage) string {
 	cols := []struct {
 		header, field string
@@ -55,7 +65,9 @@ func imagesTemplate(images []cloud.CloudImage) string {
 		{"TYPE", "Type", func(i cloud.CloudImage) bool { return i.Type != "" }},
 		{"OS FLAVOR", "OSFlavor", func(i cloud.CloudImage) bool { return i.OSFlavor != "" }},
 		{"OS VERSION", "OSVersion", func(i cloud.CloudImage) bool { return i.OSVersion != "" }},
+		{"SIZE", "Size", func(i cloud.CloudImage) bool { return i.Size != "" }},
 		{"DESCRIPTION", "Description", func(i cloud.CloudImage) bool { return i.Description != "" }},
+		{"URL", "URL", func(i cloud.CloudImage) bool { return i.URL != "" }},
 	}
 	var headers, fields []string
 	for _, c := range cols {

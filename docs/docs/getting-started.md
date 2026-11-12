@@ -101,6 +101,11 @@ too: `--vcpu`, `--memory` (MiB), `--rootfs-size`, `--kernel-image`,
 `--rootfs-image`, and for `fc` a persistent `--cache-image` as a second
 drive.
 
+`onctl images -p fc` lists the root filesystems and the kernel published at
+[images.boxctl.io](https://github.com/boxctl-io/boxctl-images), with the URL
+of each. Download one of each (`curl -fsSL <url> | zstd -d -o <file>`) and
+pass the files to `--rootfs-image` and `--kernel-image`.
+
 ## Connect
 
 ```
