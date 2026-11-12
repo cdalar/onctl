@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 
 	"github.com/cdalar/onctl/internal/domain"
 	"github.com/cdalar/onctl/internal/tools"
@@ -247,6 +248,9 @@ var createCmd = &cobra.Command{
 				log.Fatalln(err)
 			}
 		}
+		if err := localVMMCreateCheck(cloudProvider, runtime.GOOS); err != nil {
+			log.Fatalln(err)
+		}
 		if cloudProvider == "boxes" {
 			if opt.Domain != "" {
 				log.Fatalln("--domain points a DNS record at the VM's public IP, and a box has none")
@@ -439,4 +443,20 @@ var createCmd = &cobra.Command{
 		s.Stop()
 		fmt.Println("\033[32m✔\033[0m VM Configured...")
 	},
+}
+
+// localVMMCreateCheck refuses an fc or ch create on a host that can't run
+// one. Firecracker and Cloud Hypervisor are KVM virtual machine monitors,
+// so they run on Linux only; without this a create on a Mac gets as far
+// as preparing the rootfs and fails on a missing debugfs, which reads as
+// "install e2fsprogs" when no package would make it work.
+func localVMMCreateCheck(provider, goos string) error {
+	if (provider != "fc" && provider != "ch") || goos == "linux" {
+		return nil
+	}
+	hint := ""
+	if goos == "darwin" {
+		hint = "; on a Mac, use -p ac (Apple containers)"
+	}
+	return fmt.Errorf("the %s provider runs microVMs on KVM, so it needs a Linux host (this is %s): run onctl there%s", provider, goos, hint)
 }
