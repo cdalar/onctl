@@ -193,3 +193,23 @@ func TestCmdCreateOptions_ZeroValues(t *testing.T) {
 	assert.Equal(t, "", opts.Vm.Name)
 	assert.Equal(t, 0, opts.Vm.SSHPort)
 }
+
+// TestLocalVMMCreateCheck: fc and ch microVMs need KVM, so a create
+// anywhere but Linux has to say that up front -- not fail halfway through
+// on a missing tool, which sends the user off to install something that
+// can't help. Every other provider is a remote API and runs anywhere.
+func TestLocalVMMCreateCheck(t *testing.T) {
+	for _, provider := range []string{"fc", "ch"} {
+		assert.NoError(t, localVMMCreateCheck(provider, "linux"))
+		err := localVMMCreateCheck(provider, "darwin")
+		if !assert.Error(t, err) {
+			continue
+		}
+		assert.Contains(t, err.Error(), "Linux")
+		assert.Contains(t, err.Error(), "-p ac", "a Mac user should be told what does work there")
+		assert.Error(t, localVMMCreateCheck(provider, "windows"))
+	}
+	for _, provider := range []string{"aws", "hetzner", "ac", "boxes"} {
+		assert.NoError(t, localVMMCreateCheck(provider, "darwin"), provider)
+	}
+}
