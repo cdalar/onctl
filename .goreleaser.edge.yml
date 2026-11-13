@@ -5,8 +5,8 @@ project_name: onctl
 # continuous builds off the tip of main, separate from .goreleaser.yml
 # (real tagged releases: GPG-signed checksums, GitHub release with
 # changelog). None of that applies to an edge build, so it's a dedicated
-# config rather than reusing goreleaser.yml with skip flags -- includes
-# Linux and macOS, no signs section.
+# config rather than reusing goreleaser.yml with skip flags -- the same
+# targets, no signs section.
 
 before:
   hooks:
@@ -20,9 +20,13 @@ builds:
     goos:
       - linux
       - darwin
+      - windows
     goarch:
       - amd64
       - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
     ldflags:
       - -w -s -X 'github.com/cdalar/onctl/cmd.Version=v{{.Version}}-{{.ShortCommit}}'
 
@@ -30,6 +34,9 @@ archives:
   - id: repl
     name_template: "{{ .ProjectName }}-{{.Os}}-{{.Arch}}"
     formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
 
 checksum:
   name_template: checksums.txt

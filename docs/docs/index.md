@@ -48,14 +48,16 @@ curl -fsSL https://onctl.sh/get.sh | bash
 
 The installer downloads the release for your OS and architecture, verifies it against the release checksums, installs `onctl` to `~/.local/bin` (override with `ONCTL_INSTALL_DIR`), and adds that directory to your PATH in `~/.bashrc`, `~/.zshrc` or fish's config if it isn't there already. No sudo. Open a new terminal afterwards. To install a specific version, set `ONCTL_VERSION=v0.1.34`. Windows users can grab `onctl-windows-amd64.zip` from the [releases page](https://github.com/cdalar/onctl/releases).
 
-#### Edge build (latest `main`, Linux and macOS)
+#### Edge build (latest `main`, Linux, macOS and Windows)
 
-To install or update to the `edge` build, a binary rebuilt from the tip of `main` on every push (no Windows build):
+To install or update to the `edge` build, a binary rebuilt from the tip of `main` on every push:
 
 ```bash
 # install the latest main (edge build)
 curl -fsSL https://onctl.sh/get-edge.sh | bash
 ```
+
+On Windows, download `onctl-windows-amd64.zip` from the [edge release](https://github.com/cdalar/onctl/releases/tag/edge).
 
 #### Tab completion
 
