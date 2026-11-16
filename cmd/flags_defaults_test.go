@@ -58,8 +58,8 @@ func TestCreateFlagsBindToViper(t *testing.T) {
 		{"username", "hetzner.vm.username", "root", "admin"},
 		{"cloud-init-timeout", "vm.cloud-init.timeout", "3m", "180s"},
 		// Firecracker (replaces fc.yaml).
-		{"kernel-image", "fc.kernelImage", "~/.onctl/firecracker/images/vmlinux", "/img/vmlinux"},
-		{"rootfs-image", "fc.rootfsImage", "~/.onctl/firecracker/images/rootfs.ext4", "/img/rootfs.ext4"},
+		{"kernel-image", "fc.kernelImage", "/opt/fc/images/vmlinux", "/img/vmlinux"},
+		{"rootfs-image", "fc.rootfsImage", "/opt/fc/images/rootfs.ext4", "/img/rootfs.ext4"},
 		{"fc-binary", "fc.binPath", "firecracker", "/usr/local/bin/firecracker"},
 		{"vcpu", "fc.vcpuCount", "1", "4"},
 		{"memory", "fc.memSizeMib", "2048", "4096"},
