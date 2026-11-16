@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -232,6 +233,20 @@ func (m tuiModel) infoBlock() []string {
 	}
 }
 
+// hotkeys is v's own hotkeys on this provider: the vms view's have
+// restart after resume where the provider can (cloud.Restarter).
+func (m tuiModel) hotkeys(v *tableView) []hotkey {
+	var keys []hotkey
+	_, restarts := m.p.(cloud.Restarter)
+	for _, k := range v.hotkeys {
+		keys = append(keys, k)
+		if v == vmsView && k.label == "resume" && restarts {
+			keys = append(keys, hotkey{"t", "restart"})
+		}
+	}
+	return keys
+}
+
 // hotkeyBlock is the header's middle column: the view's hotkeys then
 // the common ones, in as many columns of tuiHeaderHeight as fit.
 func (m tuiModel) hotkeyBlock(width int) []string {
@@ -240,7 +255,7 @@ func (m tuiModel) hotkeyBlock(width int) []string {
 	if t.kind == pageTable {
 		v = t.view
 	}
-	keys := append([]hotkey{}, v.hotkeys...)
+	keys := m.hotkeys(v)
 	if t.kind == pageText {
 		keys = []hotkey{{"j/k", "scroll"}, {"g/G", "top/bottom"}, {"y", "json"}, {"s", "shell"}, {"a", "claude"}}
 	}

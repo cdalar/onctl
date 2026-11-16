@@ -424,7 +424,41 @@ func (m tuiModel) handleVMKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return fmt.Sprintf("resumed %s (IP %s)", name, orDash(resumed.IP)), nil
 		})
+	case "t":
+		return m.askRestart(vm)
 	}
+	return m, nil
+}
+
+// askRestart is restart.go: a cold boot from the VM's own disk, on the
+// providers that can (cloud.Restarter), after asking -- what's only in
+// the VM's memory is lost. Any state will do: restart also brings back
+// a paused VM and one whose process died.
+func (m tuiModel) askRestart(vm *cloud.Vm) (tea.Model, tea.Cmd) {
+	restarter, ok := m.p.(cloud.Restarter)
+	if !ok {
+		return m, m.fail("this provider does not support restart (only fc does)")
+	}
+	if v, ok := m.pending[vm.Name]; ok {
+		return m, m.fail("%s is being %s", vm.Name, pastTense(v))
+	}
+	name := vm.Name
+	m.ask(fmt.Sprintf("Restart %s?", name), []string{
+		fmt.Sprintf("This will reboot VM %q from its disk.", name),
+		"Anything only in its memory is lost.",
+	}, func(m tuiModel) (tea.Model, tea.Cmd) {
+		vm := m.vm(name)
+		if vm == nil {
+			return m, nil
+		}
+		return m.act(vm, "restart", -1, func() (string, error) {
+			restarted, err := restarter.Restart(cloud.Vm{Name: name}, cloud.RestartOptions{})
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("restarted %s (IP %s)", name, orDash(restarted.IP)), nil
+		})
+	})
 	return m, nil
 }
 
@@ -493,7 +527,7 @@ func (m *tuiModel) pushHelp() {
 		lines = append(lines, fmt.Sprintf("  %-18s %s", g[0], g[1]))
 	}
 	lines = append(lines, "", v.title, "")
-	for _, h := range v.hotkeys {
+	for _, h := range m.hotkeys(v) {
 		lines = append(lines, fmt.Sprintf("  %-14s %s", h.key, h.label))
 	}
 	var sorts []string
@@ -529,6 +563,7 @@ func (m *tuiModel) pushHelp() {
 			"  s shell runs `onctl ssh <vm>`; a runs `onctl claude --box <vm>` (Claude Code on the VM, with this directory's project);",
 			"  c runs `onctl create` in the foreground with what the form asks;",
 			"  p is `onctl pause` (a snapshot, then the server is deleted, on Hetzner); r is `onctl resume`;",
+			"  t is `onctl restart` (a reboot from the VM's own disk; fc only), and asks first;",
 			"  ctrl-d is `onctl destroy`, and asks first.")
 	}
 	m.push(page{kind: pageText, title: "help", lines: lines})
