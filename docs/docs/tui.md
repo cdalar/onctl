@@ -48,6 +48,7 @@ With the cursor on a VM:
 | `d` or `enter` | describe it; `y` for its JSON |
 | `c` | create a VM: a form asks name, image and type, then runs `onctl create` |
 | `p` / `r` | pause / resume (`onctl pause`, `onctl resume`) |
+| `t` | restart it from its own disk (`onctl restart`), after asking; `fc` only |
 | `ctrl-d` | destroy it (`onctl destroy`), after asking |
 
 ![Describing a VM](/img/tui/describe.png)
@@ -103,6 +104,7 @@ enter        in :repos (your GitHub repos, newest push first, from gh), start Cl
              on a box of this provider with the repo cloned (onctl claude --repo)
 c            create a VM (name, image and type are asked; runs onctl create)
 p / r        pause / resume
+t            restart the VM from its disk (fc only; asks first)
 ctrl-d       destroy the VM (asks first)
 0 / 1 / 2    all VMs / running only / paused only
 esc          back; ctrl-c or :q quits

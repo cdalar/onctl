@@ -55,6 +55,7 @@ var tuiCmd = &cobra.Command{
                a PR, o opens it. You get a desktop notification when Claude waits
   c            create a VM (name, image and type are asked; runs onctl create)
   p / r        pause / resume
+  t            restart the VM from its disk (fc only; asks first)
   space        mark the VM (again: unmark), for ctrl-d
   ctrl-d       destroy the VM, or the marked ones (asks first)
   0 / 1 / 2    all VMs / running only / paused only

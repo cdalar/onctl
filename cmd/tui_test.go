@@ -1519,3 +1519,62 @@ func TestTUIProviderRemembered(t *testing.T) {
 		t.Errorf("unknown provider in the file: got %q, want it asked again", got)
 	}
 }
+
+// tuiRestartProvider is a provider that can restart (cloud.Restarter),
+// as fc is.
+type tuiRestartProvider struct{ *tuiFakeProvider }
+
+func (f tuiRestartProvider) Restart(v cloud.Vm, opts cloud.RestartOptions) (cloud.Vm, error) {
+	f.calls = append(f.calls, "restart "+v.Name+" kernel="+opts.KernelImage)
+	return cloud.Vm{Name: v.Name, IP: "10.0.0.7"}, nil
+}
+
+// t is `onctl restart`: a reboot loses what's only in the VM's memory,
+// so, as the subcommand does, it asks first and restarts only on yes --
+// on the VM's current kernel. Where the provider can't restart the key
+// isn't offered, and pressing it says why instead of doing nothing.
+func TestTUIRestart(t *testing.T) {
+	f := tuiFixture()
+	m := newTUI(tuiRestartProvider{f})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
+	m = next.(tuiModel)
+	next, _ = m.Update(m.list("vms")())
+	m = next.(tuiModel)
+	if !strings.Contains(m.View(), "restart") {
+		t.Errorf("no restart hotkey on a provider that restarts:\n%s", m.View())
+	}
+
+	m.top().selected = "web"
+	m, cmd := press(t, m, "t")
+	if v := m.View(); hasAction(cmd) != nil || !strings.Contains(v, "Restart web?") || !strings.Contains(v, "memory is lost") {
+		t.Fatalf("t didn't ask first:\n%s", v)
+	}
+	m, _ = press(t, m, "esc")
+	if m.dialog != nil || len(f.calls) != 0 {
+		t.Fatalf("esc on the question: dialog=%v calls=%v", m.dialog, f.calls)
+	}
+
+	m, _ = press(t, m, "t")
+	m, cmd = press(t, m, "y")
+	if m.pending["web"] != "restart" || !strings.Contains(m.View(), "restarting") {
+		t.Fatalf("y on the question: pending=%v", m.pending)
+	}
+	am := hasAction(cmd)
+	if am == nil || am.err != nil || am.result != "restarted web (IP 10.0.0.7)" {
+		t.Fatalf("restart's result: %#v", am)
+	}
+	if got := strings.Join(f.calls, ", "); got != "restart web kernel=" {
+		t.Errorf("provider saw %q", got)
+	}
+
+	// A provider that can't restart: no hotkey, and the key says so.
+	f = tuiFixture()
+	m = listed(t, f, 140, 40)
+	if strings.Contains(m.View(), "restart") {
+		t.Errorf("restart hotkey on a provider that can't:\n%s", m.View())
+	}
+	m, cmd = press(t, m, "t")
+	if hasAction(cmd) != nil || !strings.Contains(m.flash, "does not support restart") {
+		t.Errorf("t on a provider that can't restart: flash=%q", m.flash)
+	}
+}
