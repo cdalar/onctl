@@ -155,8 +155,8 @@ func init() {
 	// providerfc.GetConfig. Defaults live in onctl.yaml's fc: section (and
 	// providerfc.GetConfig has its own inline fallback besides). The generic
 	// --username flag also drives the microVM user.
-	createCmd.Flags().StringVar(&flagFCKernelImage, "kernel-image", "~/.onctl/firecracker/images/vmlinux", "Firecracker: path to the uncompressed kernel (vmlinux)")
-	createCmd.Flags().StringVar(&flagFCRootfsImage, "rootfs-image", "~/.onctl/firecracker/images/rootfs.ext4", "Firecracker: path to the base rootfs (ext4)")
+	createCmd.Flags().StringVar(&flagFCKernelImage, "kernel-image", "/opt/fc/images/vmlinux", "Firecracker: path to the uncompressed kernel (vmlinux)")
+	createCmd.Flags().StringVar(&flagFCRootfsImage, "rootfs-image", "/opt/fc/images/rootfs.ext4", "Firecracker: path to the base rootfs (ext4)")
 	createCmd.Flags().StringVar(&flagFCBinary, "fc-binary", "firecracker", "Firecracker: path to the firecracker binary")
 	createCmd.Flags().Int64Var(&flagFCVCPU, "vcpu", 1, "Firecracker: number of vCPUs")
 	createCmd.Flags().Int64Var(&flagFCMemory, "memory", 2048, "Firecracker: memory size in MiB")
