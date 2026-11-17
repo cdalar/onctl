@@ -1,8 +1,6 @@
 package providerovh
 
 import (
-	"log"
-
 	"github.com/ovh/go-ovh/ovh"
 )
 

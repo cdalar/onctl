@@ -2,7 +2,6 @@ package providergcp
 
 import (
 	"context"
-	"log"
 	"os/exec"
 	"strings"
 	"time"
