@@ -13,10 +13,10 @@ import (
 // chain (OVH_ENDPOINT, OVH_APPLICATION_KEY, OVH_APPLICATION_SECRET,
 // OVH_CONSUMER_KEY env vars, or an ovh.conf file) resolve everything, and
 // failing loudly if it can't.
-func GetClient() *ovh.Client {
+func GetClient() (*ovh.Client, error) {
 	client, err := ovh.NewDefaultClient()
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
 	}
-	return client
+	return client, nil
 }

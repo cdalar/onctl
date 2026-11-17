@@ -269,17 +269,20 @@ func CreateVpcAndSubnet(svc *ec2.Client) (*string, []string) {
 	return vpcId, subnetIds
 }
 
-func GetClient() *ec2.Client {
+func GetClient() (*ec2.Client, error) {
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion(viper.GetString("aws.location")))
 	if err != nil {
-		log.Println(err)
+		return nil, err
 	}
-	return ec2.NewFromConfig(cfg)
+	return ec2.NewFromConfig(cfg), nil
 }
 
 func GetImages() ([]types.Image, error) {
-	svc := GetClient()
+	svc, err := GetClient()
+	if err != nil {
+		return nil, err
+	}
 
 	// Use configured image name, or fallback to a pattern for latest Ubuntu
 	imageName := viper.GetString("aws.vm.image")
@@ -379,7 +382,11 @@ func CreateSecurityGroupForPort(svc *ec2.Client, vpcId *string, port int64) (gro
 }
 
 func DescribeInstance(instanceId string) types.Instance {
-	svc := GetClient()
+	svc, err := GetClient()
+	if err != nil {
+		printAwsError(err)
+		return types.Instance{}
+	}
 
 	input := &ec2.DescribeInstancesInput{
 		Filters: []types.Filter{

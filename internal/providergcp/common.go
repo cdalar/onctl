@@ -10,22 +10,22 @@ import (
 	compute "cloud.google.com/go/compute/apiv1"
 )
 
-func GetClient() *compute.InstancesClient {
+func GetClient() (*compute.InstancesClient, error) {
 	ctx := context.Background()
 	client, err := compute.NewInstancesRESTClient(ctx)
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
 	}
-	return client
+	return client, nil
 }
 
-func GetGroupClient() *compute.InstanceGroupsClient {
+func GetGroupClient() (*compute.InstanceGroupsClient, error) {
 	ctx := context.Background()
 	client, err := compute.NewInstanceGroupsRESTClient(ctx)
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
 	}
-	return client
+	return client, nil
 }
 
 // GCloudDefaultProject best-effort resolves the gcloud CLI's active project
