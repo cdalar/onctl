@@ -18,7 +18,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/hetznercloud/hcloud-go/v2 v2.53.0
 	github.com/manifoldco/promptui v0.9.0
-	github.com/ovh/go-ovh v1.9.0
+	github.com/ovh/go-ovh v1.10.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.1.0
 	github.com/stretchr/testify v1.12.1
