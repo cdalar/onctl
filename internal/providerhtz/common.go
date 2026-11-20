@@ -1,20 +1,17 @@
 package providerhtz
 
 import (
-	"log"
+	"fmt"
 	"os"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
-func GetClient() *hcloud.Client {
+func GetClient() (*hcloud.Client, error) {
 	token := os.Getenv("HCLOUD_TOKEN")
-	if token != "" {
-		client := hcloud.NewClient(hcloud.WithToken(token))
-		return client
-	} else {
-		log.Println("HCLOUD_TOKEN is not set")
-		os.Exit(1)
+	if token == "" {
+		return nil, fmt.Errorf("HCLOUD_TOKEN is not set")
 	}
-	return nil
+	client := hcloud.NewClient(hcloud.WithToken(token))
+	return client, nil
 }

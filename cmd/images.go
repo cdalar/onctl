@@ -12,8 +12,12 @@ import (
 )
 
 // hetznerImageLister returns the ImageLister to use. Overridable in tests.
-var hetznerImageLister = func() cloud.ImageLister {
-	return cloud.ProviderHetzner{Client: providerhtz.GetClient()}
+var hetznerImageLister = func() (cloud.ImageLister, error) {
+	client, err := providerhtz.GetClient()
+	if err != nil {
+		return nil, err
+	}
+	return cloud.ProviderHetzner{Client: client}, nil
 }
 
 // fcImageLister lists the images published for the fc provider.
@@ -31,14 +35,22 @@ var imagesCmd = &cobra.Command{
 	Short: "List available OS images for the current cloud provider",
 	Run: func(cmd *cobra.Command, args []string) {
 		var lister cloud.ImageLister
+		var err error
 		switch cloudProvider {
 		case "hetzner":
-			lister = hetznerImageLister()
+			lister, err = hetznerImageLister()
 		case "fc":
 			lister = fcImageLister()
 		case "boxes":
 			ensureProvider()
-			lister, _ = provider.(cloud.ImageLister)
+			lister, err = provider.(cloud.ImageLister), nil
+			if err == nil && lister == nil {
+				// ensureProvider might not set provider if it's not a lister
+				err = fmt.Errorf("provider does not support listing images")
+			}
+		}
+		if err != nil {
+			log.Fatalln(err)
 		}
 		if lister == nil {
 			fmt.Println("The current cloud provider does not support listing images.")
