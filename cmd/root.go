@@ -35,7 +35,10 @@ var (
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Long:          `onctl is a tool to manage cross platform resources in cloud`,
-		Example: `  # List all VMs
+		Example: `  # Browse and manage your VMs in the k9s-style terminal UI
+  onctl
+
+  # List all VMs
   onctl ls
 
   # Create a VM with docker installed
