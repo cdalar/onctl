@@ -73,7 +73,7 @@ root@onctl-test:~#
 
 Or browse and manage your VMs in a k9s-style terminal UI: `s` opens a shell, `a` runs Claude Code on the VM (`onctl claude`), `c` creates, `p`/`r` pause and resume, `ctrl-d` destroys, `:images` and `:sizes` show what the provider offers, `:repos` lists your GitHub repositories and `enter` starts Claude on a box with one cloned (`onctl claude --repo`), `:provider` switches clouds, `?` lists every key.
 ```
-❯ onctl tui
+❯ onctl        # or: onctl tui
 ```
 
 ## Import an existing server
