@@ -87,7 +87,7 @@ func TestInitProvider_LocalProviders(t *testing.T) {
 
 	t.Run("fc", func(t *testing.T) {
 		withProvider(t, nil)
-		initProvider("fc")
+		require.NoError(t, initProvider("fc"))
 		fc, ok := provider.(*cloud.ProviderFC)
 		require.True(t, ok, "got %T", provider)
 		assert.Equal(t, "/opt/bin/firecracker", fc.Config.BinPath, "fc config must come from viper")
@@ -100,7 +100,7 @@ func TestInitProvider_LocalProviders(t *testing.T) {
 
 	t.Run("ch", func(t *testing.T) {
 		withProvider(t, nil)
-		initProvider("ch")
+		require.NoError(t, initProvider("ch"))
 		ch, ok := provider.(*cloud.ProviderCH)
 		require.True(t, ok, "got %T", provider)
 		assert.Equal(t, "/opt/bin/cloud-hypervisor", ch.Config.BinPath, "ch config must come from viper")
@@ -113,7 +113,7 @@ func TestInitProvider_LocalProviders(t *testing.T) {
 
 	t.Run("ac", func(t *testing.T) {
 		withProvider(t, nil)
-		initProvider("ac")
+		require.NoError(t, initProvider("ac"))
 		ac, ok := provider.(*cloud.ProviderAC)
 		require.True(t, ok, "got %T", provider)
 		assert.Equal(t, "/opt/bin/container", ac.Config.BinPath, "ac config must come from viper")
@@ -122,7 +122,7 @@ func TestInitProvider_LocalProviders(t *testing.T) {
 
 	t.Run("static", func(t *testing.T) {
 		withProvider(t, nil)
-		initProvider("static")
+		require.NoError(t, initProvider("static"))
 		st, ok := provider.(*cloud.ProviderStatic)
 		require.True(t, ok, "got %T", provider)
 		want, err := onctlSSHConfigPath()
@@ -132,7 +132,7 @@ func TestInitProvider_LocalProviders(t *testing.T) {
 
 	t.Run("unknown leaves provider unset", func(t *testing.T) {
 		withProvider(t, nil)
-		initProvider("nope")
+		require.NoError(t, initProvider("nope"))
 		assert.Nil(t, provider)
 	})
 }

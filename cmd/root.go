@@ -298,7 +298,6 @@ func ensureProvider() {
 
 // initProvider builds the global provider client for the selected cloud.
 func initProvider(cloudProvider string) error {
-	var err error
 	switch cloudProvider {
 	case "hetzner":
 		client, err := providerhtz.GetClient()
@@ -472,7 +471,7 @@ func initProvider(cloudProvider string) error {
 		}
 		provider = &cloud.ProviderStatic{InventoryPath: path}
 	}
-	return err
+	return nil
 }
 
 func init() {
