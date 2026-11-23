@@ -29,13 +29,44 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        id: setup-go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: 'stable'
           check-latest: true
+          cache: false
+
+      - name: Restore Go cache
+        # setup-go's built-in cache is off: it only matches its exact key
+        # (Go version + go.sum hash), and Dependabot's auto-merges push to
+        # main with GITHUB_TOKEN, which runs no push workflows -- so main
+        # never had a cache for the current go.sum and every PR compiled
+        # the AWS/Azure/GCP SDKs from scratch (~3 min a job on onctl-2).
+        # restore-keys falls back to main's newest cache for an older
+        # go.sum, which still covers nearly every dependency.
+        id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-lint-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-lint-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-
 
       - name: Lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: latest
           args: --timeout 5m
+
+      - name: Save Go cache
+        # main only: a PR's cache is readable by that PR alone, and ~400MB
+        # per PR pushed main's entries out of the repo's 10GB cache quota.
+        if: ${{ github.event_name != 'pull_request' && steps.go-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}

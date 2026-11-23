@@ -1578,3 +1578,68 @@ func TestTUIRestart(t *testing.T) {
 		t.Errorf("t on a provider that can't restart: flash=%q", m.flash)
 	}
 }
+
+// tuiFailingRestartProvider is a provider whose restart fails, as a VM
+// whose disk is gone would.
+type tuiFailingRestartProvider struct{ *tuiFakeProvider }
+
+func (f tuiFailingRestartProvider) Restart(v cloud.Vm, _ cloud.RestartOptions) (cloud.Vm, error) {
+	f.calls = append(f.calls, "restart "+v.Name)
+	return cloud.Vm{}, errors.New("no disk")
+}
+
+// Restart's edges: a VM with a call already in flight isn't rebooted
+// under it (nothing asked, nothing sent); one that's gone by the time
+// the question is answered isn't restarted blind; and a failed restart
+// is shown as an error, not a success with an empty IP.
+func TestTUIRestartEdges(t *testing.T) {
+	newModel := func(p cloud.CloudProviderInterface) tuiModel {
+		m := newTUI(p)
+		next, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
+		m = next.(tuiModel)
+		next, _ = m.Update(m.list("vms")())
+		m = next.(tuiModel)
+		m.top().selected = "web"
+		return m
+	}
+
+	// In flight: refused, with why.
+	f := tuiFixture()
+	m := newModel(tuiRestartProvider{f})
+	m.pending["web"] = "pause"
+	m, _ = press(t, m, "t")
+	if !strings.Contains(m.flash, "web is being paused") {
+		t.Errorf("t on a VM being paused: flash=%q", m.flash)
+	}
+	m = ack(t, m)
+	if strings.Contains(m.View(), "Restart web?") || len(f.calls) != 0 {
+		t.Errorf("t on a VM being paused asked or called: calls=%v", f.calls)
+	}
+
+	// Gone before yes: no restart of a VM that's no longer listed.
+	f = tuiFixture()
+	m = newModel(tuiRestartProvider{f})
+	m, _ = press(t, m, "t")
+	f.vms = f.vms[1:] // web is deleted elsewhere while the question is up
+	next, _ := m.Update(m.list("vms")())
+	m = next.(tuiModel)
+	m, cmd := press(t, m, "y")
+	if hasAction(cmd) != nil || len(f.calls) != 0 || m.pending["web"] != "" {
+		t.Errorf("y after web vanished: calls=%v pending=%v", f.calls, m.pending)
+	}
+
+	// The provider fails: the error comes back, and is shown as one.
+	f = tuiFixture()
+	m = newModel(tuiFailingRestartProvider{f})
+	m, _ = press(t, m, "t")
+	m, cmd = press(t, m, "y")
+	am := hasAction(cmd)
+	if am == nil || am.err == nil || am.result != "" {
+		t.Fatalf("failed restart's result: %#v", am)
+	}
+	next, _ = m.Update(*am)
+	m = next.(tuiModel)
+	if !strings.Contains(m.flash, "no disk") || m.dialog == nil || !m.dialog.alert {
+		t.Errorf("failed restart not shown as an error: flash=%q", m.flash)
+	}
+}
