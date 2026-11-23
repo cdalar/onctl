@@ -15,7 +15,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/cloudflare/cloudflare-go v0.119.0
 	github.com/gofrs/uuid/v5 v5.5.1
-	github.com/gorilla/websocket v1.5.3
+	github.com/gorilla/websocket v1.5.4-0.20240701034025-d67f41855da4
 	github.com/hetznercloud/hcloud-go/v2 v2.53.0
 	github.com/manifoldco/promptui v0.9.0
 	github.com/ovh/go-ovh v1.10.0
