@@ -1,5 +1,11 @@
 ## Brief overview
-Guidelines for developing the onctl CLI tool, a Go-based utility for managing cloud resources across multiple providers (AWS, Azure, GCP, Hetzner). These rules focus on Go best practices, CLI design patterns, and cloud integration approaches observed in the project.
+`onctl` is a Go-based CLI tool and k9s-style Terminal UI (`tui`) for managing virtual machines across multi-cloud and local microVM platforms:
+- **Cloud Providers**: AWS, Azure, GCP, Hetzner Cloud, and OVH.
+- **Local & MicroVM Runtimes**: Firecracker (`fc`), Cloud Hypervisor (`ch`), macOS Apple container (`ac`), NVIDIA OpenShell (`openshell`), and hosted microVMs (`boxes`).
+- **Import / Static**: Support for importing existing servers (e.g., bare-metal or auction hosts) to manage with `ssh` and `ls`.
+- **AI Agent Sandbox (`onctl claude`)**: Orchestrates Claude Code sessions inside dedicated microVMs or containers, mounting/cloning projects and synchronizing git work trees.
+
+These guidelines focus on Go best practices, CLI design patterns, and cloud integration approaches observed in the project.
 
 ## Go coding conventions
 - Use `gofmt` and `goimports` for consistent code formatting and import organization
@@ -36,6 +42,22 @@ Guidelines for developing the onctl CLI tool, a Go-based utility for managing cl
 - Use embedded files for templates and static assets to simplify distribution
 - Maintain clear boundaries between CLI commands, domain logic, and infrastructure code
 - Document public APIs and complex algorithms with comments
+
+### Project structure
+- `cmd/`: CLI commands built with Cobra:
+  - Core lifecycle: `create.go`, `destroy.go`, `ssh.go`, `list.go`, `restart.go`, `pause.go`, `resume.go`
+  - TUI interface: `tui.go`, `tuiactions.go`, `tuirender.go`, `tuirepos.go`, `tuiviews.go` (k9s-style interactive terminal UI)
+  - Agent workflows: `claude.go`, `claudesession.go`, `claudegit.go`, `agents.go`
+  - Utility commands: `init.go`, `images.go`, `sizes.go`, `import.go`, `portforward.go`
+- `internal/`: Internal domain logic and provider adapters:
+  - Public cloud adapters: `provideraws/`, `providerazure/`, `providergcp/`, `providerhtz/`, `providerovh/`
+  - Sandbox/microVM adapters: `providerboxes/`, `providerfc/`, `providerch/`, `providerac/`, `provideropenshell/`
+  - Common domain & DNS: `domain/`
+  - Terminal formatting & UI helpers: `ui/`
+  - File management: `files/`
+- `pkg/cloud/`: Shared cloud interfaces and helpers
+- `Makefile`: Primary build and test targets (`make build`, `make test`, `make lint`)
+- `docs/`: Documentation site for `onctl.sh`
 
 ## Build and language guidelines
 - Use `make` for building the project instead of direct `go build` commands
