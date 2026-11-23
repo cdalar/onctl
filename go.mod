@@ -8,7 +8,7 @@ require (
 	github.com/NVIDIA/OpenShell/sdk/go v0.1.8
 	github.com/aws/aws-sdk-go-v2 v1.48.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.19
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.348.0
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.349.0
 	github.com/aws/smithy-go v1.28.9
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
