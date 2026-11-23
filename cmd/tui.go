@@ -125,7 +125,15 @@ func switchProvider(name string) error {
 		}
 		return fmt.Errorf("switching to %s: %w", name, err)
 	}
-	initProvider(name)
+	if err := initProvider(name); err != nil {
+		cloudProvider = prev
+		if hadEnv {
+			_ = os.Setenv("ONCTL_CLOUD", prevEnv)
+		} else {
+			_ = os.Unsetenv("ONCTL_CLOUD")
+		}
+		return fmt.Errorf("initializing %s: %w", name, err)
+	}
 	return nil
 }
 

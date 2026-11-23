@@ -44,6 +44,9 @@ func SetDefaultRouteToMainRouteTable(svc *ec2.Client, routeTableId *string, inte
 }
 
 func DefaultRouteTable(svc *ec2.Client, vpcId *string) *string {
+	if vpcId == nil {
+		return nil
+	}
 
 	input := &ec2.DescribeRouteTablesInput{
 		Filters: []types.Filter{
@@ -56,11 +59,18 @@ func DefaultRouteTable(svc *ec2.Client, vpcId *string) *string {
 	result, err := svc.DescribeRouteTables(context.TODO(), input)
 	if err != nil {
 		printAwsError(err)
+		return nil
+	}
+	if len(result.RouteTables) == 0 {
+		return nil
 	}
 	return result.RouteTables[0].RouteTableId
 }
 
 func CreateSecurityGroupSSH(svc *ec2.Client, vpcId *string) *string {
+	if vpcId == nil {
+		return nil
+	}
 
 	sgs, err := svc.DescribeSecurityGroups(context.TODO(), &ec2.DescribeSecurityGroupsInput{
 		Filters: []types.Filter{
@@ -68,6 +78,7 @@ func CreateSecurityGroupSSH(svc *ec2.Client, vpcId *string) *string {
 	})
 	if err != nil {
 		printAwsError(err)
+		return nil
 	}
 
 	if len(sgs.SecurityGroups) > 0 {
@@ -87,7 +98,12 @@ func CreateSecurityGroupSSH(svc *ec2.Client, vpcId *string) *string {
 		result, err := svc.CreateSecurityGroup(context.TODO(), input)
 		if err != nil {
 			printAwsError(err)
+			return nil
 		}
+		if result.GroupId == nil {
+			return nil
+		}
+
 		_, err = svc.AuthorizeSecurityGroupIngress(context.TODO(), &ec2.AuthorizeSecurityGroupIngressInput{
 			GroupId:    result.GroupId,
 			IpProtocol: aws.String("tcp"),
@@ -98,16 +114,6 @@ func CreateSecurityGroupSSH(svc *ec2.Client, vpcId *string) *string {
 		if err != nil {
 			log.Println(err)
 		}
-		// _, err = svc.AuthorizeSecurityGroupIngress(context.TODO(), &ec2.AuthorizeSecurityGroupIngressInput{
-		// 	GroupId:    result.GroupId,
-		// 	IpProtocol: aws.String("tcp"),
-		// 	FromPort:   aws.Int32(80),
-		// 	ToPort:     aws.Int32(80),
-		// 	CidrIp:     aws.String("0.0.0.0/0"),
-		// })
-		// if err != nil {
-		// 	log.Println(err)
-		// }
 
 		log.Println("Security Group created: ", *result.GroupId)
 		return result.GroupId
@@ -136,6 +142,10 @@ func createSubnets(svc *ec2.Client, vpcId string) []string {
 	subnetsAz := getAvailabilityZones(svc)
 	var subnetIds []string
 	for k, v := range subnets {
+		if k >= len(subnetsAz) {
+			log.Println("Not enough availability zones for all subnets")
+			break
+		}
 
 		input := &ec2.CreateSubnetInput{
 			CidrBlock:        aws.String(v),     // Required
@@ -148,8 +158,11 @@ func createSubnets(svc *ec2.Client, vpcId string) []string {
 		subnet, err := svc.CreateSubnet(context.TODO(), input)
 		if err != nil {
 			printAwsError(err)
+			continue
 		}
-		subnetIds = append(subnetIds, *subnet.Subnet.SubnetId)
+		if subnet.Subnet != nil && subnet.Subnet.SubnetId != nil {
+			subnetIds = append(subnetIds, *subnet.Subnet.SubnetId)
+		}
 	}
 	log.Println("Subnets created: ", subnetIds)
 	return subnetIds
@@ -256,17 +269,20 @@ func CreateVpcAndSubnet(svc *ec2.Client) (*string, []string) {
 	return vpcId, subnetIds
 }
 
-func GetClient() *ec2.Client {
+func GetClient() (*ec2.Client, error) {
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion(viper.GetString("aws.location")))
 	if err != nil {
-		log.Println(err)
+		return nil, err
 	}
-	return ec2.NewFromConfig(cfg)
+	return ec2.NewFromConfig(cfg), nil
 }
 
 func GetImages() ([]types.Image, error) {
-	svc := GetClient()
+	svc, err := GetClient()
+	if err != nil {
+		return nil, err
+	}
 
 	// Use configured image name, or fallback to a pattern for latest Ubuntu
 	imageName := viper.GetString("aws.vm.image")
@@ -366,7 +382,11 @@ func CreateSecurityGroupForPort(svc *ec2.Client, vpcId *string, port int64) (gro
 }
 
 func DescribeInstance(instanceId string) types.Instance {
-	svc := GetClient()
+	svc, err := GetClient()
+	if err != nil {
+		printAwsError(err)
+		return types.Instance{}
+	}
 
 	input := &ec2.DescribeInstancesInput{
 		Filters: []types.Filter{
@@ -379,6 +399,9 @@ func DescribeInstance(instanceId string) types.Instance {
 	instances, err := svc.DescribeInstances(context.TODO(), input)
 	if err != nil {
 		printAwsError(err)
+		return types.Instance{}
+	}
+	if len(instances.Reservations) == 0 || len(instances.Reservations[0].Instances) == 0 {
 		return types.Instance{}
 	}
 	// log.Println(instances)
@@ -433,6 +456,9 @@ func GetDefaultVpcId(svc *ec2.Client) (vpcId *string) {
 	result, err := svc.DescribeVpcs(context.TODO(), input)
 	if err != nil {
 		printAwsError(err)
+		return nil
+	}
+	if len(result.Vpcs) == 0 {
 		return nil
 	}
 	return result.Vpcs[0].VpcId

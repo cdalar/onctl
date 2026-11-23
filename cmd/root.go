@@ -89,7 +89,9 @@ var (
 			}
 			// The images command initializes its own provider lazily.
 			if cmd.Name() != "images" {
-				initProvider(cloudProvider)
+				if err := initProvider(cloudProvider); err != nil {
+					return err
+				}
 			}
 			return nil
 		},
@@ -288,15 +290,22 @@ func ensureProvider() {
 		log.Println("[DEBUG] completion: " + err.Error())
 		return
 	}
-	initProvider(cloudProvider)
+	if err := initProvider(cloudProvider); err != nil {
+		log.Println("[DEBUG] completion: " + err.Error())
+		return
+	}
 }
 
 // initProvider builds the global provider client for the selected cloud.
-func initProvider(cloudProvider string) {
+func initProvider(cloudProvider string) error {
 	switch cloudProvider {
 	case "hetzner":
+		client, err := providerhtz.GetClient()
+		if err != nil {
+			return err
+		}
 		provider = &cloud.ProviderHetzner{
-			Client: providerhtz.GetClient(),
+			Client: client,
 			Config: cloud.HetznerConfig{
 				Location:      viper.GetString("hetzner.location"),
 				VMType:        viper.GetString("hetzner.vm.type"),
@@ -306,28 +315,72 @@ func initProvider(cloudProvider string) {
 			},
 		}
 	case "gcp":
+		client, err := providergcp.GetClient()
+		if err != nil {
+			return err
+		}
+		groupClient, err := providergcp.GetGroupClient()
+		if err != nil {
+			return err
+		}
 		provider = &cloud.ProviderGcp{
-			Client:      providergcp.GetClient(),
-			GroupClient: providergcp.GetGroupClient(),
+			Client:      client,
+			GroupClient: groupClient,
 		}
 
 	case "aws":
+		client, err := provideraws.GetClient()
+		if err != nil {
+			return err
+		}
 		provider = &cloud.ProviderAws{
-			Client: provideraws.GetClient(),
+			Client: client,
 		}
 	case "azure":
+		rgClient, err := providerazure.GetResourceGraphClient()
+		if err != nil {
+			return err
+		}
+		vmClient, err := providerazure.GetVmClient()
+		if err != nil {
+			return err
+		}
+		nicClient, err := providerazure.GetNicClient()
+		if err != nil {
+			return err
+		}
+		ipClient, err := providerazure.GetIPClient()
+		if err != nil {
+			return err
+		}
+		sshClient, err := providerazure.GetSSHKeyClient()
+		if err != nil {
+			return err
+		}
+		vnetClient, err := providerazure.GetVnetClient()
+		if err != nil {
+			return err
+		}
+		nsgClient, err := providerazure.GetNSGClient()
+		if err != nil {
+			return err
+		}
 		provider = &cloud.ProviderAzure{
-			ResourceGraphClient: providerazure.GetResourceGraphClient(),
-			VmClient:            providerazure.GetVmClient(),
-			NicClient:           providerazure.GetNicClient(),
-			PublicIPClient:      providerazure.GetIPClient(),
-			SSHKeyClient:        providerazure.GetSSHKeyClient(),
-			VnetClient:          providerazure.GetVnetClient(),
-			NSGClient:           providerazure.GetNSGClient(),
+			ResourceGraphClient: rgClient,
+			VmClient:            vmClient,
+			NicClient:           nicClient,
+			PublicIPClient:      ipClient,
+			SSHKeyClient:        sshClient,
+			VnetClient:          vnetClient,
+			NSGClient:           nsgClient,
 		}
 	case "ovh":
+		client, err := providerovh.GetClient()
+		if err != nil {
+			return err
+		}
 		provider = &cloud.ProviderOvh{
-			Client: providerovh.GetClient(),
+			Client: client,
 			Config: cloud.OvhConfig{
 				ServiceName:   viper.GetString("ovh.serviceName"),
 				Region:        viper.GetString("ovh.location"),
@@ -366,7 +419,7 @@ func initProvider(cloudProvider string) {
 	case "boxes":
 		creds, err := providerboxes.LoadCredentials(viper.GetString("boxes.apiURL"))
 		if err != nil {
-			log.Fatalln(err)
+			return err
 		}
 		bin, err := os.Executable()
 		if err != nil {
@@ -384,7 +437,7 @@ func initProvider(cloudProvider string) {
 	case "openshell":
 		gw, err := provideropenshell.Connect(viper.GetString("openshell.gateway"))
 		if err != nil {
-			log.Fatalln(err)
+			return err
 		}
 		bin, err := os.Executable()
 		if err != nil {
@@ -414,10 +467,11 @@ func initProvider(cloudProvider string) {
 	case "static":
 		path, err := onctlSSHConfigPath()
 		if err != nil {
-			log.Fatalln(err)
+			return err
 		}
 		provider = &cloud.ProviderStatic{InventoryPath: path}
 	}
+	return nil
 }
 
 func init() {

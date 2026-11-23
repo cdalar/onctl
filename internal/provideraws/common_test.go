@@ -179,3 +179,49 @@ func TestDefaultRouteCIDR(t *testing.T) {
 		t.Errorf("Expected default route 0.0.0.0/0, got %s", defaultRoute)
 	}
 }
+
+func TestGetClient(t *testing.T) {
+	client, err := GetClient()
+	if err != nil {
+		t.Fatalf("unexpected error from GetClient: %v", err)
+	}
+	if client == nil {
+		t.Fatal("expected non-nil client from GetClient")
+	}
+}
+
+func TestDefaultRouteTable_NilVpcId(t *testing.T) {
+	result := DefaultRouteTable(nil, nil)
+	if result != nil {
+		t.Errorf("expected nil result for nil vpcId, got %v", result)
+	}
+}
+
+func TestCreateSecurityGroupSSH_NilVpcId(t *testing.T) {
+	result := CreateSecurityGroupSSH(nil, nil)
+	if result != nil {
+		t.Errorf("expected nil result for nil vpcId, got %v", result)
+	}
+}
+
+func TestDescribeInstance_NonexistentInstance(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "test")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
+	t.Setenv("AWS_REGION", "us-east-1")
+	inst := DescribeInstance("i-00000000000000000")
+	// DescribeInstance must handle error gracefully without panicking
+	if inst.InstanceId != nil {
+		t.Errorf("expected empty instance for nonexistent id, got %v", inst)
+	}
+}
+
+func TestGetImages_HandlesError(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "test")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
+	t.Setenv("AWS_REGION", "us-east-1")
+	// When AWS credentials are fake/invalid, GetImages should return an error and not panic
+	images, err := GetImages()
+	if err != nil && len(images) > 0 {
+		t.Errorf("expected no images on error, got %d", len(images))
+	}
+}

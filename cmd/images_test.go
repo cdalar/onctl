@@ -55,11 +55,11 @@ func TestImagesCmd_HetznerPath(t *testing.T) {
 	}()
 
 	cloudProvider = "hetzner"
-	hetznerImageLister = func() cloud.ImageLister {
+	hetznerImageLister = func() (cloud.ImageLister, error) {
 		return fakeImageLister{images: []cloud.CloudImage{
 			{Name: "ubuntu-22.04", Type: "system", OSFlavor: "ubuntu", OSVersion: "22.04", Description: "Ubuntu 22.04"},
 			{Name: "fedora-42", Type: "system", OSFlavor: "fedora", OSVersion: "42", Description: "Fedora 42"},
-		}}
+		}}, nil
 	}
 
 	assert.NotPanics(t, func() {
@@ -76,8 +76,8 @@ func TestImagesCmd_HetznerPath_Empty(t *testing.T) {
 	}()
 
 	cloudProvider = "hetzner"
-	hetznerImageLister = func() cloud.ImageLister {
-		return fakeImageLister{images: []cloud.CloudImage{}}
+	hetznerImageLister = func() (cloud.ImageLister, error) {
+		return fakeImageLister{images: []cloud.CloudImage{}}, nil
 	}
 
 	assert.NotPanics(t, func() {
@@ -94,16 +94,19 @@ func TestImagesCmd_HetznerPath_ListError(t *testing.T) {
 	}()
 
 	cloudProvider = "hetzner"
-	hetznerImageLister = func() cloud.ImageLister {
-		return fakeImageLister{err: errors.New("api error")}
+	hetznerImageLister = func() (cloud.ImageLister, error) {
+		return fakeImageLister{err: errors.New("api error")}, nil
 	}
 
 	// log.Fatalln calls os.Exit — we can't assert on it directly, but
 	// we verify the error path is reachable without a setup panic.
 	assert.NotPanics(t, func() {
 		// Would call log.Fatalln; skip invoking Run to avoid os.Exit in tests.
-		lister := hetznerImageLister()
-		_, err := lister.ListImages()
+		lister, err := hetznerImageLister()
+		if err != nil {
+			return
+		}
+		_, err = lister.ListImages()
 		assert.Error(t, err)
 	})
 }
