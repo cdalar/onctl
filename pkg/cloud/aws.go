@@ -172,14 +172,20 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 	}
 	images, err := provideraws.GetImages()
 	if err != nil {
-		log.Println(err)
+		return Vm{}, fmt.Errorf("listing images: %w", err)
+	}
+	if len(images) == 0 {
+		return Vm{}, errors.New("no matching AMI found (check aws.vm.image)")
 	}
 
 	keyPairs, err := p.Client.DescribeKeyPairs(context.TODO(), &ec2.DescribeKeyPairsInput{
 		KeyPairIds: []string{server.SSHKeyID},
 	})
 	if err != nil {
-		log.Fatalln(err)
+		return Vm{}, fmt.Errorf("looking up SSH key %q: %w", server.SSHKeyID, err)
+	}
+	if len(keyPairs.KeyPairs) == 0 {
+		return Vm{}, fmt.Errorf("SSH key %q not found", server.SSHKeyID)
 	}
 
 	vpcId := provideraws.GetDefaultVpcId(p.Client)
@@ -249,9 +255,9 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 		},
 	})
 	if err != nil {
-		log.Fatalln(err)
+		return Vm{}, fmt.Errorf("checking for an existing instance: %w", err)
 	}
-	if len(descOut.Reservations) > 0 {
+	if len(descOut.Reservations) > 0 && len(descOut.Reservations[0].Instances) > 0 {
 		log.Println("Instance already exists, skipping creation")
 		return mapAwsServer(descOut.Reservations[0].Instances[0]), nil
 	}
@@ -262,12 +268,15 @@ func (p ProviderAws) Deploy(server Vm) (Vm, error) {
 		return Vm{}, err
 	}
 	log.Printf("[DEBUG] %+v", result)
+	if len(result.Instances) == 0 {
+		return Vm{}, errors.New("RunInstances returned no instance")
+	}
 	waiter := ec2.NewInstanceRunningWaiter(p.Client)
 	err = waiter.Wait(context.TODO(), &ec2.DescribeInstancesInput{
 		InstanceIds: []string{*result.Instances[0].InstanceId},
 	}, 10*time.Minute)
 	if err != nil {
-		log.Fatalln(err)
+		return Vm{}, fmt.Errorf("waiting for %s to run: %w", *result.Instances[0].InstanceId, err)
 	}
 	instance := provideraws.DescribeInstance(*result.Instances[0].InstanceId)
 
@@ -288,8 +297,11 @@ func (p ProviderAws) Destroy(server Vm) error {
 		log.Println("[DEBUG] Server ID is empty")
 		// Use findAwsInstance (state-agnostic) so paused (stopped) instances are also destroyable.
 		id, err := p.findAwsInstance(server.Name)
-		if err != nil || id == "" {
-			log.Fatalln(err)
+		if err != nil {
+			return err
+		}
+		if id == "" {
+			return fmt.Errorf("no instance found with name %q", server.Name)
 		}
 		server.ID = id
 	}
@@ -337,6 +349,9 @@ func (p ProviderAws) List() (VmList, error) {
 		log.Println("[DEBUG] # of Reservations:" + strconv.Itoa(len(instances.Reservations)))
 		cloudList := make([]Vm, 0, len(instances.Reservations))
 		for _, reserv := range instances.Reservations {
+			if len(reserv.Instances) == 0 {
+				continue
+			}
 			cloudList = append(cloudList, mapAwsServer(reserv.Instances[0]))
 		}
 		output := VmList{
@@ -350,13 +365,13 @@ func (p ProviderAws) List() (VmList, error) {
 func (p ProviderAws) CreateSSHKey(publicKeyFile string) (keyID string, err error) {
 	publicKey, err := os.ReadFile(publicKeyFile)
 	if err != nil {
-		log.Fatalln(err)
+		return "", err
 	}
 
 	SSHKeyMD5 := fmt.Sprintf("%x", md5.Sum(publicKey))
 	pk, _, _, _, err := ssh.ParseAuthorizedKey(publicKey)
 	if err != nil {
-		panic(err)
+		return "", fmt.Errorf("parsing %s: %w", publicKeyFile, err)
 	}
 
 	// Get the fingerprint
@@ -380,17 +395,16 @@ func (p ProviderAws) CreateSSHKey(publicKeyFile string) (keyID string, err error
 					KeyNames: []string{"onctl-" + SSHKeyMD5[:8]},
 				})
 				if err != nil {
-					log.Fatalln(err)
+					return "", err
+				}
+				if len(keyPair.KeyPairs) == 0 {
+					return "", errors.New("SSH key reported as existing but not found")
 				}
 				log.Println("[DEBUG] SSH Key ID: " + *keyPair.KeyPairs[0].KeyPairId)
 				return *keyPair.KeyPairs[0].KeyPairId, nil
-			default:
-				fmt.Println(apiErr.Error())
 			}
-		} else {
-			fmt.Println(err.Error())
 		}
-		log.Fatalln(err)
+		return "", err
 	}
 	log.Printf("[DEBUG] %+v", importKeyPairOutput)
 	return *importKeyPairOutput.KeyPairId, nil
@@ -448,12 +462,10 @@ func (p ProviderAws) GetByName(serverName string) (Vm, error) {
 		},
 	})
 	if err != nil {
-		log.Fatalln(err)
-	}
-	if len(s.Reservations) == 0 {
-		// fmt.Println("No server found with name: " + serverName)
-		// os.Exit(1)
 		return Vm{}, err
+	}
+	if len(s.Reservations) == 0 || len(s.Reservations[0].Instances) == 0 {
+		return Vm{}, nil
 	}
 	return mapAwsServer(s.Reservations[0].Instances[0]), nil
 }
