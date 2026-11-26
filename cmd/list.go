@@ -2,15 +2,14 @@ package cmd
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"os"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/cdalar/onctl/internal/tools/puppet"
+	"github.com/cdalar/onctl/pkg/box"
 	"github.com/cdalar/onctl/pkg/cloud"
 
 	"github.com/spf13/cobra"
@@ -120,46 +119,14 @@ var listCmd = &cobra.Command{
 	},
 }
 
-// listVMs is what `onctl ls` and `onctl tui` show: the provider's VMs split
-// into running and paused -- ListPaused's, plus any stopped VMs List
-// returned, so all providers show the split, not just Hetzner. A failed
-// call is reported through err; what the other call returned is still
-// handed back.
+// listVMs is what `onctl ls` and `onctl tui` show: the provider's VMs
+// split into running and paused (box.Client.List).
 func listVMs(p cloud.CloudProviderInterface) (running, paused cloud.VmList, err error) {
-	all, listErr := p.List()
-	log.Println("[DEBUG] VM List: ", all)
-	snapshots, pausedErr := p.ListPaused()
-	log.Println("[DEBUG] Paused List: ", snapshots)
-	live := map[string]bool{}
-	for _, vm := range all.List {
-		live[vm.Name] = true
-		if isPausedStatus(vm.Status) {
-			paused.List = append(paused.List, vm)
-		} else {
-			running.List = append(running.List, vm)
-		}
-	}
-	// Mid pause/resume the server and its snapshot coexist (Hetzner
-	// snapshots before deleting, and creates before deleting the
-	// snapshot); the server is the current record, so skip its snapshot.
-	for _, vm := range snapshots.List {
-		if !live[vm.Name] {
-			paused.List = append(paused.List, vm)
-		}
-	}
-	return running, paused, errors.Join(listErr, pausedErr)
+	return box.Wrap(cloudProvider, p).List()
 }
 
-// isPausedStatus reports whether a VM status means stopped/paused rather than
-// running. AWS uses "stopped", Hetzner "off" (a server powered off outside
-// onctl pause, which snapshots and deletes it), GCP uses "TERMINATED"
-// (stopped, not deleted), Azure uses "VM deallocated", OVH uses
-// "SHELVED"/"SHELVED_OFFLOADED".
+// isPausedStatus reports whether a VM status means stopped/paused rather
+// than running (box.PausedStatus).
 func isPausedStatus(status string) bool {
-	return status == "stopped" ||
-		status == "off" ||
-		status == "TERMINATED" ||
-		status == "SHELVED" ||
-		status == "SHELVED_OFFLOADED" ||
-		strings.Contains(strings.ToLower(status), "deallocated")
+	return box.PausedStatus(status)
 }

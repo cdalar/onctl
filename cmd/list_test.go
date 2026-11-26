@@ -2,11 +2,15 @@ package cmd
 
 import (
 	"errors"
+	"io"
+	"os"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestListCmd_CommandProperties(t *testing.T) {
@@ -104,4 +108,41 @@ func TestListCmd_ProviderErrorIsTheResult(t *testing.T) {
 
 	withProvider(t, &tuiFakeProvider{vms: []cloud.Vm{{Name: "api"}}})
 	assert.NoError(t, listCmd.RunE(listCmd, nil))
+}
+
+// TestListCmd_JSONContract pins `onctl ls -o json`, which the boxctl host
+// service parses (`onctl ls -o json -p fc`): one flat array, running VMs
+// then paused, every cloud.Vm field under its Go name. A change here
+// breaks that service.
+func TestListCmd_JSONContract(t *testing.T) {
+	created := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	withProvider(t, &tuiFakeProvider{
+		vms: []cloud.Vm{
+			{ID: "1", Name: "web", IP: "10.0.0.2", Status: "running", Provider: "fc", SSHReady: true, SSHPort: 22, CreatedAt: created},
+			{ID: "2", Name: "db", Status: "stopped", Provider: "fc", CreatedAt: created},
+		},
+		paused: []cloud.Vm{{Name: "api", Status: "paused", Provider: "fc", CreatedAt: created}},
+	})
+	orig := output
+	output = "json"
+	t.Cleanup(func() { output = orig })
+
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	stdout := os.Stdout
+	os.Stdout = w
+	runErr := listCmd.RunE(listCmd, nil)
+	os.Stdout = stdout
+	require.NoError(t, w.Close())
+	got, err := io.ReadAll(r)
+	require.NoError(t, err)
+	require.NoError(t, runErr)
+
+	vm := func(id, name, ip, status string, ready bool, port int) string {
+		return `{"ID":"` + id + `","Name":"` + name + `","IP":"` + ip + `","PrivateIP":"","Type":"","Image":"","BaseImage":"","Status":"` + status +
+			`","SSHReady":` + strconv.FormatBool(ready) + `,"Location":"","SSHKeyID":"","SSHPort":` + strconv.Itoa(port) +
+			`,"CloudInitFile":"","CreatedAt":"2026-01-02T03:04:05Z","Provider":"fc","Cost":{"Currency":"","CostPerHour":0,"CostPerMonth":0,"AccumulatedCost":0}}`
+	}
+	want := "[" + vm("1", "web", "10.0.0.2", "running", true, 22) + "," + vm("2", "db", "", "stopped", false, 0) + "," + vm("", "api", "", "paused", false, 0) + "]\n"
+	assert.Equal(t, want, string(got))
 }

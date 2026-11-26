@@ -87,8 +87,10 @@ var destroyCmd = &cobra.Command{
 			// Tear down specific server
 			serverName := args[0]
 			log.Println("[DEBUG] Tear down server: " + serverName)
-			if sd, ok := provider.(cloud.SnapshotDestroyer); ok && isPaused(serverName) {
-				destroySnapshot(sd, serverName)
+			// box.Client.Destroy tells a snapshot from a VM itself; this
+			// asks first so the prompt and the result say which it is.
+			if _, ok := provider.(cloud.SnapshotDestroyer); ok && isPaused(serverName) {
+				destroySnapshot(serverName)
 				return
 			}
 			if !force {
@@ -99,7 +101,7 @@ var destroyCmd = &cobra.Command{
 			}
 			s.Suffix = " Destroying VM..."
 			s.Start()
-			if err := provider.Destroy(cloud.Vm{Name: serverName}); err != nil {
+			if err := boxClient().Destroy(serverName); err != nil {
 				s.Stop()
 				fmt.Println("\033[31m✘\033[0m Cannot destroy VM: " + serverName)
 				fmt.Println(err)
@@ -128,7 +130,7 @@ func isPaused(name string) bool {
 
 // destroySnapshot deletes a paused VM that's only a snapshot (Hetzner's),
 // saying that's what it is first: deleted, it can never be resumed.
-func destroySnapshot(sd cloud.SnapshotDestroyer, name string) {
+func destroySnapshot(name string) {
 	if !force {
 		fmt.Printf("%q is paused: all that's left of it is a snapshot (and the public IP kept for it).\n", name)
 		fmt.Println("This will permanently delete the snapshot, so it can never be resumed. This cannot be undone.")
@@ -136,7 +138,7 @@ func destroySnapshot(sd cloud.SnapshotDestroyer, name string) {
 			os.Exit(0)
 		}
 	}
-	if err := sd.DestroySnapshot(name); err != nil {
+	if err := boxClient().Destroy(name); err != nil {
 		fmt.Println("\033[31m✘\033[0m Cannot delete the snapshot of " + name)
 		fmt.Println(err)
 		os.Exit(1)

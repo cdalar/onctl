@@ -5,8 +5,19 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 )
+
+// OnctlSSHConfigPath is the fixed location of onctl's own ssh_config-format
+// inventory of imported hosts (the static provider's), ~/.ssh/onctl_config.
+func OnctlSSHConfigPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return filepath.Join(home, ".ssh", "onctl_config"), nil
+}
 
 type SSHIntoVMRequest struct {
 	IPAddress      string

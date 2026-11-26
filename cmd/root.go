@@ -6,17 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cdalar/onctl/internal/providerac"
-	"github.com/cdalar/onctl/internal/provideraws"
 	"github.com/cdalar/onctl/internal/providerazure"
-	"github.com/cdalar/onctl/internal/providerboxes"
-	"github.com/cdalar/onctl/internal/providerch"
-	"github.com/cdalar/onctl/internal/providerfc"
 	"github.com/cdalar/onctl/internal/providergcp"
-	"github.com/cdalar/onctl/internal/providerhtz"
-	"github.com/cdalar/onctl/internal/provideropenshell"
-	"github.com/cdalar/onctl/internal/providerovh"
 	"github.com/cdalar/onctl/internal/tools"
+	"github.com/cdalar/onctl/pkg/box"
 	"github.com/cdalar/onctl/pkg/cloud"
 
 	"github.com/spf13/cobra"
@@ -95,7 +88,7 @@ var (
 		},
 	}
 	cloudProvider     string
-	cloudProviderList = []string{"aws", "hetzner", "azure", "gcp", "ovh", "fc", "ch", "ac", "static", "boxes", "openshell"}
+	cloudProviderList = box.Providers
 	provider          cloud.CloudProviderInterface
 	providerFlag      string
 )
@@ -291,133 +284,23 @@ func ensureProvider() {
 	initProvider(cloudProvider)
 }
 
-// initProvider builds the global provider client for the selected cloud.
+// initProvider builds the global provider client for the selected cloud
+// (pkg/box picks and builds it). An unknown name leaves it unset.
 func initProvider(cloudProvider string) {
-	switch cloudProvider {
-	case "hetzner":
-		provider = &cloud.ProviderHetzner{
-			Client: providerhtz.GetClient(),
-			Config: cloud.HetznerConfig{
-				Location:      viper.GetString("hetzner.location"),
-				VMType:        viper.GetString("hetzner.vm.type"),
-				Image:         viper.GetString("hetzner.vm.image"),
-				Username:      viper.GetString("hetzner.vm.username"),
-				SSHPrivateKey: viper.GetString("ssh.privateKey"),
-			},
-		}
-	case "gcp":
-		provider = &cloud.ProviderGcp{
-			Client:      providergcp.GetClient(),
-			GroupClient: providergcp.GetGroupClient(),
-		}
-
-	case "aws":
-		provider = &cloud.ProviderAws{
-			Client: provideraws.GetClient(),
-		}
-	case "azure":
-		provider = &cloud.ProviderAzure{
-			ResourceGraphClient: providerazure.GetResourceGraphClient(),
-			VmClient:            providerazure.GetVmClient(),
-			NicClient:           providerazure.GetNicClient(),
-			PublicIPClient:      providerazure.GetIPClient(),
-			SSHKeyClient:        providerazure.GetSSHKeyClient(),
-			VnetClient:          providerazure.GetVnetClient(),
-			NSGClient:           providerazure.GetNSGClient(),
-		}
-	case "ovh":
-		provider = &cloud.ProviderOvh{
-			Client: providerovh.GetClient(),
-			Config: cloud.OvhConfig{
-				ServiceName:   viper.GetString("ovh.serviceName"),
-				Region:        viper.GetString("ovh.location"),
-				VMType:        viper.GetString("ovh.vm.type"),
-				Image:         viper.GetString("ovh.vm.image"),
-				Username:      viper.GetString("ovh.vm.username"),
-				SSHPrivateKey: viper.GetString("ssh.privateKey"),
-			},
-		}
-	case "fc":
-		fcConfig := providerfc.GetConfig()
-		provider = &cloud.ProviderFC{
-			Config:  fcConfig,
-			Process: providerfc.NewProcessManager(fcConfig.BinPath),
-			API:     providerfc.NewAPIClient(),
-			Net:     providerfc.NewNetworkManager(),
-			Rootfs:  providerfc.NewRootfsPreparer(),
-			Cache:   providerfc.NewCacheDiskPreparer(),
-		}
-	case "ch":
-		chConfig := providerch.GetConfig()
-		provider = &cloud.ProviderCH{
-			Config:       chConfig,
-			Process:      providerch.NewProcessManager(chConfig.BinPath),
-			Net:          providerch.NewNetworkManager(),
-			Rootfs:       providerch.NewRootfsPreparer(),
-			WindowsGuest: providerch.NewWindowsGuestPreparer(),
-			DHCP:         providerch.NewDHCPManager(chConfig.StateDir),
-		}
-	case "ac":
-		acConfig := providerac.GetConfig()
-		provider = &cloud.ProviderAC{
-			Config: acConfig,
-			CLI:    providerac.NewRunner(acConfig.BinPath),
-		}
-	case "boxes":
-		creds, err := providerboxes.LoadCredentials(viper.GetString("boxes.apiURL"))
-		if err != nil {
-			log.Fatalln(err)
-		}
-		bin, err := os.Executable()
-		if err != nil {
-			bin = "onctl"
-		}
-		provider = &cloud.ProviderBoxes{
-			Client: providerboxes.New(creds.APIURL, creds.Token),
-			Config: cloud.BoxesConfig{
-				VMType:   viper.GetString("boxes.vm.type"),
-				Image:    viper.GetString("boxes.vm.image"),
-				Username: viper.GetString("boxes.vm.username"),
-				OnctlBin: bin,
-			},
-		}
-	case "openshell":
-		gw, err := provideropenshell.Connect(viper.GetString("openshell.gateway"))
-		if err != nil {
-			log.Fatalln(err)
-		}
-		bin, err := os.Executable()
-		if err != nil {
-			bin = "onctl"
-		}
-		// The relay logs in as the sandbox's own user whatever is asked
-		// for; the ssh client just needs a name to send.
-		viper.SetDefault("openshell.vm.username", "sandbox")
-		// Without an onctl.yaml (see configOptional) there's no key path
-		// at all; onctl.yaml's own default lets getSSHKeyFilePaths fall
-		// back to whichever key type exists. The relay doesn't check the
-		// key, but the ssh client needs one to offer.
-		viper.SetDefault("ssh.publicKey", "~/.ssh/id_rsa.pub")
-		viper.SetDefault("ssh.privateKey", "~/.ssh/id_rsa")
-		provider = &cloud.ProviderOpenShell{
-			Sandboxes: gw.Client.Sandboxes(),
-			SSH:       gw.Client.SSH(),
-			TCP:       gw.Client.TCP(),
-			Config: cloud.OpenShellConfig{
-				Gateway:   gw.Name,
-				Workspace: viper.GetString("openshell.workspace"),
-				Image:     viper.GetString("openshell.vm.image"),
-				Username:  viper.GetString("openshell.vm.username"),
-				OnctlBin:  bin,
-			},
-		}
-	case "static":
-		path, err := onctlSSHConfigPath()
-		if err != nil {
-			log.Fatalln(err)
-		}
-		provider = &cloud.ProviderStatic{InventoryPath: path}
+	if !tools.Contains(cloudProviderList, cloudProvider) {
+		return
 	}
+	c, err := box.New(box.Options{Provider: cloudProvider})
+	if err != nil {
+		log.Fatalln(err)
+	}
+	provider = c.Provider()
+}
+
+// boxClient is the global provider as a pkg/box client: what the
+// lifecycle commands (create, ls, destroy, pause, resume, ssh) go through.
+func boxClient() *box.Client {
+	return box.Wrap(cloudProvider, provider)
 }
 
 func init() {

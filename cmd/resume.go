@@ -5,8 +5,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/cdalar/onctl/pkg/cloud"
-
 	"github.com/spf13/cobra"
 )
 
@@ -31,13 +29,14 @@ snapshot and re-attaches the preserved public IP when available.`,
 
 		// Ensure the onctl SSH key exists and attach it (mirrors create).
 		publicKeyFile, _ := getSSHKeyFilePaths(resumePublicKeyFile)
-		keyID, err := provider.CreateSSHKey(publicKeyFile)
+		c := boxClient()
+		keyID, err := c.AddSSHKey(publicKeyFile)
 		if err != nil {
 			log.Fatalln(err)
 		}
 
 		fmt.Println("\033[32m✔\033[0m Resuming VM from snapshot...")
-		vm, err := provider.Resume(cloud.Vm{Name: serverName, SSHKeyID: keyID})
+		vm, err := c.Resume(serverName, keyID)
 		if err != nil {
 			fmt.Println("\033[31m✘\033[0m Could not resume VM: " + serverName)
 			fmt.Println(err)
