@@ -64,6 +64,14 @@ Checked in `boxctl-io/boxctl` at `2994b92` and `boxctl-io/boxctl-cli` at
    code and pull requests, which every run needs, and tracking tasks,
    which only the backlog needs. They're supported separately, so on an
    on-prem forge runs can work before its issues or work items do.
+6. **Backlog order comes from labels.** A priority label on each issue
+   (Azure DevOps: a tag), the same on every forge; a forge's own board
+   or backlog order is not read.
+7. **Internal certificate authorities are supported.** An on-prem
+   install takes a CA bundle and every box, image, agent, git and the
+   runner trust it, so the forge, the control plane, the object store and
+   a local model behind an internal CA all work. The install kit
+   (`deploy/onprem`) and `onctl` both take the bundle.
 
 ## Steps
 
@@ -100,8 +108,8 @@ boxctl-cli. Independent of the rest.
   client; Azure DevOps Server and GitLab each through their own.
 - **Tasks are issues.** What `backlog.json` holds today goes to the
   forge instead:
-  - state (queued, active, needs you, done) and priority: onctl's own
-    labels (Azure DevOps: tags), never the forge's workflow state, so
+  - state (queued, active, needs you, done) and priority (decision 6):
+    onctl's own labels (Azure DevOps: tags), never the forge's workflow state, so
     an Azure DevOps process (Agile, Scrum, CMMI, Basic) or a custom
     workflow doesn't matter;
   - each run and its outcome (kind, box, done/failed/lost/killed): a
@@ -147,9 +155,4 @@ step 4. Step 1 can land at any time.
 
 ## Open questions
 
-1. Ordering: priority labels, or the order of a GitHub Project, an Azure
-   DevOps backlog or a GitLab board? Labels work the same on every
-   forge.
-2. Air-gapped installs usually have an internal certificate authority.
-   Boxes, the agent and git must trust it: does the install kit take a
-   CA bundle and put it in every image?
+None at the moment.
