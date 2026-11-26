@@ -47,7 +47,7 @@
   <rect class="work" x="30" y="204" width="220" height="92" rx="8" stroke-width="1.5"/>
   <text class="t" x="48" y="234">Task</text>
   <text class="s" x="48" y="256">one PR, one repository</text>
-  <text class="s" x="48" y="275">issue optional (--issue N)</text>
+  <text class="s" x="48" y="275">backlog: an issue · one-off: text</text>
 
   <!-- Agent -->
   <rect class="agent" x="370" y="44" width="220" height="92" rx="8" stroke-width="1.5"/>

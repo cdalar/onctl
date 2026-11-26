@@ -29,12 +29,12 @@ boxctl.io. Both have grown words that mean several things at once:
 
 | Word | Means | Isn't |
 |---|---|---|
-| **Task** | One piece of work that ends in one pull request, in one repository. It has a description, and optionally the GitHub issue it came from. | A place. A group of tasks. |
+| **Task** | One piece of work that ends in one pull request, in one repository. In the backlog it is an issue on the forge (Azure DevOps: a work item). A one-off run's task is just its text. | A place. A group of tasks. |
 | **Agent** | What does the work: Claude Code or Kilo, with its model, effort and harness (its *profile*). It has no state of its own. | A running process or a box. |
 | **Run** | One agent working once, in one workspace, interactive or unattended. It has a kind, a status (working, blocked, done, failed, lost, killed) and, when it gets that far, a pull request. A task has one or more runs. | The task itself. |
 | **Workspace** | Where a run's code is: a checkout of the project on a box, or a git worktree beside it (`<dir>@<name>`, branch `<name>`). | The box. |
 | **Box** | A machine: a VM or microVM. It holds one or more workspaces. onctl makes it in your cloud, boxctl gets it from boxctl.io. | A workspace or an environment. |
-| **Backlog** | The queue of tasks boxctl works through, a few at a time. | A layer above tasks. |
+| **Backlog** | The forge's issues labelled for onctl, worked through a few at a time, in the order of their priority labels. | A layer above tasks. |
 
 ![Task, Agent, Run, Workspace and Box, and how they relate](shared-vocabulary.svg)
 
@@ -57,8 +57,10 @@ workspaces, Claude Code's session ID (`--handoff`).
    not modelled. Independent tasks already run in parallel (`boxctl
    backlog limit`); what splitting work would add is ordering and
    dependencies between tasks, which nothing does today.
-2. **A task doesn't need an issue.** `--issue N` makes a task from issue
-   N and links it; a task can also be just its description.
+2. **A backlog task is an issue; a one-off run's task is text.** The
+   backlog keeps no store of its own (see
+   [control-plane.md](https://github.com/cdalar/onctl/blob/main/docs/plans/control-plane.md)). `--issue N` runs issue
+   N, and its pull request closes it.
 3. **The new names are user-facing, with no aliases.** There are no users
    to keep working yet, so old flags and views go away in the same
    change that adds the new ones. Callers inside the repositories (the
@@ -88,11 +90,10 @@ workspaces, Claude Code's session ID (`--handoff`).
 
 | Today | New |
 |---|---|
-| `backlog.Item` | `backlog.Task` |
-| `Item.Goal` | `Task.Description` |
-| `boxctl backlog add <goal>` | `boxctl backlog add <description>` |
+| `backlog.Item`, `Item.Goal`, `~/.boxctl/backlog.json` | an issue and its text; no file (control-plane.md, step 4) |
+| `boxctl backlog add <goal>` | `backlog add <description>`: opens an issue labelled queued |
 | `claude --goal "<text>"` | `claude --task "<text>"` (freed by `--workspace`) |
-| `claude --issue N` | unchanged; the task now records issue N |
+| `claude --issue N` | unchanged |
 | `goalRun`, ephemeral run, `--repo` run, `backlog.Run` | one `Run`, with a kind |
 | `boxctl runs`: backlog runs only | `boxctl runs`: every run |
 | `--harness`, `--model`, `--effort` | unchanged flags; together called the agent's profile in docs |
@@ -126,7 +127,7 @@ work, or need "this one first", add it without a new kind of record:
 One pull request per repository, each doing all of its renames, with
 tests updated to the new names:
 
-1. boxctl-cli: Item → Task, `--goal` → `--task`, `--task` →
+1. boxctl-cli: `--goal` → `--task`, `--task` →
    `--workspace`, one `Run`, `boxctl runs` for every run, the Claude
    plugin and docs.
 2. onctl: `--task` → `--workspace`, `:agents` → `:runs`, `agentSession`
