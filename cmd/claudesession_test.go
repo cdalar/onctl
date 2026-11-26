@@ -11,19 +11,19 @@ import (
 	"testing"
 )
 
-func TestTaskSession(t *testing.T) {
-	main := newTaskSession("/w/app", "")
-	if main.dir != "/w/app" || main.name != "claude" || main.ghSocket != boxGitHubSocket {
+func TestWorkspace(t *testing.T) {
+	main := newWorkspace("/w/app", "")
+	if main.dir != "/w/app" || main.session != "claude" || main.ghSocket != boxGitHubSocket {
 		t.Errorf("main: %+v", main)
 	}
 	if main.attachHint("claude-app") != "onctl claude --box claude-app" {
 		t.Error(main.attachHint("claude-app"))
 	}
-	auth := newTaskSession("/w/app", "auth")
-	if auth.dir != "/w/app@auth" || auth.name != "claude-auth" || auth.ghSocket != "/root/.boxctl/gh-auth.sock" {
-		t.Errorf("task: %+v", auth)
+	auth := newWorkspace("/w/app", "auth")
+	if auth.dir != "/w/app@auth" || auth.session != "claude-auth" || auth.ghSocket != "/root/.boxctl/gh-auth.sock" {
+		t.Errorf("workspace: %+v", auth)
 	}
-	if auth.attachHint("claude-app") != "onctl claude --box claude-app --task auth" {
+	if auth.attachHint("claude-app") != "onctl claude --box claude-app --workspace auth" {
 		t.Error(auth.attachHint("claude-app"))
 	}
 	if auth.envFile() == main.envFile() || !strings.HasPrefix(auth.envFile(), "/run/") {
@@ -37,7 +37,7 @@ func TestTaskSession(t *testing.T) {
 // in its arguments.
 func TestSessionCommandTakesItsSecrets(t *testing.T) {
 	root := t.TempDir()
-	s := newTaskSession("/w/app", "auth")
+	s := newWorkspace("/w/app", "auth")
 	envFile := filepath.Join(root, "claude-auth.env")
 	line := strings.ReplaceAll(s.commandLine("", nil), shellQuote(s.envFile()), shellQuote(envFile))
 	write(t, envFile, "export CLAUDE_CODE_OAUTH_TOKEN="+shellQuote("sk-ant-oat01-secret")+"\n")
@@ -144,50 +144,65 @@ func TestWorktreeScript(t *testing.T) {
 	run(t, proj, "git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init")
 
 	sh(t, worktreeScript(proj, "auth"))
-	if gitOut(t, taskDir(proj, "auth"), "branch", "--show-current") != "auth" {
-		t.Fatal("task worktree isn't on branch auth")
+	if gitOut(t, workspaceDir(proj, "auth"), "branch", "--show-current") != "auth" {
+		t.Fatal("workspace worktree isn't on branch auth")
 	}
 	sh(t, worktreeScript(proj, "auth")) // again: already there, no error
 	// An existing branch is checked out, not recreated.
 	run(t, proj, "git", "branch", "billing")
 	sh(t, worktreeScript(proj, "billing"))
-	if gitOut(t, taskDir(proj, "billing"), "branch", "--show-current") != "billing" {
+	if gitOut(t, workspaceDir(proj, "billing"), "branch", "--show-current") != "billing" {
 		t.Fatal("billing worktree")
 	}
 
 	ws := parseWorktrees(gitOut(t, proj, "worktree", "list", "--porcelain"), proj)
-	var tasks []string
+	var names []string
 	for _, w := range ws {
-		tasks = append(tasks, w.task+"="+w.wipName())
+		names = append(names, w.name+"="+w.wipName())
 	}
-	if want := []string{"=wip", "auth=wip-auth", "billing=wip-billing"}; !reflect.DeepEqual(tasks, want) {
-		t.Fatalf("worktrees %v, want %v", tasks, want)
+	if want := []string{"=wip", "auth=wip-auth", "billing=wip-billing"}; !reflect.DeepEqual(names, want) {
+		t.Fatalf("worktrees %v, want %v", names, want)
 	}
 	branches := worktreeBranches(gitOut(t, proj, "worktree", "list", "--porcelain"))
-	if branches[taskDir(proj, "auth")] != "auth" {
+	if branches[workspaceDir(proj, "auth")] != "auth" {
 		t.Errorf("branches %v", branches)
 	}
 }
 
-func TestResolveTask(t *testing.T) {
-	prevTask, prevOwn, prevBox, prevProj := claudeTask, claudeOwnBox, claudeBox, claudeProject
-	t.Cleanup(func() { claudeTask, claudeOwnBox, claudeBox, claudeProject = prevTask, prevOwn, prevBox, prevProj })
+func TestResolveWorkspace(t *testing.T) {
+	prevWorkspace, prevOwn, prevBox, prevProj := claudeWorkspace, claudeOwnBox, claudeBox, claudeProject
+	t.Cleanup(func() {
+		claudeWorkspace, claudeOwnBox, claudeBox, claudeProject = prevWorkspace, prevOwn, prevBox, prevProj
+	})
 
 	claudeProject = t.TempDir()
-	claudeTask, claudeOwnBox, claudeBox = "Bad_Name", false, ""
-	if resolveTask() == nil {
-		t.Error("an invalid task name was accepted")
+	claudeWorkspace, claudeOwnBox, claudeBox = "Bad_Name", false, ""
+	if resolveWorkspace() == nil {
+		t.Error("an invalid workspace name was accepted")
 	}
-	claudeTask, claudeOwnBox = "", true
-	if resolveTask() == nil {
-		t.Error("--own-box without --task was accepted")
+	claudeWorkspace, claudeOwnBox = "", true
+	if resolveWorkspace() == nil {
+		t.Error("--own-box without --workspace was accepted")
 	}
-	claudeTask, claudeOwnBox, claudeBox = "auth", true, ""
-	if err := resolveTask(); err != nil {
+	claudeWorkspace, claudeOwnBox, claudeBox = "auth", true, ""
+	if err := resolveWorkspace(); err != nil {
 		t.Fatal(err)
 	}
-	if claudeTask != "" || !strings.HasSuffix(claudeBox, "-auth") || !strings.HasPrefix(claudeBox, "claude-") {
-		t.Errorf("own box: task %q box %q", claudeTask, claudeBox)
+	if claudeWorkspace != "" || !strings.HasSuffix(claudeBox, "-auth") || !strings.HasPrefix(claudeBox, "claude-") {
+		t.Errorf("own box: workspace %q box %q", claudeWorkspace, claudeBox)
+	}
+}
+
+// A worktree is a workspace, named with --workspace (-w). --task is gone
+// with no alias: in boxctl it now means a task's description, so an old
+// `--task auth` must fail here rather than quietly make a worktree.
+func TestWorkspaceFlag(t *testing.T) {
+	f := claudeCmd.PersistentFlags().Lookup("workspace")
+	if f == nil || f.Shorthand != "w" {
+		t.Fatalf("--workspace/-w missing: %+v", f)
+	}
+	if claudeCmd.PersistentFlags().Lookup("task") != nil || claudeCmd.PersistentFlags().ShorthandLookup("t") != nil {
+		t.Error("--task/-t is still a flag of onctl claude")
 	}
 }
 
@@ -306,7 +321,7 @@ func TestStageClaudeEnv(t *testing.T) {
 	argsLog := fakeSSH(t)
 	_, runDir := boxPaths(t)
 	box := &boxSSH{name: "b", args: []string{"root@b"}}
-	s := newTaskSession("/w/app", "auth")
+	s := newWorkspace("/w/app", "auth")
 	env := "export CLAUDE_CODE_OAUTH_TOKEN='sk-ant-oat01-secret'\n"
 
 	if err := stageClaudeEnv(context.Background(), box, s, env); err != nil {
@@ -337,7 +352,7 @@ func TestStageClaudeEnv(t *testing.T) {
 	if err := os.Remove(argsLog); err != nil {
 		t.Fatal(err)
 	}
-	main := newTaskSession("/w/app", "")
+	main := newWorkspace("/w/app", "")
 	if err := stageClaudeEnv(context.Background(), box, main, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -404,25 +419,25 @@ func TestClaudeStateScriptKeepsBoxState(t *testing.T) {
 	}
 }
 
-// A task name goes into a git branch, a worktree path, a socket path and
+// A workspace name goes into a git branch, a worktree path, a socket path and
 // -- unquoted -- the worktree script's refs/heads/ check, so the pattern
 // is the only thing keeping it a plain, short, branch-safe word.
-func TestTaskNamePattern(t *testing.T) {
+func TestWorkspaceNamePattern(t *testing.T) {
 	for _, ok := range []string{"auth", "fix-ci", "a", "9lives", strings.Repeat("a", 30)} {
-		if !taskNamePattern.MatchString(ok) {
+		if !workspaceNamePattern.MatchString(ok) {
 			t.Errorf("%q rejected", ok)
 		}
 	}
 	for _, bad := range []string{"", "-auth", "Auth", "fix_ci", "a b", "a/b", "a;rm -rf", "a..b", "a\nb", strings.Repeat("a", 31)} {
-		if taskNamePattern.MatchString(bad) {
+		if workspaceNamePattern.MatchString(bad) {
 			t.Errorf("%q accepted", bad)
 		}
 	}
 }
 
-// A task needs a git repository to branch from: outside one the script
+// A workspace needs a git repository to branch from: outside one the script
 // must stop with a clear error and make nothing, not leave a stray
-// <dir>@<task> directory behind.
+// <dir>@<name> directory behind.
 func TestWorktreeScriptNeedsGit(t *testing.T) {
 	root := t.TempDir()
 	proj := filepath.Join(root, "app")
@@ -433,10 +448,10 @@ func TestWorktreeScriptNeedsGit(t *testing.T) {
 	if err == nil {
 		t.Fatalf("worked outside a git repository: %s", out)
 	}
-	if !strings.Contains(string(out), "tasks need a git repository") {
+	if !strings.Contains(string(out), "workspaces need a git repository") {
 		t.Errorf("error %q", out)
 	}
-	if _, err := os.Stat(taskDir(proj, "auth")); !os.IsNotExist(err) {
+	if _, err := os.Stat(workspaceDir(proj, "auth")); !os.IsNotExist(err) {
 		t.Error("a worktree directory was made anyway")
 	}
 }
@@ -459,8 +474,8 @@ func TestWorktreeScriptProjectWithSpace(t *testing.T) {
 	run(t, proj, "git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init")
 
 	sh(t, worktreeScript(proj, "auth"))
-	if gitOut(t, taskDir(proj, "auth"), "branch", "--show-current") != "auth" {
-		t.Fatal("task worktree isn't on branch auth")
+	if gitOut(t, workspaceDir(proj, "auth"), "branch", "--show-current") != "auth" {
+		t.Fatal("workspace worktree isn't on branch auth")
 	}
 	if _, err := os.Stat(filepath.Join(root, "my")); !os.IsNotExist(err) {
 		t.Error("the path was split at the space")

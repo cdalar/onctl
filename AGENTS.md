@@ -47,7 +47,7 @@ These guidelines focus on Go best practices, CLI design patterns, and cloud inte
 - `cmd/`: CLI commands built with Cobra:
   - Core lifecycle: `create.go`, `destroy.go`, `ssh.go`, `list.go`, `restart.go`, `pause.go`, `resume.go`
   - TUI interface: `tui.go`, `tuiactions.go`, `tuirender.go`, `tuirepos.go`, `tuiviews.go` (k9s-style interactive terminal UI)
-  - Agent workflows: `claude.go`, `claudesession.go`, `claudegit.go`, `agents.go`
+  - Agent workflows: `claude.go`, `claudesession.go`, `claudegit.go`, `runs.go`
   - Utility commands: `init.go`, `images.go`, `sizes.go`, `import.go`, `portforward.go`
 - `internal/`: Internal domain logic and provider adapters:
   - Public cloud adapters: `provideraws/`, `providerazure/`, `providergcp/`, `providerhtz/`, `providerovh/`

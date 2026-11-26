@@ -58,7 +58,7 @@ var k9s = struct {
 		"failed":   lipgloss.NewStyle().Foreground(lipgloss.Color("203")),
 		"private":  lipgloss.NewStyle().Foreground(lipgloss.Color("220")),
 		"archived": lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
-		// :agents' CLAUDE column: green at work, yellow waiting for you.
+		// :runs' CLAUDE column: green at work, yellow waiting for you.
 		"working": lipgloss.NewStyle().Foreground(lipgloss.Color("46")),
 		"blocked": lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Bold(true),
 		"done":    lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Bold(true),

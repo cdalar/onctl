@@ -14,7 +14,7 @@ import (
 // attaches -- across a detach, a dropped connection, a --detach start.
 // tmux is the default. herdr (herdr.dev) is the alternative, --mux herdr:
 // a terminal workspace manager made for coding agents, which tells a
-// working one from a blocked one from an idle one, and shows every task
+// working one from a blocked one from an idle one, and shows every run
 // on the box in one window. Which one a box uses is recorded on it
 // (muxMarker) when a session starts, so later runs -- attaching again,
 // claude ls -- look for the session where it is without being told.
@@ -29,9 +29,9 @@ type multiplexer interface {
 	// start is shell that starts s's Claude with line as its command, or
 	// attaches to it if it's running already; detached starts it without
 	// attaching (--detach).
-	start(s taskSession, line string, detached bool) string
+	start(s workspace, line string, detached bool) string
 	// running is shell that exits 0 if s's Claude is running.
-	running(s taskSession) string
+	running(s workspace) string
 	// list is shell printing the sessions, for parseList.
 	list() string
 	// parseList maps each running session's name to what claude ls shows
@@ -99,20 +99,20 @@ func (tmuxMux) setup() string {
 // start: one tmux session per Claude session. -A attaches to it if it's
 // running already, -d starts it without attaching. -u: the box has no
 // locale set, and Claude's interface is Unicode.
-func (tmuxMux) start(s taskSession, line string, detached bool) string {
+func (tmuxMux) start(s workspace, line string, detached bool) string {
 	mode := "-A"
 	if detached {
 		mode = "-d"
 	}
 	return muxMarkScript("tmux") + fmt.Sprintf("; tmux -u new-session %s -s %s -c %s %s",
-		mode, s.name, shellQuote(s.dir), shellQuote(line))
+		mode, s.session, shellQuote(s.dir), shellQuote(line))
 }
 
 // running: =name is exact. A bare -t name falls back to a prefix match,
 // so "claude" would find "claude-auth" and take the main session for
 // running.
-func (tmuxMux) running(s taskSession) string {
-	return "tmux has-session -t =" + s.name + " 2>/dev/null"
+func (tmuxMux) running(s workspace) string {
+	return "tmux has-session -t =" + s.session + " 2>/dev/null"
 }
 
 func (tmuxMux) list() string {
@@ -138,7 +138,7 @@ func (tmuxMux) parseList(out string) map[string]string {
 
 // herdr runs one server per box (its default session), and each Claude
 // session is a workspace of it labeled with the session's name (claude,
-// claude-auth): an attached herdr shows every task on the box, with what
+// claude-auth): an attached herdr shows every run on the box, with what
 // its Claude is doing, and claude ls reads them all from one `herdr
 // workspace list`. Verified against herdr 0.9.5.
 type herdrMux struct{}
@@ -177,8 +177,8 @@ func (herdrMux) setup() string {
 // A pane whose process ends is closed; an attached client then shows a
 // plain shell workspace (detach with Ctrl-b q), and the server stays for
 // the box's other sessions -- a box outlives its runs here.
-func (herdrMux) start(s taskSession, line string, detached bool) string {
-	cmdFile := muxRunDir + "/" + s.name + ".cmd"
+func (herdrMux) start(s workspace, line string, detached bool) string {
+	cmdFile := muxRunDir + "/" + s.session + ".cmd"
 	pane := "exec sh " + shellQuote(cmdFile)
 	stop := ""
 	if !detached && s.ephemeral {
@@ -197,13 +197,13 @@ if ! herdr workspace list >/dev/null 2>&1; then
   n=0; until herdr workspace list >/dev/null 2>&1; do n=$((n+1)); [ "$n" -lt 100 ] || { echo "herdr's server didn't start" >&2; exit 1; }; sleep 0.1; done
   for w in $(herdr workspace list 2>/dev/null | grep -o '"workspace_id":"[^"]*"' | sed 's/.*:"//; s/"$//'); do herdr workspace close "$w" >/dev/null 2>&1; done
 fi
-ws=$(herdr workspace list 2>/dev/null | grep -o ` + shellQuote(`"label":"`+s.name+`"[^}]*"workspace_id":"[^"]*"`) + ` | sed 's/.*"workspace_id":"//; s/"$//' | head -n 1)
+ws=$(herdr workspace list 2>/dev/null | grep -o ` + shellQuote(`"label":"`+s.session+`"[^}]*"workspace_id":"[^"]*"`) + ` | sed 's/.*"workspace_id":"//; s/"$//' | head -n 1)
 if [ -n "$ws" ]; then herdr workspace focus "$ws" >/dev/null || exit 1
 else
   herdr integration install claude >/dev/null 2>&1 || true
   (umask 077 && mkdir -p ` + shellQuote(muxRunDir) + ` && printf '%s\n' ` + shellQuote(line) + ` >` + shellQuote(cmdFile) + stopTouch(stop) + `) || exit 1
-  p=$(herdr workspace create --cwd ` + shellQuote(s.dir) + ` --label ` + shellQuote(s.name) + ` --focus | sed -n 's/.*"root_pane":{[^}]*"pane_id":"\([^"]*\)".*/\1/p')
-  [ -n "$p" ] || { echo "couldn't make a herdr workspace for ` + s.name + `" >&2; exit 1; }
+  p=$(herdr workspace create --cwd ` + shellQuote(s.dir) + ` --label ` + shellQuote(s.session) + ` --focus | sed -n 's/.*"root_pane":{[^}]*"pane_id":"\([^"]*\)".*/\1/p')
+  [ -n "$p" ] || { echo "couldn't make a herdr workspace for ` + s.session + `" >&2; exit 1; }
   herdr pane run "$p" ` + shellQuote(pane) + ` >/dev/null || exit 1
 fi
 exec 9>&-`
@@ -215,7 +215,7 @@ exec 9>&-`
 
 // herdrStopFile, while it exists, has an ephemeral session's pane stop
 // herdr's server when Claude exits.
-func herdrStopFile(s taskSession) string { return muxRunDir + "/" + s.name + ".stop" }
+func herdrStopFile(s workspace) string { return muxRunDir + "/" + s.session + ".stop" }
 
 // stopTouch is shell, after the command file is written, that makes the
 // stop file -- none when there's no stop.
@@ -228,8 +228,8 @@ func stopTouch(stop string) string {
 
 // running: the session's workspace exists. A workspace goes when its
 // pane's process ends, so one still listed is one still running.
-func (herdrMux) running(s taskSession) string {
-	return "herdr workspace list 2>/dev/null | grep -q " + shellQuote(`"label":"`+s.name+`"`)
+func (herdrMux) running(s workspace) string {
+	return "herdr workspace list 2>/dev/null | grep -q " + shellQuote(`"label":"`+s.session+`"`)
 }
 
 func (herdrMux) list() string {

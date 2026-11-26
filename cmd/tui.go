@@ -39,7 +39,7 @@ var tuiCmd = &cobra.Command{
 	Short: "Browse and manage your VMs in a k9s-style terminal UI",
 	Long: `Opens a live, full-screen view of your VMs, laid out like k9s.
 
-  :vms :agents :images :sizes :repos   switch view (also :q, :help, :create)
+  :vms :runs :images :sizes :repos     switch view (also :q, :help, :create)
   :provider [name]      switch cloud provider (a list to pick from without a name)
   :claude [vm]          run Claude Code on a VM (onctl claude --box vm; the project's box without one)
   /text        filter the rows; esc clears
@@ -50,8 +50,8 @@ var tuiCmd = &cobra.Command{
   enter        in :repos (your GitHub repos, newest push first, from gh), start Claude
                on a box of this provider with the repo cloned (onctl claude --repo):
                a new box, or the repo's own box, is asked
-  :agents      Claude sessions on boxes, with herdr's status and their PRs; n starts
-               one (pick a repo, say the task), enter attaches, P pushes and opens
+  :runs        Claude's runs on boxes, with herdr's status and their PRs; n starts
+               one (pick a repo, describe the task), enter attaches, P pushes and opens
                a PR, o opens it. You get a desktop notification when Claude waits
   c            create a VM (name, image and type are asked; runs onctl create)
   p / r        pause / resume
@@ -226,12 +226,12 @@ var tuiFlashFor = 5 * time.Second
 // Messages from the commands the model runs.
 type (
 	tuiListMsg struct {
-		resource string // vms, images, sizes, repos, agents
+		resource string // vms, images, sizes, repos, runs
 		vms      []cloud.Vm
 		images   []cloud.CloudImage
 		sizes    []cloud.CloudSize
 		repos    []ghRepo
-		agents   []agentSession
+		runs     []boxRun
 		err      error
 	}
 	tuiActionMsg struct {
@@ -323,11 +323,11 @@ type tuiModel struct {
 	// doesn't open it again every 15 seconds.
 	listErrShown map[string]string
 
-	agents        []agentSession    // :agents (tuiagents.go)
-	agentStatuses map[string]string // each box's status at the last poll; nil before the first
-	tasking       bool              // typing a new session's task
-	task          textinput.Model
-	taskRepo      string
+	runs        []boxRun          // :runs (tuiruns.go)
+	runStatuses map[string]string // each box's status at the last poll; nil before the first
+	tasking     bool              // typing a new run's task description
+	task        textinput.Model
+	taskRepo    string
 
 	pages       []page // the navigation stack; the last is shown
 	stateFilter stateFilter
@@ -370,7 +370,7 @@ func newTUI(p cloud.CloudProviderInterface) tuiModel {
 	f.CharLimit = 80
 	cmd := textinput.New()
 	cmd.Prompt = ""
-	cmd.Placeholder = "vms, agents, images, sizes, repos, create, claude, provider, help, q"
+	cmd.Placeholder = "vms, runs, images, sizes, repos, create, claude, provider, help, q"
 	cmd.CharLimit = 80
 	task := textinput.New()
 	task.Prompt = ""
@@ -443,8 +443,8 @@ func (m *tuiModel) list(resource string) tea.Cmd {
 			msg.images, msg.err = tuiListImages(p)
 		case "sizes":
 			msg.sizes, msg.err = tuiListSizes(p)
-		case "agents":
-			msg.agents, msg.err = pollAgents()
+		case "runs":
+			msg.runs, msg.err = pollRuns()
 		}
 		return msg
 	}
@@ -478,10 +478,10 @@ func (m *tuiModel) refresh() tea.Cmd {
 	if m.picking {
 		return nil
 	}
-	if m.loaded["agents"] {
-		// Once :agents has been opened its boxes are polled in every
+	if m.loaded["runs"] {
+		// Once :runs has been opened its boxes are polled in every
 		// view, so a Claude waiting for you is noticed wherever you are.
-		return tea.Batch(m.list("vms"), m.list("agents"), m.spinIfBusy())
+		return tea.Batch(m.list("vms"), m.list("runs"), m.spinIfBusy())
 	}
 	return tea.Batch(m.list("vms"), m.spinIfBusy())
 }
@@ -630,8 +630,8 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "repos":
 			m.repos = msg.repos
 			m.reposAt = time.Now()
-		case "agents":
-			m.gotAgents(msg.agents)
+		case "runs":
+			m.gotRuns(msg.runs)
 		}
 		// A describe/json page follows its VM.
 		for i := range m.pages {
@@ -702,7 +702,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(m.say("created %s", what), list, m.refresh())
 		}
 		if msg.verb == "start" {
-			return m, tea.Batch(m.say("Claude is working on %s; you're notified when it waits for you", what), m.refresh(), m.list("agents"))
+			return m, tea.Batch(m.say("Claude is working on %s; you're notified when it waits for you", what), m.refresh(), m.list("runs"))
 		}
 		return m, m.refresh()
 
@@ -798,7 +798,7 @@ func (m *tuiModel) currentVM() *cloud.Vm {
 	switch {
 	case t.kind == pageText:
 		name = t.vm
-	case t.view == vmsView || t.view == agentsView:
+	case t.view == vmsView || t.view == runsView:
 		if r := m.currentRow(); r != nil {
 			name = r.key
 		}

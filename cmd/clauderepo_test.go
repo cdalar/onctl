@@ -83,12 +83,12 @@ func TestCloneScript(t *testing.T) {
 // --repo is a project of its own on the box, so the flags about a
 // project here are refused up front rather than half-applied.
 func TestRepoConflicts(t *testing.T) {
-	defer func() { claudeTask, claudeOwnBox, claudeHandoff, claudeProject = "", false, "", "" }()
+	defer func() { claudeWorkspace, claudeOwnBox, claudeHandoff, claudeProject = "", false, "", "" }()
 	if got := repoConflicts(); len(got) != 0 {
 		t.Errorf("nothing set: %v", got)
 	}
-	claudeTask, claudeHandoff = "auth", "abc"
-	if got := strings.Join(repoConflicts(), " "); got != "--task --handoff" {
+	claudeWorkspace, claudeHandoff = "auth", "abc"
+	if got := strings.Join(repoConflicts(), " "); got != "--workspace --handoff" {
 		t.Errorf("conflicts = %q", got)
 	}
 }
