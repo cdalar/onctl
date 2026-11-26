@@ -53,8 +53,14 @@ Checked in `boxctl-io/boxctl` at `2994b92` and `boxctl-io/boxctl-cli` at
 4. **No backlog store: tasks live on the forge.** The backlog is the
    forge's issues (Azure DevOps: work items), and onctl keeps no task
    database of its own, locally or on the server. See step 4.
-5. **Forges: GitHub, GitHub Enterprise Server and Azure DevOps Server
-   (TFS) first, GitLab later.** A forge does two separate jobs: hosting
+5. **Forges: GitHub, GitHub Enterprise Server, Azure DevOps Server
+   (TFS) and GitLab (gitlab.com and self-managed).** Azure DevOps Server:
+   the current, versionless release (GA December 2025, Modern Lifecycle)
+   and 2022 Update 2 (supported until January 2028); 2020 and older are
+   out of mainstream support and not targeted. No usage figures by
+   version were found, so this follows Microsoft's support lifecycle.
+   GitLab: the self-managed versions GitLab itself still supports, over
+   its v4 REST API. A forge does two separate jobs: hosting
    code and pull requests, which every run needs, and tracking tasks,
    which only the backlog needs. They're supported separately, so on an
    on-prem forge runs can work before its issues or work items do.
@@ -91,11 +97,13 @@ boxctl-cli. Independent of the rest.
 - **A forge interface**, two parts: code (clone, push, open and watch a
   pull request, its checks) and tasks (list, label, comment on issues or
   work items). GitHub and GitHub Enterprise Server through the same
-  client; Azure DevOps Server next; GitLab later.
+  client; Azure DevOps Server and GitLab each through their own.
 - **Tasks are issues.** What `backlog.json` holds today goes to the
   forge instead:
-  - state (queued, active, needs you, done) and priority: labels (Azure
-    DevOps: tags and fields);
+  - state (queued, active, needs you, done) and priority: onctl's own
+    labels (Azure DevOps: tags), never the forge's workflow state, so
+    an Azure DevOps process (Agile, Scrum, CMMI, Basic) or a custom
+    workflow doesn't matter;
   - each run and its outcome (kind, box, done/failed/lost/killed): a
     comment the dispatcher writes on the issue, readable by people and
     parsed back for attempt counts;
@@ -103,6 +111,11 @@ boxctl-cli. Independent of the rest.
     and the control plane has their run status.
 - **One-off runs** (`--task "<text>"`) stay outside the backlog, with no
   issue.
+- **The runner opens the pull request, not the agent.** Today the agent
+  is told to run `gh pr create`. With several forges the agent only
+  commits and pushes; onctl opens the pull request (GitLab: merge
+  request) through the forge interface, so images don't need `gh`, `az`
+  and `glab`, and the agent's instructions are the same everywhere.
 - Agent profiles (harness, model, effort) are files, as harnesses are
   today; the server stores none.
 - The backlog dispatcher moves out of the boxctl CLI into onctl, behind
@@ -134,8 +147,9 @@ step 4. Step 1 can land at any time.
 
 ## Open questions
 
-1. Azure DevOps Server: which versions, and is its work-item process
-   (Agile, Scrum, CMMI) fixed per install, which decides the fields
-   state maps to?
-2. Ordering: priority labels, or the order of a GitHub Project / Azure
-   DevOps backlog?
+1. Ordering: priority labels, or the order of a GitHub Project, an Azure
+   DevOps backlog or a GitLab board? Labels work the same on every
+   forge.
+2. Air-gapped installs usually have an internal certificate authority.
+   Boxes, the agent and git must trust it: does the install kit take a
+   CA bundle and put it in every image?
