@@ -50,6 +50,14 @@ Checked in `boxctl-io/boxctl` at `2994b92` and `boxctl-io/boxctl-cli` at
    has no route to it: Claude, Kilo, herdr, images and the forge (where
    tasks and pull requests live) must all be reachable inside the
    network.
+4. **No backlog store: tasks live on the forge.** The backlog is the
+   forge's issues (Azure DevOps: work items), and onctl keeps no task
+   database of its own, locally or on the server. See step 4.
+5. **Forges: GitHub, GitHub Enterprise Server and Azure DevOps Server
+   (TFS) first, GitLab later.** A forge does two separate jobs: hosting
+   code and pull requests, which every run needs, and tracking tasks,
+   which only the backlog needs. They're supported separately, so on an
+   on-prem forge runs can work before its issues or work items do.
 
 ## Steps
 
@@ -80,12 +88,27 @@ boxctl-cli. Independent of the rest.
 
 ### 4. The agent layer behind the interface
 
-- Tasks, runs and agent profiles (harness, model, effort) are stored by
-  the control plane: a file or SQLite locally, new `/api/tasks` and
-  `/api/runs` endpoints on the server.
+- **A forge interface**, two parts: code (clone, push, open and watch a
+  pull request, its checks) and tasks (list, label, comment on issues or
+  work items). GitHub and GitHub Enterprise Server through the same
+  client; Azure DevOps Server next; GitLab later.
+- **Tasks are issues.** What `backlog.json` holds today goes to the
+  forge instead:
+  - state (queued, active, needs you, done) and priority: labels (Azure
+    DevOps: tags and fields);
+  - each run and its outcome (kind, box, done/failed/lost/killed): a
+    comment the dispatcher writes on the issue, readable by people and
+    parsed back for attempt counts;
+  - the run that's going: boxes are already labelled with their issue,
+    and the control plane has their run status.
+- **One-off runs** (`--task "<text>"`) stay outside the backlog, with no
+  issue.
+- Agent profiles (harness, model, effort) are files, as harnesses are
+  today; the server stores none.
 - The backlog dispatcher moves out of the boxctl CLI into onctl, behind
   the interface. The run-status channel is reused as it is.
-- The largest step. The server side is new work.
+- Still the largest step, but the server gains no task or run
+  endpoints.
 
 ### 5. One CLI, two-sided tui
 
@@ -111,6 +134,8 @@ step 4. Step 1 can land at any time.
 
 ## Open questions
 
-1. Step 4, under discussion: does the backlog need a store of its own
-   (a JSON file or SQLite locally, endpoints on the server), or do tasks
-   live as issues on the forge, with no store?
+1. Azure DevOps Server: which versions, and is its work-item process
+   (Agile, Scrum, CMMI) fixed per install, which decides the fields
+   state maps to?
+2. Ordering: priority labels, or the order of a GitHub Project / Azure
+   DevOps backlog?
