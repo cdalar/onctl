@@ -42,8 +42,14 @@ Checked in `boxctl-io/boxctl` at `2994b92` and `boxctl-io/boxctl-cli` at
    only a hosted service needs (accounts, billing, the dashboard,
    admission, usage) stays in the server.
 2. **One CLI: onctl.** "boxctl" stays the name of the hosted service and
-   the server. The boxctl CLI is retired, or kept as onctl set up for
-   boxctl.io; which of the two is decided in step 5.
+   the server. The boxctl CLI stays as a thin wrapper: onctl with the
+   boxctl.io provider preset, so the hosted service keeps a command of its
+   own name.
+3. **Internet-free (air-gapped) on-prem installs are supported.** Nothing
+   a box or a run needs may be fetched from the internet when the install
+   has no route to it: Claude, Kilo, herdr, images and the forge (where
+   tasks and pull requests live) must all be reachable inside the
+   network.
 
 ## Steps
 
@@ -85,8 +91,8 @@ boxctl-cli. Independent of the rest.
 
 - onctl's tui gets boxctl's split: Boxes (boxes, URLs, images, sizes,
   backups) and Board (backlog, runs, PRs, repos), with its home tiles.
-- The boxctl CLI is retired or becomes onctl preset to boxctl.io. The
-  duplicated agent code in both repositories goes.
+- The boxctl CLI becomes the thin wrapper (decision 2). The duplicated
+  agent code in both repositories goes.
 
 ## Later
 
@@ -105,8 +111,6 @@ step 4. Step 1 can land at any time.
 
 ## Open questions
 
-1. Step 4: does the local store start as a JSON file (as the backlog is
-   today) or SQLite?
-2. Step 5: retire the boxctl CLI, or keep it as a preset onctl?
-3. Do internet-free (air-gapped) on-prem installs need to work? Claude,
-   Kilo, herdr and images are downloaded today.
+1. Step 4, under discussion: does the backlog need a store of its own
+   (a JSON file or SQLite locally, endpoints on the server), or do tasks
+   live as issues on the forge, with no store?
