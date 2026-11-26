@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 500" width="960" height="500" role="img" aria-label="A task has one or more runs. A run is carried out by an agent, in a workspace, which is on a box. A run may produce a pull request, which closes the task when merged. Later, a parent task may group tasks.">
+  <style>
+    .bg { fill: #ffffff; }
+    text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1b2230; }
+    .t { font-size: 17px; font-weight: 600; }
+    .s { font-size: 12.5px; fill: #5d6778; }
+    .lbl { font-size: 12px; fill: #5d6778; font-family: ui-monospace, Menlo, monospace; }
+    .lane { font-size: 11px; letter-spacing: .12em; font-weight: 600; }
+    .edge { stroke: #5d6778; stroke-width: 1.5; fill: none; }
+    .head { fill: #5d6778; }
+    .work { fill: #e8f0fd; stroke: #2f6fdf; } .work-l { fill: #2f6fdf; }
+    .agent { fill: #f2eafb; stroke: #8a4fd0; } .agent-l { fill: #8a4fd0; }
+    .env { fill: #e4f4ee; stroke: #1f8a6a; } .env-l { fill: #1f8a6a; }
+    .run { fill: #fdf0e2; stroke: #c76a12; }
+    .pr { fill: #ffffff; stroke: #d5dae3; }
+    .later { fill: none; stroke: #9aa3b2; stroke-dasharray: 6 4; }
+    .later-t { fill: #7b8494; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #0d1117; }
+      text { fill: #e4e8ef; }
+      .s, .lbl { fill: #98a2b3; }
+      .edge { stroke: #98a2b3; } .head { fill: #98a2b3; }
+      .work { fill: #1b2a44; stroke: #7aa7f5; } .work-l { fill: #7aa7f5; }
+      .agent { fill: #2c2140; stroke: #c09af0; } .agent-l { fill: #c09af0; }
+      .env { fill: #173229; stroke: #5fcaa5; } .env-l { fill: #5fcaa5; }
+      .run { fill: #3a2814; stroke: #f0a45c; }
+      .pr { fill: #161b22; stroke: #2e3643; }
+      .later { stroke: #6b7485; } .later-t { fill: #8a93a3; }
+    }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+  <rect class="bg" width="960" height="500"/>
+
+  <text class="lane work-l" x="40" y="28">WORK · WHAT</text>
+  <text class="lane agent-l" x="390" y="28">WHO</text>
+  <text class="lane env-l" x="740" y="28">WHERE</text>
+
+  <!-- Later: parent task -->
+  <rect class="later" x="30" y="44" width="220" height="92" rx="8" stroke-width="1.5"/>
+  <text class="t later-t" x="48" y="74">Parent task</text>
+  <text class="s" x="48" y="96">later, not built: a PBI</text>
+  <text class="s" x="48" y="115">split by a "plan" run</text>
+
+  <!-- Task -->
+  <rect class="work" x="30" y="204" width="220" height="92" rx="8" stroke-width="1.5"/>
+  <text class="t" x="48" y="234">Task</text>
+  <text class="s" x="48" y="256">one PR, one repository</text>
+  <text class="s" x="48" y="275">issue optional (--issue N)</text>
+
+  <!-- Agent -->
+  <rect class="agent" x="370" y="44" width="220" height="92" rx="8" stroke-width="1.5"/>
+  <text class="t" x="388" y="74">Agent</text>
+  <text class="s" x="388" y="96">Claude Code, Kilo</text>
+  <text class="s" x="388" y="115">profile: model, effort, harness</text>
+
+  <!-- Run -->
+  <rect class="run" x="370" y="204" width="220" height="92" rx="8" stroke-width="2.5"/>
+  <text class="t" x="388" y="234">Run</text>
+  <text class="s" x="388" y="256">kind: interactive, code, ci_fix,</text>
+  <text class="s" x="388" y="275">conflict_fix, change</text>
+
+  <!-- Workspace -->
+  <rect class="env" x="710" y="204" width="220" height="92" rx="8" stroke-width="1.5"/>
+  <text class="t" x="728" y="234">Workspace</text>
+  <text class="s" x="728" y="256">checkout, or worktree</text>
+  <text class="s" x="728" y="275">&lt;dir&gt;@&lt;name&gt; (--workspace)</text>
+
+  <!-- Box -->
+  <rect class="env" x="710" y="374" width="220" height="92" rx="8" stroke-width="1.5"/>
+  <text class="t" x="728" y="404">Box</text>
+  <text class="s" x="728" y="426">VM / microVM</text>
+  <text class="s" x="728" y="445">onctl: your cloud · boxctl.io</text>
+
+  <!-- Pull request -->
+  <rect class="pr" x="370" y="374" width="220" height="92" rx="8" stroke-width="1.5"/>
+  <text class="t" x="388" y="404">Pull request</text>
+  <text class="s" x="388" y="426">what a run produces</text>
+  <text class="s" x="388" y="445">merged: the task is done</text>
+
+  <!-- edges -->
+  <line class="edge" x1="140" y1="136" x2="140" y2="200" stroke-dasharray="5 4" marker-end="url(#a)"/>
+  <text class="lbl" x="150" y="174">parent of 1..n</text>
+
+  <line class="edge" x1="250" y1="250" x2="366" y2="250" marker-end="url(#a)"/>
+  <text class="lbl" x="262" y="242">has 1..n</text>
+
+  <line class="edge" x1="480" y1="136" x2="480" y2="200" marker-end="url(#a)"/>
+  <text class="lbl" x="490" y="174">carries out</text>
+
+  <line class="edge" x1="590" y1="250" x2="706" y2="250" marker-end="url(#a)"/>
+  <text class="lbl" x="600" y="242">works in</text>
+
+  <line class="edge" x1="820" y1="296" x2="820" y2="370" marker-end="url(#a)"/>
+  <text class="lbl" x="830" y="338">is on</text>
+
+  <line class="edge" x1="480" y1="296" x2="480" y2="370" marker-end="url(#a)"/>
+  <text class="lbl" x="490" y="338">may produce</text>
+
+  <path class="edge" d="M370,420 H140 V300" stroke-dasharray="5 4" marker-end="url(#a)"/>
+  <text class="lbl" x="200" y="412">closes</text>
+</svg>

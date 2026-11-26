@@ -36,6 +36,8 @@ boxctl.io. Both have grown words that mean several things at once:
 | **Box** | A machine: a VM or microVM. It holds one or more workspaces. onctl makes it in your cloud, boxctl gets it from boxctl.io. | A workspace or an environment. |
 | **Backlog** | The queue of tasks boxctl works through, a few at a time. | A layer above tasks. |
 
+![Task, Agent, Run, Workspace and Box, and how they relate](shared-vocabulary.svg)
+
 Relations: a task has 1..n runs; a run is carried out by one agent, in one
 workspace; a workspace is on one box; a box holds 1..n workspaces; a run
 may produce a pull request; merging it closes the task (and its issue,
