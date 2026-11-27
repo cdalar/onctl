@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cdalar/onctl/internal/tools"
 	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/spf13/cobra"
 )
@@ -35,11 +36,7 @@ func init() {
 // dir) so it can be `Include`d from ~/.ssh/config and imported hosts stay
 // reachable with plain `ssh <name>`, independent of --config/-c.
 func onctlSSHConfigPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
-	}
-	return filepath.Join(home, ".ssh", "onctl_config"), nil
+	return tools.OnctlSSHConfigPath()
 }
 
 // staticProvider builds a ProviderStatic backed by onctl's own ssh_config

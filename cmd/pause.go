@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cdalar/onctl/pkg/cloud"
-
 	"github.com/spf13/cobra"
 )
 
@@ -42,7 +40,7 @@ snapshot. Use 'onctl resume <name>' to bring it back.`,
 		}
 
 		fmt.Println("\033[32m✔\033[0m Pausing VM " + serverName + "... (this can take a few minutes)")
-		if err := provider.Pause(cloud.Vm{Name: serverName}, pauseHot); err != nil {
+		if err := boxClient().Pause(serverName, pauseHot); err != nil {
 			fmt.Println("\033[31m✘\033[0m Could not pause VM: " + serverName)
 			fmt.Println(err)
 			os.Exit(1)

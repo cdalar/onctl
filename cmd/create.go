@@ -262,24 +262,18 @@ var createCmd = &cobra.Command{
 		s := ui.New() // Build our new spinner
 		s.Suffix = " Checking vm..."
 		s.Start()
-		list, err := provider.List()
+		// box.Client.Create checks this again; checking here first fails
+		// before the key and domain steps, as it always has.
+		c := boxClient()
+		exists, err := c.Exists(opt.Vm.Name)
 		if err != nil {
 			s.Stop()
 			log.Println(err)
 		}
-
-		for _, vm := range list.List {
-			// A "dead" fc/ch record means the microVM's VMM process died
-			// out-of-band (e.g. host reboot) and cannot be restarted in place —
-			// Deploy() recreates it instead, so it isn't a live duplicate to abort on.
-			if (vm.Provider == "fc" || vm.Provider == "ch") && vm.Status == "dead" {
-				continue
-			}
-			if vm.Name == opt.Vm.Name {
-				s.Stop()
-				fmt.Println("\033[31m✘\033[0m VM " + opt.Vm.Name + " exists. Aborting...")
-				os.Exit(1)
-			}
+		if exists {
+			s.Stop()
+			fmt.Println("\033[31m✘\033[0m VM " + opt.Vm.Name + " exists. Aborting...")
+			os.Exit(1)
 		}
 
 		s.Stop()
@@ -308,7 +302,7 @@ var createCmd = &cobra.Command{
 		fmt.Println("\033[32m✔\033[0m Using Public Key:", publicKeyFile)
 		s.Suffix = " Checking SSH Keys..."
 		s.Start()
-		opt.Vm.SSHKeyID, err = provider.CreateSSHKey(publicKeyFile)
+		opt.Vm.SSHKeyID, err = c.AddSSHKey(publicKeyFile)
 		if err != nil {
 			s.Stop()
 			fmt.Println("\033[32m✘\033[0m Checking SSH Keys...")
@@ -331,7 +325,7 @@ var createCmd = &cobra.Command{
 		s.Restart()
 		// END Set VM Name
 
-		vm, err := provider.Deploy(opt.Vm)
+		vm, err := c.Create(opt.Vm)
 		if err != nil {
 			s.Stop()
 			fmt.Println("\033[31m✘\033[0m VM Starting...")
