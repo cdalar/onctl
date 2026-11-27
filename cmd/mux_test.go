@@ -77,7 +77,7 @@ func readFile(t *testing.T, p string) string {
 func TestHerdrStart(t *testing.T) {
 	log := fakeHerdr(t)
 	marker, runDir := boxPaths(t)
-	s := newTaskSession("/w/my app", "")
+	s := newWorkspace("/w/my app", "")
 	line := `exec claude 'fix "it"'`
 	start := func(detached bool) string {
 		out, err := exec.Command("sh", "-c", (herdrMux{}).start(s, line, detached)).CombinedOutput()
@@ -123,7 +123,7 @@ func TestHerdrStart(t *testing.T) {
 func TestHerdrStartEphemeral(t *testing.T) {
 	log := fakeHerdr(t)
 	_, runDir := boxPaths(t)
-	s := newTaskSession("/w/app", "")
+	s := newWorkspace("/w/app", "")
 	s.ephemeral = true
 	out, err := exec.Command("sh", "-c", (herdrMux{}).start(s, "exec claude", false)).CombinedOutput()
 	if err != nil {
@@ -177,7 +177,7 @@ func TestHerdrStartConcurrent(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(filepath.Dir(log), "slow"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	script := (herdrMux{}).start(newTaskSession("/w/app", ""), "exec claude", true)
+	script := (herdrMux{}).start(newWorkspace("/w/app", ""), "exec claude", true)
 	errs := make(chan error, 2)
 	for range 2 {
 		go func() {
@@ -210,7 +210,7 @@ func TestHerdrStartDuplicateLabel(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	out, err := exec.Command("sh", "-c", (herdrMux{}).start(newTaskSession("/w/app", ""), "exec claude", true)).CombinedOutput()
+	out, err := exec.Command("sh", "-c", (herdrMux{}).start(newWorkspace("/w/app", ""), "exec claude", true)).CombinedOutput()
 	if err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
@@ -238,19 +238,19 @@ func TestClaudeSessions(t *testing.T) {
 	}
 }
 
-// TestHerdrStartDetached: a detached start makes a task's workspace
-// under the task's label and doesn't attach.
+// TestHerdrStartDetached: a detached start makes a worktree's herdr workspace
+// under its session's label and doesn't attach.
 func TestHerdrStartDetached(t *testing.T) {
 	log := fakeHerdr(t)
 	_, runDir := boxPaths(t)
-	s := newTaskSession("/w/app", "auth")
+	s := newWorkspace("/w/app", "auth")
 	out, err := exec.Command("sh", "-c", (herdrMux{}).start(s, "exec claude", true)).CombinedOutput()
 	if err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
 	calls := readFile(t, log)
 	if !strings.Contains(calls, "--label claude-auth --focus\n") || !strings.Contains(calls, "pane run w1:p1 exec sh "+shellQuote(runDir+"/claude-auth.cmd")+"\n") {
-		t.Errorf("task session:\n%s", calls)
+		t.Errorf("worktree session:\n%s", calls)
 	}
 	if strings.HasSuffix(calls, "\n\n") {
 		t.Errorf("detached start attaches:\n%s", calls)
@@ -258,7 +258,7 @@ func TestHerdrStartDetached(t *testing.T) {
 }
 
 func TestHerdrRunningAndList(t *testing.T) {
-	s := newTaskSession("/w/app", "")
+	s := newWorkspace("/w/app", "")
 	if got := (herdrMux{}).running(s); !strings.Contains(got, `'"label":"claude"'`) {
 		t.Error(got)
 	}
@@ -279,7 +279,7 @@ func TestTmuxList(t *testing.T) {
 	if len(got) != 2 || !strings.HasSuffix(got["claude"], " ago") {
 		t.Errorf("parseList: %v", got)
 	}
-	if got := (tmuxMux{}).running(newTaskSession("/w/app", "")); got != "tmux has-session -t =claude 2>/dev/null" {
+	if got := (tmuxMux{}).running(newWorkspace("/w/app", "")); got != "tmux has-session -t =claude 2>/dev/null" {
 		t.Error(got)
 	}
 }
@@ -337,7 +337,7 @@ func TestProjectCheckReportsTheMux(t *testing.T) {
 func TestHerdrStartAfterServerRestart(t *testing.T) {
 	log := fakeHerdr(t)
 	boxPaths(t)
-	s := newTaskSession("/w/app", "")
+	s := newWorkspace("/w/app", "")
 	start := func() string {
 		out, err := exec.Command("sh", "-c", (herdrMux{}).start(s, "exec claude", true)).CombinedOutput()
 		if err != nil {

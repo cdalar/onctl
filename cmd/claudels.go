@@ -14,11 +14,11 @@ import (
 
 var claudeLsCmd = &cobra.Command{
 	Use:   "ls",
-	Short: "List this project's Claude sessions: the main one and its tasks",
-	Long: `Lists the Claude sessions working on this project: the main checkout and
-each --task worktree on the project's box (with its branch, whether
-Claude is running there, and when it last showed activity -- or, in
-herdr, what it's doing), plus the boxes of --own-box tasks.`,
+	Short: "List this project's workspaces and their runs",
+	Long: `Lists this project's workspaces and their runs: the main checkout and
+each --workspace worktree on the project's box (with its branch, whether
+a run of Claude is going there, and when it last showed activity -- or,
+in herdr, what it's doing), plus the boxes of --own-box workspaces.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		return claudeList(cmd.Context())
@@ -44,14 +44,14 @@ func claudeList(ctx context.Context) error {
 	}
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "TASK\tBRANCH\tCLAUDE\tACTIVE\tBOX")
-	// The project's box first, then the --own-box tasks' boxes.
+	_, _ = fmt.Fprintln(tw, "WORKSPACE\tBRANCH\tRUN\tACTIVE\tBOX")
+	// The project's box first, then the --own-box workspaces' boxes.
 	sort.SliceStable(vms, func(i, j int) bool { return vms[i].name == main && vms[j].name != main })
 	rows := 0
 	for _, vm := range vms {
 		switch {
 		case vm.name == main && vm.state == "running":
-			n, err := listBoxSessions(ctx, tw, dir)
+			n, err := listBoxWorkspaces(ctx, tw, dir)
 			if err != nil {
 				return err
 			}
@@ -65,15 +65,15 @@ func claudeList(ctx context.Context) error {
 		}
 	}
 	if rows == 0 {
-		fmt.Fprintf(os.Stderr, "No Claude sessions for %s -- start one with onctl claude.\n", dir)
+		fmt.Fprintf(os.Stderr, "No workspaces for %s -- start one with onctl claude.\n", dir)
 		return nil
 	}
 	return tw.Flush()
 }
 
-// listBoxSessions writes a row per worktree on the project's (running)
-// box.
-func listBoxSessions(ctx context.Context, tw *tabwriter.Writer, dir string) (int, error) {
+// listBoxWorkspaces writes a row per workspace on the project's
+// (running) box.
+func listBoxWorkspaces(ctx context.Context, tw *tabwriter.Writer, dir string) (int, error) {
 	t, err := openClaudeBox(ctx, false, false)
 	if err != nil {
 		return 0, err
@@ -90,22 +90,22 @@ func listBoxSessions(ctx context.Context, tw *tabwriter.Writer, dir string) (int
 	branches := worktreeBranches(porcelain)
 	activity := mux.parseList(sessions)
 	worktrees := parseWorktrees(porcelain, dir)
-	sort.SliceStable(worktrees, func(i, j int) bool { return worktrees[i].task < worktrees[j].task })
+	sort.SliceStable(worktrees, func(i, j int) bool { return worktrees[i].name < worktrees[j].name })
 	for _, w := range worktrees {
-		s := newTaskSession(dir, w.task)
-		task := w.task
-		if task == "" {
-			task = "(main)"
+		s := newWorkspace(dir, w.name)
+		name := w.name
+		if name == "" {
+			name = "(main)"
 		}
 		state, active := "stopped", "-"
-		if a, ok := activity[s.name]; ok {
+		if a, ok := activity[s.session]; ok {
 			state, active = "running", a
 		}
 		branch := branches[w.dir]
 		if branch == "" {
 			branch = "-"
 		}
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", task, branch, state, active, t.name)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", name, branch, state, active, t.name)
 	}
 	return len(worktrees), nil
 }

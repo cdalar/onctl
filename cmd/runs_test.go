@@ -17,36 +17,36 @@ import (
 )
 
 func TestNewlyWaiting(t *testing.T) {
-	blocked := agentSession{box: "a", status: "blocked"}
-	done := agentSession{box: "a", status: "done"}
-	working := agentSession{box: "a", status: "working"}
+	blocked := boxRun{box: "a", status: "blocked"}
+	done := boxRun{box: "a", status: "done"}
+	working := boxRun{box: "a", status: "working"}
 
-	// Opening the view must not fire a notification for every session
+	// Opening the view must not fire a notification for every run
 	// that was already waiting: you'd be told what you can see.
-	assert.Empty(t, newlyWaiting(nil, []agentSession{blocked}))
+	assert.Empty(t, newlyWaiting(nil, []boxRun{blocked}))
 
 	// The point of the view: Claude went from working to asking you.
-	assert.Equal(t, []agentSession{blocked}, newlyWaiting(map[string]string{"a": "working"}, []agentSession{blocked}))
+	assert.Equal(t, []boxRun{blocked}, newlyWaiting(map[string]string{"a": "working"}, []boxRun{blocked}))
 
 	// Still blocked on the next poll is the same question: one
 	// notification per wait, not one every ten seconds.
-	assert.Empty(t, newlyWaiting(map[string]string{"a": "blocked"}, []agentSession{blocked}))
+	assert.Empty(t, newlyWaiting(map[string]string{"a": "blocked"}, []boxRun{blocked}))
 
 	// Answering a permission and Claude then finishing is a new reason
 	// to come back.
-	assert.Equal(t, []agentSession{done}, newlyWaiting(map[string]string{"a": "blocked"}, []agentSession{done}))
+	assert.Equal(t, []boxRun{done}, newlyWaiting(map[string]string{"a": "blocked"}, []boxRun{done}))
 
 	// Back to work needs nothing from you.
-	assert.Empty(t, newlyWaiting(map[string]string{"a": "blocked"}, []agentSession{working}))
+	assert.Empty(t, newlyWaiting(map[string]string{"a": "blocked"}, []boxRun{working}))
 
-	// A session started after the view opened that is already waiting
+	// A run started after the view opened that is already waiting
 	// by its first poll still needs you.
-	assert.Equal(t, []agentSession{blocked}, newlyWaiting(map[string]string{}, []agentSession{blocked}))
+	assert.Equal(t, []boxRun{blocked}, newlyWaiting(map[string]string{}, []boxRun{blocked}))
 }
 
-func TestParseAgentStatus(t *testing.T) {
-	// A box without a project isn't a session, whatever runs on it.
-	_, ok := parseAgentStatus("plain", "")
+func TestParseRunStatus(t *testing.T) {
+	// A box without a project isn't a run, whatever runs on it.
+	_, ok := parseRunStatus("plain", "")
 	assert.False(t, ok)
 
 	herdr := `{"result":{"workspaces":[{"label":"claude-other","agent_status":"working","workspace_id":"w2"},{"label":"claude","agent_status":"blocked","workspace_id":"w1"}]}}`
@@ -54,38 +54,38 @@ func TestParseAgentStatus(t *testing.T) {
 		"dir=/root/onctl", "mux=herdr", "origin=https://github.com/cdalar/onctl.git",
 		"branch=onctl/a1b2c3", "pr=https://github.com/cdalar/onctl/pull/7", "herdr=" + herdr,
 	}, "\n")
-	s, ok := parseAgentStatus("onctl-fix-x-1a2b", out)
+	s, ok := parseRunStatus("onctl-fix-x-1a2b", out)
 	assert.True(t, ok)
 	// The status is the main session's, not another workspace's on the
 	// same box: that's the Claude this row starts and attaches to.
-	assert.Equal(t, agentSession{
+	assert.Equal(t, boxRun{
 		box: "onctl-fix-x-1a2b", repo: "cdalar/onctl", dir: "/root/onctl", branch: "onctl/a1b2c3",
 		mux: "herdr", status: "blocked", pr: "https://github.com/cdalar/onctl/pull/7",
 	}, s)
 
 	// Claude exited: its workspace is gone, and the row must not keep
 	// showing it as working.
-	s, _ = parseAgentStatus("b", "dir=/root/x\nmux=herdr\nherdr="+`{"result":{"workspaces":[]}}`)
+	s, _ = parseRunStatus("b", "dir=/root/x\nmux=herdr\nherdr="+`{"result":{"workspaces":[]}}`)
 	assert.Equal(t, "stopped", s.status)
 
 	// tmux can't tell what Claude is doing, so such a box never claims
 	// to be waiting (and never notifies).
-	s, _ = parseAgentStatus("c", "dir=/root/x\nmux=tmux")
+	s, _ = parseRunStatus("c", "dir=/root/x\nmux=tmux")
 	assert.Equal(t, "tmux", s.status)
 	assert.False(t, s.waiting())
 }
 
-func TestAgentsStartArgs(t *testing.T) {
-	args := strings.Join(agentsStartArgs("cdalar/onctl", "onctl-x-1a2b", "fix the bug"), " ")
+func TestRunStartArgs(t *testing.T) {
+	args := strings.Join(runStartArgs("cdalar/onctl", "onctl-x-1a2b", "fix the bug"), " ")
 	// herdr is what reports blocked/done; with tmux nothing would notify.
 	assert.Contains(t, args, "--mux herdr")
 	// A detached Claude has no forwarded GitHub credentials, so without a
 	// stored token it couldn't push or open the PR it's asked for.
 	assert.Contains(t, args, "--github store")
 	assert.Contains(t, args, "--detach")
-	// A new box per session, never the repo's shared one.
+	// A new box per run, never the repo's shared one.
 	assert.Contains(t, args, "--box onctl-x-1a2b")
-	assert.Contains(t, args, "fix the bug"+agentsPRInstruction)
+	assert.Contains(t, args, "fix the bug"+runPRInstruction)
 }
 
 func TestOpenPRScriptNeverCommits(t *testing.T) {
@@ -117,12 +117,12 @@ func TestOriginRepo(t *testing.T) {
 	assert.Equal(t, "", originRepo(""))
 }
 
-// :agents in the tui: the sessions come in with each poll, a desktop
+// :runs in the tui: the runs come in with each poll, a desktop
 // notification goes out only when a Claude starts waiting (not for what
 // was already waiting when the view opened), n -> repo -> task starts a
-// session on a new box and comes back to :agents, and :repos opened on
+// run on a new box and comes back to :runs, and :repos opened on
 // its own still asks which box, as before.
-func TestTUIAgents(t *testing.T) {
+func TestTUIRuns(t *testing.T) {
 	tuiFlashFor = time.Millisecond
 	withCloudProvider(t, "hetzner")
 	dir := t.TempDir()
@@ -146,23 +146,23 @@ func TestTUIAgents(t *testing.T) {
 	}
 
 	m := listed(t, tuiFixture(), 140, 40)
-	_ = m.openView(agentsView) // its poll is ssh; the test delivers the sessions itself
-	poll := func(sessions ...agentSession) {
-		next, _ := m.Update(tuiListMsg{resource: "agents", agents: sessions})
+	_ = m.openView(runsView) // its poll is ssh; the test delivers the runs itself
+	poll := func(runs ...boxRun) {
+		next, _ := m.Update(tuiListMsg{resource: "runs", runs: runs})
 		m = next.(tuiModel)
 	}
-	poll(agentSession{box: "db", status: "working"}, agentSession{box: "web", repo: "acme/web", status: "blocked"})
+	poll(boxRun{box: "db", status: "working"}, boxRun{box: "web", repo: "acme/web", status: "blocked"})
 	assert.Equal(t, "db web", keys(m.rows()))
 	assert.Empty(t, notifications(), "already waiting when the view opened")
-	poll(agentSession{box: "db", status: "blocked"}, agentSession{box: "web", repo: "acme/web", status: "blocked"})
+	poll(boxRun{box: "db", status: "blocked"}, boxRun{box: "web", repo: "acme/web", status: "blocked"})
 	assert.Equal(t, []string{"Claude is waiting: db"}, notifications())
 	assert.Contains(t, m.View(), "blocked")
 
 	// Polled from now on in any view, so the notification doesn't need
-	// :agents on screen.
-	assert.True(t, m.loaded["agents"])
+	// :runs on screen.
+	assert.True(t, m.loaded["runs"])
 
-	// n -> :repos on top of :agents -> enter asks for the task.
+	// n -> :repos on top of :runs -> enter asks for the task.
 	m, cmd := press(t, m, "n")
 	assert.Equal(t, reposView, m.top().view)
 	for _, msg := range runCmd(cmd) {
@@ -179,7 +179,7 @@ func TestTUIAgents(t *testing.T) {
 	m, cmd = press(t, m, "enter")
 	assert.NotNil(t, cmd, "onctl claude runs")
 	assert.False(t, m.tasking)
-	assert.Equal(t, agentsView, m.top().view, "back to the sessions")
+	assert.Equal(t, runsView, m.top().view, "back to the runs")
 	reg := readAgentsRegistry()
 	assert.Len(t, reg, 1)
 	for box, repo := range reg {
@@ -187,7 +187,7 @@ func TestTUIAgents(t *testing.T) {
 		assert.Equal(t, "acme/web", repo)
 	}
 
-	// ctrl-d on a session is the VM's destroy, asked first.
+	// ctrl-d on a run is the VM's destroy, asked first.
 	m.top().selected = "web"
 	m, _ = press(t, m, "ctrl+d")
 	assert.NotNil(t, m.dialog)
@@ -202,15 +202,15 @@ func TestTUIAgents(t *testing.T) {
 
 // --- the box side, run for real against a fake box -------------------------
 
-// fakeAgentBox makes "the box" a directory here, so the scripts the
-// agents view sends run for real: ssh, herdr, gh, timeout and tmux on
+// fakeRunBox makes "the box" a directory here, so the scripts the
+// runs view sends run for real: ssh, herdr, gh, timeout and tmux on
 // PATH are stand-ins, ssh runs the box's command with sh (its
 // /root/.boxctl being <root>/boxctl), and a host named unreachable fails
 // the way ssh does. herdr lists <root>/herdr.json; gh has a pull request
 // once <root>/pr exists, and pr create makes it. Every stand-in logs its
 // arguments to the returned log. agentConn connects to any box but one
 // named gone, recording which.
-func fakeAgentBox(t *testing.T) (root string, log func() string, connected func() []string) {
+func fakeRunBox(t *testing.T) (root string, log func() string, connected func() []string) {
 	t.Helper()
 	root = t.TempDir()
 	bin := filepath.Join(root, "bin")
@@ -293,33 +293,33 @@ const herdrBlocked = `{"result":{"workspaces":[{"label":"claude-x","agent_status
 // The status script and its parser agree on a real box layout: what the
 // row shows is the project's repo, branch, the main session's herdr
 // status and its PR -- and a box with no project prints nothing, so it
-// never shows up as a session.
-func TestAgentStatusScriptOnABox(t *testing.T) {
-	root, _, _ := fakeAgentBox(t)
+// never shows up as a run.
+func TestRunStatusScriptOnABox(t *testing.T) {
+	root, _, _ := fakeRunBox(t)
 	dir, _ := boxProject(t, root)
 	assert.NoError(t, os.WriteFile(filepath.Join(root, "herdr.json"), []byte(herdrBlocked), 0o600))
 	assert.NoError(t, os.WriteFile(filepath.Join(root, "pr"), []byte("https://github.com/acme/web/pull/1\n"), 0o600))
 	b, err := newVMSSH("web", "root", "web", 22, "key")
 	assert.NoError(t, err)
 
-	out, err := b.output(context.Background(), agentStatusScript())
+	out, err := b.output(context.Background(), runStatusScript())
 	assert.NoError(t, err)
-	s, ok := parseAgentStatus("web", string(out))
+	s, ok := parseRunStatus("web", string(out))
 	assert.True(t, ok)
-	assert.Equal(t, agentSession{box: "web", repo: "acme/web", dir: dir, branch: "onctl/abc", mux: "herdr",
+	assert.Equal(t, boxRun{box: "web", repo: "acme/web", dir: dir, branch: "onctl/abc", mux: "herdr",
 		status: "blocked", pr: "https://github.com/acme/web/pull/1"}, s)
 
 	assert.NoError(t, os.Remove(filepath.Join(root, "boxctl", "project")))
-	out, err = b.output(context.Background(), agentStatusScript())
+	out, err = b.output(context.Background(), runStatusScript())
 	assert.NoError(t, err)
-	_, ok = parseAgentStatus("web", string(out))
+	_, ok = parseRunStatus("web", string(out))
 	assert.False(t, ok)
 }
 
-// A box whose sessions haven't started yet (no multiplexer recorded) says
+// A box whose runs haven't started yet (no multiplexer recorded) says
 // so rather than looking stopped.
-func TestParseAgentStatusNotStarted(t *testing.T) {
-	s, ok := parseAgentStatus("b", "dir=/root/x")
+func TestParseRunStatusNotStarted(t *testing.T) {
+	s, ok := parseRunStatus("b", "dir=/root/x")
 	assert.True(t, ok)
 	assert.Equal(t, "not started", s.status)
 }
@@ -328,8 +328,8 @@ func TestParseAgentStatusNotStarted(t *testing.T) {
 // connected to -- connecting gives root ssh on a VM -- and only running
 // ones; one that can't be reached is still listed, with why, instead of
 // vanishing; the rows come sorted by box.
-func TestPollAgentsOnlyTouchesItsOwnVMs(t *testing.T) {
-	root, _, connected := fakeAgentBox(t)
+func TestPollRunsOnlyTouchesItsOwnVMs(t *testing.T) {
+	root, _, connected := fakeRunBox(t)
 	dir, _ := boxProject(t, root)
 	assert.NoError(t, os.WriteFile(filepath.Join(root, "herdr.json"), []byte(herdrBlocked), 0o600))
 	withCloudProvider(t, "hetzner")
@@ -348,29 +348,29 @@ func TestPollAgentsOnlyTouchesItsOwnVMs(t *testing.T) {
 		assert.NoError(t, addToAgentsRegistry(box, repo))
 	}
 
-	sessions, err := pollAgents()
+	runs, err := pollRuns()
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"unreachable", "web"}, connected(), "db isn't ours, old is paused")
-	if assert.Len(t, sessions, 2) {
-		assert.Equal(t, "unreachable", sessions[0].box)
-		assert.Equal(t, "acme/api", sessions[0].repo, "the repo it was started for")
-		assert.NotEmpty(t, sessions[0].err)
-		assert.Equal(t, agentSession{box: "web", repo: "acme/web", dir: dir, branch: "onctl/abc", mux: "herdr", status: "blocked"}, sessions[1])
+	if assert.Len(t, runs, 2) {
+		assert.Equal(t, "unreachable", runs[0].box)
+		assert.Equal(t, "acme/api", runs[0].repo, "the repo it was started for")
+		assert.NotEmpty(t, runs[0].err)
+		assert.Equal(t, boxRun{box: "web", repo: "acme/web", dir: dir, branch: "onctl/abc", mux: "herdr", status: "blocked"}, runs[1])
 	}
 }
 
 // Attaching lands on the session's own herdr workspace (labelled claude,
-// not another task's) and then runs the herdr client; on a tmux box it's
+// not another workspace's) and then runs the herdr client; on a tmux box it's
 // the session named exactly claude (=), not one that starts with it.
-func TestAgentAttachScript(t *testing.T) {
-	root, log, _ := fakeAgentBox(t)
+func TestRunAttachScript(t *testing.T) {
+	root, log, _ := fakeRunBox(t)
 	assert.NoError(t, os.WriteFile(filepath.Join(root, "herdr.json"), []byte(herdrBlocked), 0o600))
-	out, err := exec.Command("sh", "-c", agentAttachScript(agentSession{mux: "herdr"})).CombinedOutput()
+	out, err := exec.Command("sh", "-c", runAttachScript(boxRun{mux: "herdr"})).CombinedOutput()
 	assert.NoError(t, err, string(out))
 	assert.Equal(t, "herdr workspace list\nherdr workspace focus w1\nherdr \n", log())
 
 	assert.NoError(t, os.Remove(filepath.Join(root, "log")))
-	out, err = exec.Command("sh", "-c", agentAttachScript(agentSession{mux: "tmux"})).CombinedOutput()
+	out, err = exec.Command("sh", "-c", runAttachScript(boxRun{mux: "tmux"})).CombinedOutput()
 	assert.NoError(t, err, string(out))
 	assert.Equal(t, "tmux -u attach -t =claude\n", log())
 }
@@ -378,13 +378,13 @@ func TestAgentAttachScript(t *testing.T) {
 // P publishes what Claude committed -- the branch pushed, a pull request
 // opened, its URL flashed -- and pressing it again doesn't open a second
 // one; a box that can't be reached says so.
-func TestTUIAgentsPushPR(t *testing.T) {
+func TestTUIRunsPushPR(t *testing.T) {
 	tuiFlashFor = time.Millisecond
-	root, log, _ := fakeAgentBox(t)
+	root, log, _ := fakeRunBox(t)
 	dir, bare := boxProject(t, root)
 	m := listed(t, tuiFixture(), 140, 40)
-	_ = m.openView(agentsView)
-	next, _ := m.Update(tuiListMsg{resource: "agents", agents: []agentSession{{box: "gone"}, {box: "web", dir: dir}}})
+	_ = m.openView(runsView)
+	next, _ := m.Update(tuiListMsg{resource: "runs", runs: []boxRun{{box: "gone"}, {box: "web", dir: dir}}})
 	m = next.(tuiModel)
 
 	pressP := func(box string) tuiModel {
@@ -410,35 +410,35 @@ func TestTUIAgentsPushPR(t *testing.T) {
 	assert.Contains(t, m.flash, "pushing gone: can't reach the box")
 }
 
-// The agents view's other keys, and what's around them.
-func TestTUIAgentsKeys(t *testing.T) {
+// The runs view's other keys, and what's around them.
+func TestTUIRunsKeys(t *testing.T) {
 	tuiFlashFor = time.Millisecond
 	withCloudProvider(t, "hetzner")
-	fakeAgentBox(t)
+	fakeRunBox(t)
 	dir := t.TempDir()
 	prevReg := agentsRegistryPath
 	t.Cleanup(func() { agentsRegistryPath = prevReg })
 	agentsRegistryPath = func() (string, error) { return filepath.Join(dir, "agents.json"), nil }
 
 	m := listed(t, tuiFixture(), 140, 40)
-	_ = m.openView(agentsView)
+	_ = m.openView(runsView)
 
-	// No sessions: the keys that act on one do nothing.
+	// No runs: the keys that act on one do nothing.
 	for _, k := range []string{"enter", "o", "P"} {
 		mm, cmd := press(t, m, k)
 		assert.Nil(t, cmd, k)
 		assert.Empty(t, mm.flash, k)
 	}
 
-	next, _ := m.Update(tuiListMsg{resource: "agents", agents: []agentSession{{box: "gone"}, {box: "web", mux: "herdr"}}})
+	next, _ := m.Update(tuiListMsg{resource: "runs", runs: []boxRun{{box: "gone"}, {box: "web", mux: "herdr"}}})
 	m = next.(tuiModel)
 
 	// Polled on every refresh from now on, whichever view shows.
 	m.openView(vmsView)
 	m.refresh()
-	assert.True(t, m.loading["agents"])
-	delete(m.loading, "agents")
-	_ = m.openView(agentsView)
+	assert.True(t, m.loading["runs"])
+	delete(m.loading, "runs")
+	_ = m.openView(runsView)
 
 	// o with no pull request yet says so, rather than opening nothing.
 	m.top().selected = "web"
@@ -458,15 +458,15 @@ func TestTUIAgentsKeys(t *testing.T) {
 
 	// The help page explains the view.
 	m, _ = press(t, m, "?")
-	assert.Contains(t, strings.Join(m.top().lines, "\n"), "n picks a repo in :repos, then asks for the task")
+	assert.Contains(t, strings.Join(m.top().lines, "\n"), "n picks a repo in :repos, then asks for the task's description")
 	m.pop()
 
-	// A session's start coming back says what happens next.
+	// A run's start coming back says what happens next.
 	next, _ = m.Update(tuiChildDoneMsg{verb: "start", name: "web-x-1a2b"})
 	m = next.(tuiModel)
 	assert.Contains(t, m.flash, "Claude is working on web-x-1a2b")
 
-	// The task prompt: esc cancels, an empty task starts nothing.
+	// The task prompt: esc cancels, an empty description starts nothing.
 	ask := func() {
 		next, _ := m.askTask("acme/web")
 		m = next.(tuiModel)

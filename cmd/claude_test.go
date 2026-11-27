@@ -39,7 +39,7 @@ func TestSSHProxyHost(t *testing.T) {
 // TestSessionCommandQuoting runs the generated command line through a
 // real shell, so a prompt with quotes or $ reaches claude intact.
 func TestSessionCommandQuoting(t *testing.T) {
-	s := newTaskSession("/Users/me/my proj", "")
+	s := newWorkspace("/Users/me/my proj", "")
 	prompt := `fix "it" -- don't touch $HOME`
 	line := s.commandLine(prompt, []string{"--model", "opus"})
 	cmd := (tmuxMux{}).start(s, line, false)

@@ -8,10 +8,10 @@ import (
 
 // TestEphemeralRun: a run gets a box of its own unless something says the
 // box is meant to last -- --keep, a named box, a detached start (nobody
-// is there when Claude exits) or a task (a worktree on the project's box).
+// is there when Claude exits) or a workspace (a worktree on the project's box).
 func TestEphemeralRun(t *testing.T) {
 	saved := []*bool{&claudeKeep, &claudeDetach}
-	savedStr := []*string{&claudeBox, &claudeTask}
+	savedStr := []*string{&claudeBox, &claudeWorkspace}
 	t.Cleanup(func() {
 		for _, b := range saved {
 			*b = false
@@ -21,13 +21,13 @@ func TestEphemeralRun(t *testing.T) {
 		}
 	})
 	for name, set := range map[string]func(){
-		"default":  func() {},
-		"--keep":   func() { claudeKeep = true },
-		"--box":    func() { claudeBox = "claude-x" },
-		"--detach": func() { claudeDetach = true },
-		"--task":   func() { claudeTask = "auth" },
+		"default":     func() {},
+		"--keep":      func() { claudeKeep = true },
+		"--box":       func() { claudeBox = "claude-x" },
+		"--detach":    func() { claudeDetach = true },
+		"--workspace": func() { claudeWorkspace = "auth" },
 	} {
-		claudeKeep, claudeDetach, claudeBox, claudeTask = false, false, "", ""
+		claudeKeep, claudeDetach, claudeBox, claudeWorkspace = false, false, "", ""
 		set()
 		if got := ephemeralRun(); got != (name == "default") {
 			t.Errorf("%s: ephemeralRun() = %v", name, got)

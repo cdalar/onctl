@@ -115,7 +115,7 @@ onctl claude --box <name>
 ```
 
 `--mux herdr` runs Claude in [herdr](https://herdr.dev) instead, a terminal
-workspace manager for coding agents that shows every task on the box in one
+workspace manager for coding agents that shows every run on the box in one
 window, each marked working, blocked or idle (`Ctrl-b q` detaches).
 `ONCTL_MUX=herdr` makes it the default.
 
@@ -131,18 +131,18 @@ onctl claude --detach --prompt "..."     # start Claude, don't attach; the box s
 With `--keep`, the first run creates `claude-<project>` and puts the project
 there (a clone on branch `onctl/<project>`, or a copy). Later runs come back to
 it and don't copy again. Nothing is synced back: Claude commits and pushes from
-the box. `--box`, `--detach`, `--task` and `--repo` keep their box too.
+the box. `--box`, `--detach`, `--workspace` and `--repo` keep their box too.
 
-## Several tasks at once
+## Several workspaces at once
 
 ```bash
-onctl claude --task auth                 # a worktree <project>@auth on branch auth
-onctl claude --task docs --own-box       # a box of its own, claude-<project>-docs
-onctl claude ls                          # what's running where
+onctl claude --workspace auth            # a worktree <project>@auth on branch auth
+onctl claude --workspace docs --own-box  # a box of its own, claude-<project>-docs
+onctl claude ls                          # the workspaces and their runs
 ```
 
-Each `--task` gets a git worktree of its own beside the project on the box,
-with its own Claude session and its own GitHub forwarding, so several Claudes
+Each `--workspace` gets a git worktree of its own beside the project on the box,
+with a Claude of its own and its own GitHub forwarding, so several Claudes
 can work on one project without touching each other's files. `onctl claude ls`
 lists them with their branch, whether Claude is running and when it last showed
 activity.
@@ -178,8 +178,8 @@ onctl claude [flags] [-- claude-args...]
       --box string         box to use, kept after the run
       --project string     project directory (default: the git repository, or directory, you're in)
   -R, --repo string        GitHub repository (owner/name) to clone on a box of its own
-  -t, --task string        work on a task in parallel: its own worktree and Claude session
-      --own-box            with --task: a box of its own instead of a worktree
+  -w, --workspace string   work in a workspace of its own, in parallel: a worktree and Claude on the box
+      --own-box            with --workspace: a box of its own instead of a worktree
       --prompt string      first message for a newly started Claude
   -d, --detach             start Claude on the box without attaching to it
       --handoff string     continue this local Claude Code session (its ID) on the box
@@ -203,7 +203,7 @@ onctl claude -- --model opus
 |---|---|
 | `onctl claude login` | save a Claude token here, so Claude on every box is logged in ([Logging in](#logging-in)) |
 | `onctl claude logout` | forget the saved token |
-| `onctl claude ls` | list this project's Claude sessions: the main one and its tasks ([Several tasks at once](#several-tasks-at-once)) |
+| `onctl claude ls` | list this project's workspaces and their runs ([Several workspaces at once](#several-workspaces-at-once)) |
 | `onctl claude fetch` | fetch the box's branches and uncommitted work as `box/*` ([Getting the work back](#getting-the-work-back)) |
 | `onctl claude push [refspec...]` | push local commits to the project on its box |
 
