@@ -33,10 +33,6 @@ A paused box is resumed first. The box needs your public key: onctl
 create and onctl ssh add it.`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		d, ok := provider.(cloud.Dialer)
-		if !ok {
-			return fmt.Errorf("ssh-proxy is for providers whose VMs aren't reachable directly (boxes); %s VMs take ssh at their IP", cloudProvider)
-		}
 		name := sshProxyHost(args[0])
 		port := 22
 		if len(args) == 2 {
@@ -46,7 +42,7 @@ create and onctl ssh add it.`,
 			}
 			port = p
 		}
-		conn, err := d.DialVM(cmd.Context(), cloud.Vm{Name: name}, port)
+		conn, err := boxClient().Dial(cmd.Context(), cloud.Vm{Name: name}, port)
 		if err != nil {
 			return err
 		}

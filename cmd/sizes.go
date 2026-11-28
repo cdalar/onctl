@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"github.com/cdalar/onctl/pkg/box"
 	"log"
 	"strconv"
 	"strings"
@@ -20,12 +22,11 @@ configured location. The default size is marked with *.`,
   onctl sizes -p boxes`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		lister, ok := provider.(cloud.SizeLister)
-		if !ok {
+		sizes, err := boxClient().Sizes()
+		if errors.Is(err, box.ErrUnsupported) {
 			fmt.Println(sizesUnsupported(cloudProvider))
 			return
 		}
-		sizes, err := lister.ListSizes()
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -119,11 +120,13 @@ func sizesTemplate(sizes []cloud.CloudSize) string {
 // list them.
 func completeSizes(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	ensureProvider()
-	lister, ok := provider.(cloud.SizeLister)
-	if !ok {
+	if provider == nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	sizes, err := lister.ListSizes()
+	sizes, err := boxClient().Sizes()
+	if errors.Is(err, box.ErrUnsupported) {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}

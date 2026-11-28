@@ -1,30 +1,15 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"strings"
 
-	"github.com/cdalar/onctl/internal/providerfc"
-	"github.com/cdalar/onctl/internal/providerhtz"
+	"github.com/cdalar/onctl/pkg/box"
 	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/spf13/cobra"
 )
-
-// hetznerImageLister returns the ImageLister to use. Overridable in tests.
-var hetznerImageLister = func() cloud.ImageLister {
-	client, err := providerhtz.GetClient()
-	if err != nil {
-		log.Fatalln(err)
-	}
-	return cloud.ProviderHetzner{Client: client}
-}
-
-// fcImageLister lists the images published for the fc provider.
-// Overridable in tests.
-var fcImageLister = func() cloud.ImageLister {
-	return providerfc.CatalogLister{BaseURL: providerfc.PublicCatalogURL}
-}
 
 func init() {
 	rootCmd.AddCommand(imagesCmd)
@@ -34,21 +19,15 @@ var imagesCmd = &cobra.Command{
 	Use:   "images",
 	Short: "List available OS images for the current cloud provider",
 	Run: func(cmd *cobra.Command, args []string) {
-		var lister cloud.ImageLister
-		switch cloudProvider {
-		case "hetzner":
-			lister = hetznerImageLister()
-		case "fc":
-			lister = fcImageLister()
-		case "boxes":
-			ensureProvider()
-			lister, _ = provider.(cloud.ImageLister)
+		ensureProvider()
+		if provider == nil {
+			log.Fatalln("unknown provider " + cloudProvider)
 		}
-		if lister == nil {
+		images, err := boxClient().Images()
+		if errors.Is(err, box.ErrUnsupported) {
 			fmt.Println("The current cloud provider does not support listing images.")
 			return
 		}
-		images, err := lister.ListImages()
 		if err != nil {
 			log.Fatalln(err)
 		}

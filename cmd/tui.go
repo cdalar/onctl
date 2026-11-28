@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"github.com/cdalar/onctl/pkg/box"
 	"io"
 	"log"
 	"os"
@@ -308,7 +309,7 @@ type tuiChoice struct {
 }
 
 type tuiModel struct {
-	p cloud.CloudProviderInterface
+	c *box.Client
 
 	vms     []cloud.Vm // every VM, running then paused, as sortVMs orders them
 	images  []cloud.CloudImage
@@ -378,7 +379,7 @@ func newTUI(p cloud.CloudProviderInterface) tuiModel {
 	sp := bspinner.New(bspinner.WithSpinner(bspinner.Spinner{Frames: tuiSpinnerFrames, FPS: 80 * time.Millisecond}))
 	sp.Style = k9s.logo
 	return tuiModel{
-		p:            p,
+		c:            box.Wrap(cloudProvider, p),
 		loaded:       map[string]bool{},
 		loading:      map[string]bool{},
 		listErr:      map[string]error{},
@@ -431,18 +432,18 @@ func (m *tuiModel) list(resource string) tea.Cmd {
 		return nil
 	}
 	m.loading[resource] = true
-	p := m.p
+	c := m.c
 	return func() tea.Msg {
 		msg := tuiListMsg{resource: resource}
 		switch resource {
 		case "vms":
-			running, paused, err := listVMs(p)
+			running, paused, err := c.List()
 			msg.vms = append(append([]cloud.Vm{}, running.List...), paused.List...)
 			msg.err = err
 		case "images":
-			msg.images, msg.err = tuiListImages(p)
+			msg.images, msg.err = tuiListImages(c)
 		case "sizes":
-			msg.sizes, msg.err = tuiListSizes(p)
+			msg.sizes, msg.err = tuiListSizes(c)
 		case "runs":
 			msg.runs, msg.err = pollRuns()
 		}
@@ -452,22 +453,22 @@ func (m *tuiModel) list(resource string) tea.Cmd {
 
 // tuiListImages is `onctl images`: the provider's images, when it lists
 // them.
-func tuiListImages(p cloud.CloudProviderInterface) ([]cloud.CloudImage, error) {
-	lister, ok := p.(cloud.ImageLister)
-	if !ok {
+func tuiListImages(c *box.Client) ([]cloud.CloudImage, error) {
+	images, err := c.Images()
+	if errors.Is(err, box.ErrUnsupported) {
 		return nil, fmt.Errorf("the %s provider does not list images", cloudProvider)
 	}
-	return lister.ListImages()
+	return images, err
 }
 
 // tuiListSizes is `onctl sizes`: the provider's sizes, when it lists them.
-func tuiListSizes(p cloud.CloudProviderInterface) ([]cloud.CloudSize, error) {
-	lister, ok := p.(cloud.SizeLister)
-	if !ok {
+func tuiListSizes(c *box.Client) ([]cloud.CloudSize, error) {
+	sizes, err := c.Sizes()
+	if errors.Is(err, box.ErrUnsupported) {
 		first, _, _ := strings.Cut(sizesUnsupported(cloudProvider), "\n")
 		return nil, errors.New(first)
 	}
-	return lister.ListSizes()
+	return sizes, err
 }
 
 // refresh lists the VMs (the header and most pages need them). The

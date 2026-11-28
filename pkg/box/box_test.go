@@ -2,7 +2,10 @@ package box_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"io"
+	"net"
 	"os/exec"
 	"strings"
 	"testing"
@@ -88,7 +91,12 @@ func (f *fakeProvider) SSHInto(name string, port int, key string, command []stri
 }
 
 func (f *fakeProvider) GetByName(name string) (cloud.Vm, error) {
-	return cloud.Vm{}, errors.New("not used")
+	for _, vm := range f.vms {
+		if vm.Name == name {
+			return vm, nil
+		}
+	}
+	return cloud.Vm{}, errors.New("no VM " + name)
 }
 
 // snapshotProvider is a provider whose paused VMs are only snapshots
@@ -306,4 +314,43 @@ func TestNew_MissingCredentialsIsAnError(t *testing.T) {
 func TestHetznerDeploy_BadKeyIDIsAnError(t *testing.T) {
 	_, err := (cloud.ProviderHetzner{}).Deploy(cloud.Vm{Name: "x", SSHKeyID: "not-a-number"})
 	assert.Error(t, err)
+}
+
+// A provider without a capability says so with ErrUnsupported, which the
+// CLIs turn into their own "not supported" message rather than an error.
+func TestCapabilities_UnsupportedIsErrUnsupported(t *testing.T) {
+	c := box.Wrap("fake", &fakeProvider{})
+	_, err := c.Images()
+	assert.ErrorIs(t, err, box.ErrUnsupported)
+	_, err = c.Sizes()
+	assert.ErrorIs(t, err, box.ErrUnsupported)
+	_, err = c.Restart("web", cloud.RestartOptions{})
+	assert.ErrorIs(t, err, box.ErrUnsupported)
+	assert.ErrorIs(t, c.AuthorizeKey(cloud.Vm{Name: "web"}, "ssh-ed25519 AAAA"), box.ErrUnsupported)
+	assert.False(t, c.CanRestart())
+	assert.False(t, c.Tunneled())
+}
+
+// Dial on a provider whose VMs have addresses goes straight to the VM's
+// IP, looked up by name: that's what lets ssh-proxy and port-forward
+// work on every provider, not only boxes.
+func TestDial_DirectLooksUpTheIP(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+	go func() {
+		if conn, err := ln.Accept(); err == nil {
+			_, _ = conn.Write([]byte("SSH-2.0-fake\r\n"))
+			_ = conn.Close()
+		}
+	}()
+	port := ln.Addr().(*net.TCPAddr).Port
+	p := &fakeProvider{vms: []cloud.Vm{{Name: "web", IP: "127.0.0.1"}}}
+
+	conn, err := box.Wrap("fake", p).Dial(context.Background(), cloud.Vm{Name: "web"}, port)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+	got, err := io.ReadAll(conn)
+	require.NoError(t, err)
+	assert.Equal(t, "SSH-2.0-fake\r\n", string(got))
 }

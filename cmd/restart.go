@@ -35,8 +35,8 @@ Only the Firecracker (fc) provider supports restart.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		serverName := args[0]
-		restarter, ok := provider.(cloud.Restarter)
-		if !ok {
+		c := boxClient()
+		if !c.CanRestart() {
 			fmt.Println("\033[31m✘\033[0m The current provider does not support restart (only fc does).")
 			os.Exit(1)
 		}
@@ -49,7 +49,7 @@ Only the Firecracker (fc) provider supports restart.`,
 		}
 
 		fmt.Println("\033[32m✔\033[0m Restarting VM " + serverName + "...")
-		vm, err := restarter.Restart(cloud.Vm{Name: serverName}, cloud.RestartOptions{KernelImage: restartKernelImage})
+		vm, err := c.Restart(serverName, cloud.RestartOptions{KernelImage: restartKernelImage})
 		if err != nil {
 			fmt.Println("\033[31m✘\033[0m Could not restart VM: " + serverName)
 			fmt.Println(err)

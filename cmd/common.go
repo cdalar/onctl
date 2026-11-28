@@ -532,14 +532,15 @@ func MergeConfig(opt *cmdCreateOptions, config *cmdCreateOptions) {
 
 // attachDialer routes remote's ssh connection through the provider when
 // the provider's VMs have no reachable address of their own
-// (cloud.Dialer, e.g. boxes); otherwise remote dials vm's IP as usual.
+// (box.Client.Tunneled, e.g. boxes); otherwise remote dials vm's IP as
+// usual.
 func attachDialer(remote *tools.Remote, vm cloud.Vm) {
-	d, ok := provider.(cloud.Dialer)
-	if !ok {
+	c := boxClient()
+	if !c.Tunneled() {
 		return
 	}
 	remote.Dial = func(ctx context.Context, port int) (net.Conn, error) {
-		return d.DialVM(ctx, vm, port)
+		return c.Dial(ctx, vm, port)
 	}
 }
 

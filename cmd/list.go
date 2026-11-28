@@ -119,12 +119,6 @@ var listCmd = &cobra.Command{
 	},
 }
 
-// listVMs is what `onctl ls` and `onctl tui` show: the provider's VMs
-// split into running and paused (box.Client.List).
-func listVMs(p cloud.CloudProviderInterface) (running, paused cloud.VmList, err error) {
-	return box.Wrap(cloudProvider, p).List()
-}
-
 // isPausedStatus reports whether a VM status means stopped/paused rather
 // than running (box.PausedStatus).
 func isPausedStatus(status string) bool {

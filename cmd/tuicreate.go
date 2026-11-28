@@ -60,11 +60,11 @@ func newTUICreateForm(image, typ string) *tuiCreateForm {
 // typ, when given, are filled in.
 func (m tuiModel) openCreate(image, typ string) (tea.Model, tea.Cmd) {
 	m.create = newTUICreateForm(image, typ)
-	p := m.p
+	c := m.c
 	list := func() tea.Msg {
 		var msg tuiCatalogMsg
-		msg.images, _ = tuiListImages(p)
-		msg.sizes, _ = tuiListSizes(p)
+		msg.images, _ = tuiListImages(c)
+		msg.sizes, _ = tuiListSizes(c)
 		return msg
 	}
 	return m, tea.Batch(list, m.create.name.Focus())

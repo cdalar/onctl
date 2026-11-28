@@ -398,7 +398,7 @@ func (m tuiModel) handleVMKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if vm == nil {
 		return m, nil
 	}
-	c := box.Wrap(cloudProvider, m.p)
+	c := m.c
 	switch msg.String() {
 	case "s":
 		return m.ssh(vm.Name)
@@ -436,8 +436,8 @@ func (m tuiModel) handleVMKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // the VM's memory is lost. Any state will do: restart also brings back
 // a paused VM and one whose process died.
 func (m tuiModel) askRestart(vm *cloud.Vm) (tea.Model, tea.Cmd) {
-	restarter, ok := m.p.(cloud.Restarter)
-	if !ok {
+	c := m.c
+	if !c.CanRestart() {
 		return m, m.fail("this provider does not support restart (only fc does)")
 	}
 	if v, ok := m.pending[vm.Name]; ok {
@@ -453,7 +453,7 @@ func (m tuiModel) askRestart(vm *cloud.Vm) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.act(vm, "restart", -1, func() (string, error) {
-			restarted, err := restarter.Restart(cloud.Vm{Name: name}, cloud.RestartOptions{})
+			restarted, err := c.Restart(name, cloud.RestartOptions{})
 			if err != nil {
 				return "", err
 			}
@@ -685,7 +685,7 @@ func (m tuiModel) askDestroy() (tea.Model, tea.Cmd) {
 		if vm == nil {
 			return m, nil
 		}
-		return m.act(vm, "destroy", -1, destroyCall(m.p, name, snapshot))
+		return m.act(vm, "destroy", -1, destroyCall(m.c, name, snapshot))
 	})
 	return m, nil
 }
@@ -695,15 +695,14 @@ func (m tuiModel) askDestroy() (tea.Model, tea.Cmd) {
 // Exactly "paused", ListPaused's: a powered-off server ("off") is filed
 // with the paused ones too, but it's still a server.
 func (m tuiModel) isSnapshot(vm *cloud.Vm) bool {
-	_, ok := m.p.(cloud.SnapshotDestroyer)
+	_, ok := m.c.Provider().(cloud.SnapshotDestroyer)
 	return ok && vm.Status == "paused"
 }
 
 // destroyCall destroys the VM named name through pkg/box, which deletes
 // its snapshot when that's all there is of it; snapshot only picks the
 // message saying so.
-func destroyCall(p cloud.CloudProviderInterface, name string, snapshot bool) func() (string, error) {
-	c := box.Wrap(cloudProvider, p)
+func destroyCall(c *box.Client, name string, snapshot bool) func() (string, error) {
 	if snapshot {
 		return func() (string, error) {
 			return "deleted " + name + "'s snapshot", c.Destroy(name)
@@ -757,7 +756,7 @@ func (m tuiModel) askDestroyMarked() (tea.Model, tea.Cmd) {
 				if vm == nil {
 					continue
 				}
-				next, cmd := m.act(vm, "destroy", -1, destroyCall(m.p, name, snapshots[name]))
+				next, cmd := m.act(vm, "destroy", -1, destroyCall(m.c, name, snapshots[name]))
 				m, cmds = next.(tuiModel), append(cmds, cmd)
 			}
 			return m, tea.Batch(cmds...)
