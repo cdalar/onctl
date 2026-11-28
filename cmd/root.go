@@ -266,7 +266,7 @@ func applyProviderFlag() error {
 // Cobra's shell-completion machinery (`__complete`) resolves
 // ValidArgsFunction without running PersistentPreRunE
 // (https://github.com/spf13/cobra/issues/1291), so completion functions that
-// call provider.List() (destroy, ssh) must invoke this themselves, or they'd
+// list VMs (destroy, ssh) must invoke this themselves, or they'd
 // dereference a nil provider. Cobra does parse flags first, so -p is applied
 // here too: `onctl -p ac destroy <TAB>` must list ac's VMs, not ONCTL_CLOUD's.
 func ensureProvider() {

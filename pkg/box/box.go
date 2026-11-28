@@ -172,6 +172,18 @@ func (c *Client) List() (running, paused cloud.VmList, err error) {
 	return running, paused, errors.Join(listErr, pausedErr)
 }
 
+// Servers is the VMs the provider has as servers, running or stopped,
+// without the paused ones that are only a snapshot (Hetzner's): what
+// `onctl destroy all` tears down and shell completion offers.
+func (c *Client) Servers() (cloud.VmList, error) {
+	return c.p.List()
+}
+
+// Get is the VM named name, as the provider reports it.
+func (c *Client) Get(name string) (cloud.Vm, error) {
+	return c.p.GetByName(name)
+}
+
 // PausedStatus reports whether a VM status means stopped/paused rather
 // than running. AWS uses "stopped", Hetzner "off" (a server powered off
 // outside onctl pause, which snapshots and deletes it), GCP uses

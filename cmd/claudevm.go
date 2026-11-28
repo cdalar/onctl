@@ -179,33 +179,22 @@ func connectClaudeVM(ctx context.Context, name string, create bool) (box *boxSSH
 // a paused one resumed, or -- when create is set -- a new one from --size
 // and --image where given, else the provider's configured defaults.
 func ensureClaudeVM(name, publicKeyFile string, create bool) (vm cloud.Vm, created bool, err error) {
-	list, err := provider.List()
+	c := boxClient()
+	// Stopped VMs some providers (ac, aws) list with the running ones are
+	// in paused, beside Hetzner-style snapshots: they have no address
+	// until resumed.
+	running, paused, err := c.List()
 	if err != nil {
 		return cloud.Vm{}, false, err
 	}
-	var stopped bool
-	for _, vm := range list.List {
+	for _, vm := range running.List {
 		// A "dead" fc/ch record is a VMM process that died out of band;
-		// Deploy makes a new one in its place (as onctl create does).
-		if vm.Name != name || vm.Status == "dead" {
-			continue
+		// Create makes a new one in its place (as onctl create does).
+		if vm.Name == name && vm.Status != "dead" {
+			return vm, false, nil
 		}
-		// Some providers (ac, aws) list stopped VMs rather than filing
-		// them under ListPaused; such a VM has no address until resumed.
-		if isPausedStatus(vm.Status) {
-			stopped = true
-			break
-		}
-		return vm, false, nil
 	}
-	keyID, err := provider.CreateSSHKey(publicKeyFile)
-	if err != nil {
-		return cloud.Vm{}, false, err
-	}
-	if stopped {
-		return resumeClaudeVM(name, keyID)
-	}
-	paused, err := provider.ListPaused()
+	keyID, err := c.AddSSHKey(publicKeyFile)
 	if err != nil {
 		return cloud.Vm{}, false, err
 	}
@@ -226,7 +215,7 @@ func ensureClaudeVM(name, publicKeyFile string, create bool) (vm cloud.Vm, creat
 		viper.Set(cloudProvider+".vm.image", claudeImage)
 	}
 	fmt.Fprintln(os.Stderr, creatingMessage(name))
-	vm, err = provider.Deploy(want)
+	vm, err = c.Create(want)
 	if err != nil {
 		return cloud.Vm{}, false, fmt.Errorf("creating %s: %w", name, err)
 	}
@@ -236,7 +225,7 @@ func ensureClaudeVM(name, publicKeyFile string, create bool) (vm cloud.Vm, creat
 // resumeClaudeVM resumes the paused VM named name through the provider.
 func resumeClaudeVM(name, keyID string) (cloud.Vm, bool, error) {
 	fmt.Fprintf(os.Stderr, "Resuming %s...\n", name)
-	vm, err := provider.Resume(cloud.Vm{Name: name, SSHKeyID: keyID})
+	vm, err := boxClient().Resume(name, keyID)
 	if err != nil {
 		return cloud.Vm{}, false, fmt.Errorf("resuming %s: %w", name, err)
 	}
@@ -316,16 +305,12 @@ func listClaudeVMs(ctx context.Context) ([]claudeVM, error) {
 		}
 		return out, nil
 	}
-	list, err := provider.List()
-	if err != nil {
-		return nil, err
-	}
-	paused, err := provider.ListPaused()
+	running, paused, err := boxClient().List()
 	if err != nil {
 		return nil, err
 	}
 	var out []claudeVM
-	for _, vm := range append(list.List, paused.List...) {
+	for _, vm := range append(running.List, paused.List...) {
 		out = append(out, claudeVM{name: vm.Name, state: strings.ToLower(vm.Status)})
 	}
 	return out, nil

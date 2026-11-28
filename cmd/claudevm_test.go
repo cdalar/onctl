@@ -214,3 +214,20 @@ func TestEnsureClaudeVMReturnsRunningVMWithoutResuming(t *testing.T) {
 	assert.Equal(t, "192.168.65.4", vm.IP)
 	assert.Empty(t, fake.calls, "a running VM is used as is")
 }
+
+// A dead fc microVM (its firecracker process gone, e.g. after a host
+// reboot) can't be used or resumed: onctl claude creates a new one in its
+// place, as onctl create does, rather than refusing the name as taken.
+func TestEnsureClaudeVMRecreatesADeadMicroVM(t *testing.T) {
+	fake := &tuiFakeProvider{vms: []cloud.Vm{
+		{Name: "claude-onctl", Status: "dead", Provider: "fc"},
+	}}
+	prev := provider
+	provider = fake
+	t.Cleanup(func() { provider = prev })
+
+	_, created, err := ensureClaudeVM("claude-onctl", "/dev/null", true)
+	require.NoError(t, err)
+	assert.True(t, created)
+	assert.Equal(t, []string{"sshkey", "deploy claude-onctl"}, fake.calls)
+}

@@ -179,7 +179,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 	TraverseChildren:      true,
 	DisableFlagsInUseLine: true,
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		VMList, err := provider.List()
+		VMList, err := boxClient().Servers()
 		list := []string{}
 		for _, vm := range VMList.List {
 			list = append(list, vm.Name)
@@ -202,7 +202,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 		vmName := args[0]
 
 		// Get VM details
-		vm, err := provider.GetByName(vmName)
+		vm, err := boxClient().Get(vmName)
 		if err != nil {
 			log.Fatalln(err)
 		}

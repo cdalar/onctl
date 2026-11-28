@@ -87,7 +87,7 @@ var sshCmd = &cobra.Command{
 		if provider == nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
-		VMList, err := provider.List()
+		VMList, err := boxClient().Servers()
 		list := []string{}
 		for _, vm := range VMList.List {
 			list = append(list, vm.Name)
@@ -166,7 +166,7 @@ var sshCmd = &cobra.Command{
 			}
 			privateKey = pk
 		}
-		vm, err := provider.GetByName(args[0])
+		vm, err := boxClient().Get(args[0])
 		if err != nil {
 			log.Fatalln(err)
 		}

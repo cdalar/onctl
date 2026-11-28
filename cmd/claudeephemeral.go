@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/cdalar/onctl/pkg/cloud"
 )
 
 // An ephemeral run -- onctl claude without --keep, --box, --detach or
@@ -87,7 +85,7 @@ func discardBox(name string) {
 	if onBoxes() {
 		err = newClient().Destroy(ctx, name)
 	} else {
-		err = provider.Destroy(cloud.Vm{Name: name})
+		err = boxClient().Destroy(name)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Couldn't delete %s: %v -- delete it with %s\n", name, err, destroyHint(name))
