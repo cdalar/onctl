@@ -54,7 +54,7 @@ func (f *tuiFakeProvider) CreateSSHKey(string) (string, error) {
 	f.calls = append(f.calls, "sshkey")
 	return "key-1", nil
 }
-func (f *tuiFakeProvider) SSHInto(string, int, string, []string) {}
+func (f *tuiFakeProvider) SSHInto(string, int, string, []string, cloud.Stdio) error { return nil }
 func (f *tuiFakeProvider) GetByName(name string) (cloud.Vm, error) {
 	for _, v := range append(f.vms, f.paused...) {
 		if v.Name == name {

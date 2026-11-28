@@ -19,7 +19,9 @@ func TestSSHIntoVM_UsesACommonTERM(t *testing.T) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("TERM", "xterm-ghostty")
 
-	SSHIntoVM(SSHIntoVMRequest{IPAddress: "vm", User: "root", Port: 22, PrivateKeyFile: "key"})
+	if err := SSHIntoVM(SSHIntoVMRequest{IPAddress: "vm", User: "root", Port: 22, PrivateKeyFile: "key"}); err != nil {
+		t.Fatal(err)
+	}
 
 	got, err := os.ReadFile(out)
 	if err != nil {

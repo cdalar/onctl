@@ -19,6 +19,13 @@ func TestFileToBase64_NonExistent(t *testing.T) {
 	assert.Equal(t, "", result)
 }
 
+// A cloud-init path that exists but can't be read (here a directory) gets
+// the same treatment as a missing one: no cloud-init, and no process exit
+// that would take a pkg/box caller down mid-deploy.
+func TestFileToBase64_Unreadable(t *testing.T) {
+	assert.Equal(t, "", FileToBase64(t.TempDir()))
+}
+
 func TestFileToBase64_ValidFile(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "base64-test-")
 	require.NoError(t, err)

@@ -470,18 +470,24 @@ func (p ProviderAws) GetByName(serverName string) (Vm, error) {
 	return mapAwsServer(s.Reservations[0].Instances[0]), nil
 }
 
-func (p ProviderAws) SSHInto(serverName string, port int, privateKey string, command []string) {
+func (p ProviderAws) SSHInto(serverName string, port int, privateKey string, command []string, stdio Stdio) error {
 
 	s, err := p.GetByName(serverName)
-	if err != nil || s.ID == "" {
-		log.Fatalln(err)
+	if err != nil {
+		return err
+	}
+	if s.ID == "" {
+		return errors.New("No Server found with name: " + serverName)
 	}
 	log.Println("[DEBUG] " + s.String())
 
 	if privateKey == "" {
 		privateKey = viper.GetString("ssh.privateKey")
 	}
-	tools.SSHIntoVM(tools.SSHIntoVMRequest{
+	return tools.SSHIntoVM(tools.SSHIntoVMRequest{
+		Stdin:          stdio.In,
+		Stdout:         stdio.Out,
+		Stderr:         stdio.Err,
 		IPAddress:      s.IP,
 		User:           viper.GetString("aws.vm.username"),
 		Port:           port,
