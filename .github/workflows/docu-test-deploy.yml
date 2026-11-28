@@ -2,12 +2,12 @@ name: Test deployment
 
 on:
   workflow_dispatch:
+  # No paths filter: "Test deployment" is a required check, so it has to
+  # report on every PR. The build steps skip themselves when docs/ didn't
+  # change (the docs step below), which still reports success.
   pull_request:
     branches:
       - main
-    paths:
-      - 'docs/**'
-      - '.github/workflows/docu-test-deploy.yml'
     # Review gh actions docs if you want to further define triggers, paths, etc
     # https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#on
 
@@ -32,13 +32,26 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: Check for docs changes
+        id: docs
+        working-directory: .
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] ||
+             ! git diff --quiet "origin/${{ github.base_ref }}...HEAD" -- docs .github/workflows/docu-test-deploy.yml; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No docs changes; skipping the docs build."
+          fi
+      - if: steps.docs.outputs.changed == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: docs/package-lock.json
 
       - name: Install dependencies
+        if: steps.docs.outputs.changed == 'true'
         run: npm ci
       - name: Test build website
+        if: steps.docs.outputs.changed == 'true'
         run: npm run build
