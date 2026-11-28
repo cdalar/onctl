@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/cdalar/onctl/pkg/box"
 	"log"
 	"os"
 
@@ -178,30 +179,20 @@ var sshCmd = &cobra.Command{
 			sshOpt.Variables = append(dotEnvVars, sshOpt.Variables...)
 		}
 
-		if len(sshOpt.UploadFiles) > 0 {
-			ProcessUploadSlice(sshOpt.UploadFiles, conn, s)
+		setup := box.Setup{
+			Uploads:    parseUploads(sshOpt.UploadFiles),
+			ApplyFiles: applyFileFound,
+			Vars:       sshOpt.Variables,
+			Downloads:  parseDownloads(sshOpt.DownloadFiles),
+			Out:        os.Stdout,
 		}
-
-		// BEGIN Apply File
-		for i, applyFile := range applyFileFound {
-			// No spinner here: the apply file's own output streams to
-			// stdout (see tools.CopyAndRunRemoteFile) and would be
-			// garbled by one.
-			s.Stop()
-			fmt.Println("Running " + sshOpt.ApplyFiles[i] + " on Remote...")
-
-			err = conn.Apply(applyFile, sshOpt.Variables, os.Stdout)
-			if err != nil {
-				log.Println(err)
-			}
-			s.Stop()
-			fmt.Println("\033[32m\u2714\033[0m " + sshOpt.ApplyFiles[i] + " ran on Remote")
-
-		}
-		// END Apply File
-
-		if len(sshOpt.DownloadFiles) > 0 {
-			ProcessDownloadSlice(sshOpt.DownloadFiles, conn)
+		printProgress(s, &setup)
+		// A failed upload, apply file or download doesn't stop the
+		// trailing command; it fails the command after.
+		provisionErr := boxClient().Provision(conn, setup)
+		s.Stop()
+		if provisionErr != nil {
+			log.Println(provisionErr)
 		}
 		remoteCmd := parseRemoteCmd(os.Args)
 		// Run the trailing `-- command` whenever one is given, even alongside
@@ -219,6 +210,9 @@ var sshCmd = &cobra.Command{
 			if code != 0 {
 				os.Exit(code)
 			}
+		}
+		if provisionErr != nil {
+			os.Exit(1)
 		}
 	},
 }

@@ -46,17 +46,7 @@ func TestGetSSHKeyFilePaths_ViperValues(t *testing.T) {
 	})
 }
 
-func TestProcessUploadSlice_FileParsing(t *testing.T) {
-	// Test function existence only to avoid SSH operations
-	assert.NotNil(t, ProcessUploadSlice)
-	t.Log("ProcessUploadSlice function exists (full test would require SSH)")
-}
 
-func TestProcessDownloadSlice_FileParsing(t *testing.T) {
-	// Test function existence only to avoid SSH operations
-	assert.NotNil(t, ProcessDownloadSlice)
-	t.Log("ProcessDownloadSlice function exists (full test would require SSH)")
-}
 
 // Additional tests to improve coverage
 

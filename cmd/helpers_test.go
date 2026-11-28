@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"github.com/cdalar/onctl/pkg/box"
 	"os"
 	"path/filepath"
 	"testing"
@@ -127,13 +126,3 @@ func TestCheckCloudProvider_AutoDetectsAndExports(t *testing.T) {
 	assert.Equal(t, "hetzner", os.Getenv("ONCTL_CLOUD"))
 }
 
-// unreachableConn is a box.Conn to a port nothing listens on: every
-// transfer through it fails to connect.
-func unreachableConn(t *testing.T) *box.Conn {
-	t.Helper()
-	key := filepath.Join(t.TempDir(), "id")
-	require.NoError(t, os.WriteFile(key, []byte("not a key"), 0o600))
-	conn, err := box.Wrap("hetzner", &tuiFakeProvider{}).Connect(cloud.Vm{Name: "web", IP: "127.0.0.1"}, box.ConnectOptions{KeyFile: key, Port: 1})
-	require.NoError(t, err)
-	return conn
-}

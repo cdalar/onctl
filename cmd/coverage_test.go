@@ -81,33 +81,7 @@ func TestReadConfig_HomeDirectory(t *testing.T) {
 	}
 }
 
-func TestProcessUploadSlice_WithColonSeparator(t *testing.T) {
-	// Test with empty slice first to ensure it works
-	mockRemote := unreachableConn(t)
 
-	// Test with empty slice
-	assert.NotPanics(t, func() {
-		ProcessUploadSlice([]string{}, mockRemote, nil)
-	})
-
-	// Test that function exists and handles colon separators
-	assert.NotNil(t, ProcessUploadSlice)
-	t.Log("ProcessUploadSlice handles colon-separated file paths")
-}
-
-func TestProcessDownloadSlice_WithColonSeparator(t *testing.T) {
-	// Test with empty slice first
-	mockRemote := unreachableConn(t)
-
-	// Test with empty slice
-	assert.NotPanics(t, func() {
-		ProcessDownloadSlice([]string{}, mockRemote)
-	})
-
-	// Test that function exists and handles colon separators
-	assert.NotNil(t, ProcessDownloadSlice)
-	t.Log("ProcessDownloadSlice handles colon-separated file paths")
-}
 
 func TestCheckCloudProvider_InvalidProvider(t *testing.T) {
 	// Save original env var
