@@ -344,24 +344,12 @@ var createCmd = &cobra.Command{
 		}
 
 		log.Println("[DEBUG] Vm:" + vm.String())
-		privateKey, err := os.ReadFile(privateKeyFile)
-		if err != nil {
-			log.Println(err)
-		}
-
-		// BEGIN Cloud-init
-		log.Println("[DEBUG] waiting for cloud-init")
-		log.Println("[DEBUG] ssh port: ", opt.Vm.SSHPort)
 		s.Stop()
-		// fmt.Println("\033[32m✔\033[0m VM Starting...")
-		remote := tools.Remote{
-			Username:   viper.GetString(cloudProvider + ".vm.username"),
-			IPAddress:  vm.IP,
-			SSHPort:    opt.Vm.SSHPort,
-			PrivateKey: string(privateKey),
-			Spinner:    s,
+		conn, err := connect(vm, privateKeyFile, opt.Vm.SSHPort, s)
+		if err != nil {
+			log.Fatalln(err)
 		}
-		attachDialer(&remote, vm)
+		defer func() { _ = conn.Close() }()
 
 		// BEGIN Domain
 		if opt.Domain != "" {
@@ -383,7 +371,7 @@ var createCmd = &cobra.Command{
 		if cloudProvider != "fc" && cloudProvider != "ch" && cloudProvider != "ac" && cloudProvider != "boxes" && cloudProvider != "openshell" {
 			s.Suffix = " Waiting for VM to be ready..."
 			s.Restart()
-			if err := remote.WaitForCloudInit(viper.GetString("vm.cloud-init.timeout")); err != nil {
+			if err := conn.WaitForCloudInit(cloudInitTimeout()); err != nil {
 				s.Stop()
 				log.Fatalln("Exiting.. " + err.Error())
 			}
@@ -393,7 +381,7 @@ var createCmd = &cobra.Command{
 		} else {
 			s.Suffix = " Waiting for SSH to be ready..."
 			s.Restart()
-			if err := remote.WaitForSSH(viper.GetString("vm.cloud-init.timeout")); err != nil {
+			if err := conn.WaitForSSH(cloudInitTimeout()); err != nil {
 				s.Stop()
 				log.Fatalln("Exiting.. " + err.Error())
 			}
@@ -415,7 +403,7 @@ var createCmd = &cobra.Command{
 
 		// Upload Files
 		if len(opt.UploadFiles) > 0 {
-			ProcessUploadSlice(opt.UploadFiles, remote)
+			ProcessUploadSlice(opt.UploadFiles, conn, s)
 		}
 
 		// BEGIN Apply File
@@ -426,10 +414,7 @@ var createCmd = &cobra.Command{
 			s.Stop()
 			fmt.Println("Running " + opt.ApplyFiles[i] + " on Remote...")
 
-			err = remote.CopyAndRunRemoteFile(&tools.CopyAndRunRemoteFileConfig{
-				File: applyFile,
-				Vars: opt.Variables,
-			})
+			err = conn.Apply(applyFile, opt.Variables, os.Stdout)
 			if err != nil {
 				log.Println(err)
 			}
@@ -438,7 +423,7 @@ var createCmd = &cobra.Command{
 
 		}
 		if len(opt.DownloadFiles) > 0 {
-			ProcessDownloadSlice(opt.DownloadFiles, remote)
+			ProcessDownloadSlice(opt.DownloadFiles, conn)
 		}
 		s.Stop()
 		fmt.Println("\033[32m✔\033[0m VM Configured...")

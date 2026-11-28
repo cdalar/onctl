@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/cdalar/onctl/pkg/box"
 	"log"
 	"os"
 	"os/exec"
@@ -9,10 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cdalar/onctl/internal/tools"
 	"github.com/cdalar/onctl/internal/ui"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 type cmdDeployOptions struct {
@@ -70,7 +69,7 @@ func checkDockerHubImage(image string) bool {
 }
 
 // runContainer runs a Docker container on the remote VM
-func runContainer(remote tools.Remote, s *ui.Spinner, image string, env []string, name string) {
+func runContainer(remote *box.Conn, s *ui.Spinner, image string, env []string, name string) {
 	// Step 3: Run Docker container on remote VM
 	s.Suffix = " Starting Docker container on remote VM..."
 	s.Restart()
@@ -87,13 +86,9 @@ func runContainer(remote tools.Remote, s *ui.Spinner, image string, env []string
 		containerName = name
 		// Stop and remove existing container with the same name if it exists
 		stopCmd := fmt.Sprintf("docker stop %s 2>/dev/null || true", containerName)
-		_, _ = remote.RemoteRun(&tools.RemoteRunConfig{
-			Command: stopCmd,
-		})
+		_, _ = remote.Run(stopCmd)
 		removeCmd := fmt.Sprintf("docker rm %s 2>/dev/null || true", containerName)
-		_, _ = remote.RemoteRun(&tools.RemoteRunConfig{
-			Command: removeCmd,
-		})
+		_, _ = remote.Run(removeCmd)
 	}
 
 	// Prepare name flag
@@ -104,9 +99,7 @@ func runContainer(remote tools.Remote, s *ui.Spinner, image string, env []string
 
 	// Run the container
 	runCmd := fmt.Sprintf("docker run -d %s %s %s", nameFlag, envVars, image)
-	output, err := remote.RemoteRun(&tools.RemoteRunConfig{
-		Command: runCmd,
-	})
+	output, err := remote.Run(runCmd)
 	if err != nil {
 		s.Stop()
 		fmt.Print("\033[?25h") // Ensure cursor is visible on error
@@ -119,16 +112,12 @@ func runContainer(remote tools.Remote, s *ui.Spinner, image string, env []string
 
 	// Check if container is actually running
 	checkCmd := fmt.Sprintf("docker ps --filter id=%s --format '{{.Status}}'", containerID)
-	statusOutput, statusErr := remote.RemoteRun(&tools.RemoteRunConfig{
-		Command: checkCmd,
-	})
+	statusOutput, statusErr := remote.Run(checkCmd)
 
 	if statusErr != nil || strings.TrimSpace(statusOutput) == "" {
 		// Container failed to start, get logs
 		logsCmd := fmt.Sprintf("docker logs %s", containerID)
-		logsOutput, logsErr := remote.RemoteRun(&tools.RemoteRunConfig{
-			Command: logsCmd,
-		})
+		logsOutput, logsErr := remote.Run(logsCmd)
 
 		fmt.Printf("\033[31m\u2717\033[0m Docker container failed to start (ID: %s)\033[?25h\n", containerID)
 		if logsErr == nil && logsOutput != "" {
@@ -147,9 +136,7 @@ func runContainer(remote tools.Remote, s *ui.Spinner, image string, env []string
 	s.Restart()
 
 	cleanupCmd := "rm image.tar.gz 2>/dev/null || true"
-	_, err = remote.RemoteRun(&tools.RemoteRunConfig{
-		Command: cleanupCmd,
-	})
+	_, err = remote.Run(cleanupCmd)
 	if err != nil {
 		log.Printf("Warning: Failed to clean up remote tar file: %v", err)
 	}
@@ -210,29 +197,17 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 		// Setup spinner
 		s := ui.New()
 
-		// Get SSH key
-		_, privateKeyFile := getSSHKeyFilePaths("")
-		privateKey, err := os.ReadFile(privateKeyFile)
+		remote, err := connect(vm, "", 22, s)
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		remote := tools.Remote{
-			Username:   viper.GetString(cloudProvider + ".vm.username"),
-			IPAddress:  vm.IP,
-			SSHPort:    22, // Default SSH port
-			PrivateKey: string(privateKey),
-			Spinner:    s,
-		}
-		attachDialer(&remote, vm)
+		defer func() { _ = remote.Close() }()
 
 		// Get remote VM architecture first
 		s.Suffix = " Getting remote VM architecture..."
 		s.Start()
 
-		remoteArchOutput, err := remote.RemoteRun(&tools.RemoteRunConfig{
-			Command: "uname -m",
-		})
+		remoteArchOutput, err := remote.Run("uname -m")
 		if err != nil {
 			s.Stop()
 			fmt.Print("\033[?25h")
@@ -307,9 +282,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 
 		// Check if image exists on remote VM
 		checkRemoteCmd := fmt.Sprintf("docker image inspect %s --format 'exists'", deployOpt.Image)
-		_, err = remote.RemoteRun(&tools.RemoteRunConfig{
-			Command: checkRemoteCmd,
-		})
+		_, err = remote.Run(checkRemoteCmd)
 
 		imageExists := (err == nil)
 
@@ -330,9 +303,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 			s.Start()
 
 			pullCmd := fmt.Sprintf("docker pull %s", deployOpt.Image)
-			_, err = remote.RemoteRun(&tools.RemoteRunConfig{
-				Command: pullCmd,
-			})
+			_, err = remote.Run(pullCmd)
 			if err != nil {
 				s.Stop()
 				fmt.Print("\033[?25h")
@@ -432,7 +403,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 			remoteImagePath := "image.tar.gz"
 
 			// Upload using SCP
-			err = remote.SCPCopyFileWithProgress(imageTarPath, remoteImagePath, progressCallback)
+			err = remote.UploadSCP(imageTarPath, remoteImagePath, progressCallback)
 
 			if err != nil {
 				s.Stop()
@@ -453,9 +424,7 @@ Note: Ensure the Docker image architecture matches the remote VM's architecture 
 			s.Restart()
 
 			loadCmd := "gunzip -c image.tar.gz | docker load"
-			_, err = remote.RemoteRun(&tools.RemoteRunConfig{
-				Command: loadCmd,
-			})
+			_, err = remote.Run(loadCmd)
 			if err != nil {
 				s.Stop()
 				fmt.Print("\033[?25h") // Ensure cursor is visible on error

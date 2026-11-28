@@ -1,12 +1,13 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/cdalar/onctl/internal/ui"
+	"github.com/cdalar/onctl/pkg/box"
+	"golang.org/x/term"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -20,7 +21,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/cdalar/onctl/internal/files"
-	"github.com/cdalar/onctl/internal/tools"
 	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/gofrs/uuid/v5"
 	"github.com/manifoldco/promptui"
@@ -271,75 +271,10 @@ func findSingleFile(filename string) (filePath string) {
 	return ""
 }
 
-// sshKeyTypeFallbackOrder lists the key basenames tried, in order, when the
-// configured default SSH key (ssh.publicKey/ssh.privateKey in onctl.yaml)
-// does not exist on disk. Newer, more secure key types are preferred first.
-var sshKeyTypeFallbackOrder = []string{"id_ed25519", "id_ecdsa", "id_rsa"}
-
+// getSSHKeyFilePaths is box.KeyFiles: filename's key pair, or the
+// configured default's (falling back to another key type on disk).
 func getSSHKeyFilePaths(filename string) (publicKeyFile, privateKeyFile string) {
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		log.Println(err)
-	}
-
-	usingConfigDefault := filename == ""
-
-	if filename == "" {
-		publicKeyFile = viper.GetString("ssh.publicKey")
-		privateKeyFile = viper.GetString("ssh.privateKey")
-	} else {
-		// check if filename has .pub extension
-		if filename[len(filename)-4:] == ".pub" {
-			publicKeyFile = filename
-			privateKeyFile = filename[:len(filename)-4]
-		} else {
-			privateKeyFile = filename
-			publicKeyFile = filename + ".pub"
-		}
-	}
-
-	// change ~ char with home directory
-	publicKeyFile = strings.Replace(publicKeyFile, "~", home, 1)
-	privateKeyFile = strings.Replace(privateKeyFile, "~", home, 1)
-
-	// The configured default (ssh.publicKey/ssh.privateKey) may point to a
-	// key type the user never generated (e.g. onctl.yaml defaults to
-	// id_rsa, but the machine only has an id_ed25519 key). Rather than
-	// failing outright, fall back to another common key type that actually
-	// exists in the same directory. Explicit -k/--publicKey/--key values are
-	// never overridden this way.
-	if usingConfigDefault {
-		_, publicStatErr := os.Stat(publicKeyFile)
-		_, privateStatErr := os.Stat(privateKeyFile)
-		if publicStatErr != nil || privateStatErr != nil {
-			keyDir := filepath.Dir(publicKeyFile)
-			for _, candidate := range sshKeyTypeFallbackOrder {
-				candidatePublic := filepath.Join(keyDir, candidate+".pub")
-				candidatePrivate := filepath.Join(keyDir, candidate)
-				if _, err := os.Stat(candidatePublic); err == nil {
-					if _, err := os.Stat(candidatePrivate); err == nil {
-						log.Println("[DEBUG] configured SSH key", publicKeyFile, "not found, falling back to", candidatePublic)
-						publicKeyFile = candidatePublic
-						privateKeyFile = candidatePrivate
-						break
-					}
-				}
-			}
-		}
-	}
-
-	log.Println("[DEBUG] publicKeyFile:", publicKeyFile)
-	log.Println("[DEBUG] privateKeyFile:", privateKeyFile)
-	if _, err := os.Stat(publicKeyFile); err != nil {
-		log.Println("[DEBUG]", publicKeyFile, "Public key file not found")
-	}
-
-	if _, err := os.Stat(privateKeyFile); err != nil {
-		log.Println("[DEBUG]", privateKeyFile, "Private key file not found")
-	}
-
-	return publicKeyFile, privateKeyFile
+	return box.KeyFiles(filename)
 }
 
 func dirSize(path string) (int64, error) {
@@ -360,14 +295,14 @@ func dirSize(path string) (int64, error) {
 	return size, err
 }
 
-func ProcessUploadSlice(uploadSlice []string, remote tools.Remote) {
+func ProcessUploadSlice(uploadSlice []string, conn *box.Conn, s *ui.Spinner) {
 	if len(uploadSlice) == 0 {
 		return
 	}
 
-	spinnerWasActive := remote.Spinner != nil && remote.Spinner.Active()
+	spinnerWasActive := s != nil && s.Active()
 	if spinnerWasActive {
-		remote.Spinner.Stop()
+		s.Stop()
 	}
 
 	for _, dfile := range uploadSlice {
@@ -431,7 +366,7 @@ func ProcessUploadSlice(uploadSlice []string, remote tools.Remote) {
 		}
 
 		if fileInfo.IsDir() {
-			err = remote.SSHUploadDir(localFile, remoteFile, totalBytes, progressCallback)
+			err = conn.Upload(localFile, remoteFile, progressCallback)
 			if err != nil {
 				fmt.Print("\n")
 				log.Printf("[ERROR] Failed to upload directory %s: %v", localFile, err)
@@ -440,7 +375,7 @@ func ProcessUploadSlice(uploadSlice []string, remote tools.Remote) {
 			progressCallback(totalBytes, totalBytes)
 			fmt.Printf("\n\033[32m\u2714\033[0m Uploaded directory %s\n", remoteFile)
 		} else {
-			err = remote.SSHCopyFileWithProgress(localFile, remoteFile, progressCallback)
+			err = conn.Upload(localFile, remoteFile, progressCallback)
 			if err != nil {
 				fmt.Print("\n")
 				log.Printf("[ERROR] Failed to upload %s: %v", localFile, err)
@@ -452,12 +387,17 @@ func ProcessUploadSlice(uploadSlice []string, remote tools.Remote) {
 	}
 
 	if spinnerWasActive {
-		remote.Spinner.Restart()
+		s.Restart()
 	}
 }
 
-func ProcessDownloadSlice(downloadSlice []string, remote tools.Remote) {
+func ProcessDownloadSlice(downloadSlice []string, conn *box.Conn) {
 	if len(downloadSlice) > 0 {
+		// Connect once up front: the downloads below share the connection.
+		if err := conn.Open(); err != nil {
+			log.Printf("[ERROR] Failed to connect for downloads: %v", err)
+			return
+		}
 		var wg sync.WaitGroup
 		for _, dfile := range downloadSlice {
 			wg.Add(1)
@@ -477,7 +417,7 @@ func ProcessDownloadSlice(downloadSlice []string, remote tools.Remote) {
 
 				log.Printf("Downloading file: %s -> %s", remoteFile, localFile)
 
-				err := remote.DownloadFile(remoteFile, localFile)
+				err := conn.Download(remoteFile, localFile)
 				if err != nil {
 					log.Printf("[ERROR] Failed to download %s: %v", remoteFile, err)
 				}
@@ -530,18 +470,47 @@ func MergeConfig(opt *cmdCreateOptions, config *cmdCreateOptions) {
 	log.Println("[DEBUG] Merged options: ", opt)
 }
 
-// attachDialer routes remote's ssh connection through the provider when
-// the provider's VMs have no reachable address of their own
-// (box.Client.Tunneled, e.g. boxes); otherwise remote dials vm's IP as
-// usual.
-func attachDialer(remote *tools.Remote, vm cloud.Vm) {
-	c := boxClient()
-	if !c.Tunneled() {
-		return
+// connect is box.Connect for the CLI: an encrypted key's passphrase is
+// read from the terminal and WaitForSSH's hints printed, with s (when
+// set) paused for each. keyFlag is -k's value (empty: an imported host's
+// own key, else the configured one); port 0 is an imported host's own.
+func connect(vm cloud.Vm, keyFlag string, port int, s *ui.Spinner) (*box.Conn, error) {
+	paused := func(f func()) {
+		active := s != nil && s.Active()
+		if active {
+			s.Stop()
+		}
+		f()
+		if active {
+			s.Restart()
+		}
 	}
-	remote.Dial = func(ctx context.Context, port int) (net.Conn, error) {
-		return c.Dial(ctx, vm, port)
+	return boxClient().Connect(vm, box.ConnectOptions{
+		KeyFile: keyFlag,
+		Port:    port,
+		Passphrase: func() (passphrase string, err error) {
+			paused(func() {
+				fmt.Print("Enter passphrase for private key:")
+				var b []byte
+				b, err = term.ReadPassword(int(os.Stdin.Fd()))
+				fmt.Println()
+				passphrase = string(b)
+			})
+			return passphrase, err
+		},
+		Hint: func(hint string) {
+			paused(func() { fmt.Fprintln(os.Stderr, hint) })
+		},
+	})
+}
+
+// cloudInitTimeout is --cloud-init-timeout (vm.cloud-init.timeout).
+func cloudInitTimeout() time.Duration {
+	d, err := time.ParseDuration(viper.GetString("vm.cloud-init.timeout"))
+	if err != nil {
+		log.Fatalf("Invalid timeout value: %v", err)
 	}
+	return d
 }
 
 // completeVMName completes a command's first argument with the provider's

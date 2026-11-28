@@ -6,7 +6,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cdalar/onctl/internal/tools"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -84,15 +83,11 @@ func TestReadConfig_HomeDirectory(t *testing.T) {
 
 func TestProcessUploadSlice_WithColonSeparator(t *testing.T) {
 	// Test with empty slice first to ensure it works
-	mockRemote := tools.Remote{
-		Username:  "test",
-		IPAddress: "127.0.0.1",
-		SSHPort:   22,
-	}
+	mockRemote := unreachableConn(t)
 
 	// Test with empty slice
 	assert.NotPanics(t, func() {
-		ProcessUploadSlice([]string{}, mockRemote)
+		ProcessUploadSlice([]string{}, mockRemote, nil)
 	})
 
 	// Test that function exists and handles colon separators
@@ -102,11 +97,7 @@ func TestProcessUploadSlice_WithColonSeparator(t *testing.T) {
 
 func TestProcessDownloadSlice_WithColonSeparator(t *testing.T) {
 	// Test with empty slice first
-	mockRemote := tools.Remote{
-		Username:  "test",
-		IPAddress: "127.0.0.1",
-		SSHPort:   22,
-	}
+	mockRemote := unreachableConn(t)
 
 	// Test with empty slice
 	assert.NotPanics(t, func() {
