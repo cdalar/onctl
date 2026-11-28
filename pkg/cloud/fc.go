@@ -1371,19 +1371,22 @@ func (p ProviderFC) CreateSSHKey(publicKeyFile string) (keyID string, err error)
 }
 
 // SSHInto connects to the microVM over its TAP device IP address.
-func (p ProviderFC) SSHInto(serverName string, port int, privateKey string, command []string) {
+func (p ProviderFC) SSHInto(serverName string, port int, privateKey string, command []string, stdio Stdio) error {
 	vm, err := p.GetByName(serverName)
 	if err != nil || vm.Name == "" {
-		log.Fatalln("no microVM found with name " + serverName)
+		return errors.New("no microVM found with name " + serverName)
 	}
 	if vm.Status == fcStatusDead {
-		log.Fatalln("microVM " + serverName + " is not running (its firecracker process is gone, e.g. after a host reboot) — destroy and recreate it")
+		return errors.New("microVM " + serverName + " is not running (its firecracker process is gone, e.g. after a host reboot) — destroy and recreate it")
 	}
 	username := p.Config.Username
 	if username == "" {
 		username = "root"
 	}
-	tools.SSHIntoVM(tools.SSHIntoVMRequest{
+	return tools.SSHIntoVM(tools.SSHIntoVMRequest{
+		Stdin:          stdio.In,
+		Stdout:         stdio.Out,
+		Stderr:         stdio.Err,
 		IPAddress:      vm.IP,
 		User:           username,
 		Port:           port,

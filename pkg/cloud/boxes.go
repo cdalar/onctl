@@ -203,17 +203,17 @@ func (p *ProviderBoxes) CreateSSHKey(publicKeyFile string) (string, error) {
 // SSHInto runs the system ssh with `onctl ssh-proxy` as its
 // ProxyCommand. The key (privateKey's .pub) is authorized first, so a box
 // made elsewhere -- the dashboard -- works too.
-func (p *ProviderBoxes) SSHInto(serverName string, port int, privateKey string, command []string) {
+func (p *ProviderBoxes) SSHInto(serverName string, port int, privateKey string, command []string, stdio Stdio) error {
 	if port == 0 {
 		port = 22
 	}
 	if pub, err := os.ReadFile(privateKey + ".pub"); err == nil {
 		ctx := context.Background()
 		if err := p.ensureRunning(ctx, serverName); err != nil {
-			log.Fatalln(err)
+			return err
 		}
 		if err := p.authorizeKey(ctx, serverName, string(pub)); err != nil {
-			log.Fatalln(err)
+			return err
 		}
 	} else {
 		log.Println("[DEBUG] no public key beside", privateKey, "- not authorizing it:", err)
@@ -222,7 +222,10 @@ func (p *ProviderBoxes) SSHInto(serverName string, port int, privateKey string, 
 	if username == "" {
 		username = "root"
 	}
-	tools.SSHIntoVM(tools.SSHIntoVMRequest{
+	return tools.SSHIntoVM(tools.SSHIntoVMRequest{
+		Stdin:          stdio.In,
+		Stdout:         stdio.Out,
+		Stderr:         stdio.Err,
 		IPAddress:      serverName,
 		User:           username,
 		Port:           port,

@@ -12,6 +12,12 @@ on:
   - cron: '0 10 * * 1' # run "At 10:00 on Monday"
   workflow_call:
 
+concurrency:
+  # A new push to a PR cancels that PR's still-running checks; other events
+  # get a unique group, so they are never cancelled.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   run:
     name: Vuln

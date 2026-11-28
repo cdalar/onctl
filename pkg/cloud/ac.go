@@ -517,19 +517,22 @@ func (p ProviderAC) CreateSSHKey(publicKeyFile string) (keyID string, err error)
 }
 
 // SSHInto connects to the sandbox at its container-network address.
-func (p ProviderAC) SSHInto(serverName string, port int, privateKey string, command []string) {
+func (p ProviderAC) SSHInto(serverName string, port int, privateKey string, command []string, stdio Stdio) error {
 	vm, err := p.GetByName(serverName)
 	if err != nil || vm.Name == "" {
-		log.Fatalln("no container found with name " + serverName)
+		return errors.New("no container found with name " + serverName)
 	}
 	if vm.Status != acStatusRunning {
-		log.Fatalln("container " + serverName + " is " + vm.Status + " -- resume it first")
+		return errors.New("container " + serverName + " is " + vm.Status + " -- resume it first")
 	}
 	username := p.Config.Username
 	if username == "" {
 		username = "root"
 	}
-	tools.SSHIntoVM(tools.SSHIntoVMRequest{
+	return tools.SSHIntoVM(tools.SSHIntoVMRequest{
+		Stdin:          stdio.In,
+		Stdout:         stdio.Out,
+		Stderr:         stdio.Err,
 		IPAddress:      vm.IP,
 		User:           username,
 		Port:           port,

@@ -231,11 +231,10 @@ func (p ProviderStatic) GetHost(serverName string) (StaticHost, error) {
 	return StaticHost{}, fmt.Errorf("no imported host found with name: %s", serverName)
 }
 
-func (p ProviderStatic) SSHInto(serverName string, port int, privateKey string, command []string) {
+func (p ProviderStatic) SSHInto(serverName string, port int, privateKey string, command []string, stdio Stdio) error {
 	host, err := p.GetHost(serverName)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	if privateKey == "" {
 		privateKey = host.PrivateKey
@@ -244,7 +243,10 @@ func (p ProviderStatic) SSHInto(serverName string, port int, privateKey string, 
 	if sshPort == 0 {
 		sshPort = host.SSHPort
 	}
-	tools.SSHIntoVM(tools.SSHIntoVMRequest{
+	return tools.SSHIntoVM(tools.SSHIntoVMRequest{
+		Stdin:          stdio.In,
+		Stdout:         stdio.Out,
+		Stderr:         stdio.Err,
 		IPAddress:      host.IP,
 		User:           host.Username,
 		Port:           sshPort,

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/cdalar/onctl/internal/providerac"
@@ -223,10 +224,20 @@ func (c *Client) Resume(name, keyID string) (cloud.Vm, error) {
 }
 
 // SSH runs command on the VM named name over ssh, or opens a shell when
-// command is empty, with this process's stdin, stdout and stderr. port 0
-// and an empty privateKeyFile mean the provider's own (imported hosts').
-func (c *Client) SSH(name string, port int, privateKeyFile string, command []string) {
-	c.p.SSHInto(name, port, privateKeyFile, command)
+// command is empty, wired to stdio (nil fields are this process's own
+// streams; pass buffers to capture the output). port 0 and an empty
+// privateKeyFile mean the provider's own (imported hosts').
+//
+// exitCode is the command's (or the shell's) exit status; ssh exits 255
+// when it can't connect. err is for an ssh that couldn't run at all: the
+// VM can't be found, isn't running, or there's no ssh binary.
+func (c *Client) SSH(name string, port int, privateKeyFile string, command []string, stdio cloud.Stdio) (exitCode int, err error) {
+	err = c.p.SSHInto(name, port, privateKeyFile, command, stdio)
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode(), nil
+	}
+	return 0, err
 }
 
 // build is the provider id names, configured from onctl's configuration.

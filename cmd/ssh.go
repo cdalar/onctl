@@ -7,6 +7,7 @@ import (
 
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/cdalar/onctl/internal/ui"
+	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
@@ -250,7 +251,13 @@ var sshCmd = &cobra.Command{
 					sshPort = 0
 				}
 			}
-			boxClient().SSH(args[0], sshPort, sshKey, remoteCmd)
+			code, err := boxClient().SSH(args[0], sshPort, sshKey, remoteCmd, cloud.Stdio{})
+			if err != nil {
+				log.Fatalln(err)
+			}
+			if code != 0 {
+				os.Exit(code)
+			}
 		}
 	},
 }

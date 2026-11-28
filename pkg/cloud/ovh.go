@@ -307,16 +307,18 @@ func (p ProviderOvh) CreateSSHKey(publicKeyFile string) (keyID string, err error
 	return created.ID, nil
 }
 
-func (p ProviderOvh) SSHInto(serverName string, port int, privateKey string, command []string) {
+func (p ProviderOvh) SSHInto(serverName string, port int, privateKey string, command []string, stdio Stdio) error {
 	server, err := p.GetByName(serverName)
 	if err != nil || server.ID == "" {
-		fmt.Println("No Server found with name: " + serverName)
-		os.Exit(1)
+		return errors.New("No Server found with name: " + serverName)
 	}
 	if privateKey == "" {
 		privateKey = p.Config.SSHPrivateKey
 	}
-	tools.SSHIntoVM(tools.SSHIntoVMRequest{
+	return tools.SSHIntoVM(tools.SSHIntoVMRequest{
+		Stdin:          stdio.In,
+		Stdout:         stdio.Out,
+		Stderr:         stdio.Err,
 		IPAddress:      server.IP,
 		User:           p.Config.Username,
 		Port:           port,

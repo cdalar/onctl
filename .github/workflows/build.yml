@@ -22,6 +22,12 @@ env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
   HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
 
+concurrency:
+  # A new push to a PR cancels that PR's still-running checks; other events
+  # get a unique group, so they are never cancelled.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   run:
     name: Build
@@ -93,7 +99,8 @@ jobs:
         run: go test -v -count=1 -race -shuffle=on -coverprofile=coverage.txt ./...
 
       - name: Go Benchmark
-        if: ${{ !inputs.skipTests }}
+        # Not on PRs: it only smoke-runs benchmarks (1x) and main/schedule cover it.
+        if: ${{ !inputs.skipTests && github.event_name != 'pull_request' }}
         run: go test -v -shuffle=on -run=- -bench=. -benchtime=1x ./...
 
       - name: Upload Coverage
