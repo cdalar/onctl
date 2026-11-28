@@ -22,17 +22,17 @@ const (
 )
 
 // offering is how the tui's provider pick labels a kind: on this
-// machine, in a cloud account of your own, a SaaS, or a host you bring.
+// machine, in a cloud account of your own, a managed service, or a host of your own.
 func (k placeKind) offering() string {
 	switch k {
 	case placeLocal:
 		return "local"
 	case placeCloud:
-		return "cloud, BYO account"
+		return "cloud, your account"
 	case placeSaaS:
-		return "cloud, SaaS"
+		return "cloud, managed"
 	}
-	return "remote, BYO host"
+	return "remote, your host"
 }
 
 var providerPlaces = map[string]providerPlace{

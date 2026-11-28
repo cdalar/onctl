@@ -689,7 +689,7 @@ func TestTUIProviderSwitch(t *testing.T) {
 	// Each provider by its full name and where it runs -- "ac" or "ch"
 	// alone tells you nothing -- the current one marked.
 	if view := regexp.MustCompile(`\x1b\[[0-9;]*m`).ReplaceAllString(m.View(), ""); !strings.Contains(view, "Providers["+strconv.Itoa(len(cloudProviderList))+"]") ||
-		!regexp.MustCompile(`hetzner +Hetzner Cloud +cloud, BYO account +\*`).MatchString(view) ||
+		!regexp.MustCompile(`hetzner +Hetzner Cloud +cloud, your account +\*`).MatchString(view) ||
 		!regexp.MustCompile(`ac +Apple Container +local `).MatchString(view) {
 		t.Errorf(":provider view:\n%s", view)
 	}
