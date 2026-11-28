@@ -250,3 +250,20 @@ func names(l cloud.VmList) []string {
 	}
 	return out
 }
+
+// A missing credential must come back from New as an error. The boxctl host
+// service builds Clients per request; a provider that exits the process on
+// a missing token would take the whole service down with it.
+func TestNew_MissingCredentialsIsAnError(t *testing.T) {
+	t.Setenv("HCLOUD_TOKEN", "")
+	c, err := box.New(box.Options{Provider: "hetzner"})
+	require.Error(t, err)
+	assert.Nil(t, c)
+	assert.Contains(t, err.Error(), "HCLOUD_TOKEN")
+}
+
+// Deploying with a key ID Hetzner can't take must fail the call, not exit.
+func TestHetznerDeploy_BadKeyIDIsAnError(t *testing.T) {
+	_, err := (cloud.ProviderHetzner{}).Deploy(cloud.Vm{Name: "x", SSHKeyID: "not-a-number"})
+	assert.Error(t, err)
+}

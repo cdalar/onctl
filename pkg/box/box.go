@@ -64,8 +64,8 @@ type Client struct {
 }
 
 // New builds the provider opts.Provider names. A provider whose
-// credentials are missing may end the process, as it does for the CLI
-// (hetzner, gcp, azure, ovh); the local ones (fc, ch, ac, static) don't.
+// credentials are missing (HCLOUD_TOKEN for hetzner, the SDK's credential
+// chain for gcp, azure and ovh) fails it with an error.
 func New(opts Options) (*Client, error) {
 	if !tools.Contains(Providers, opts.Provider) {
 		return nil, fmt.Errorf("unsupported provider %q; use one of: %s", opts.Provider, strings.Join(Providers, ", "))
@@ -233,8 +233,12 @@ func (c *Client) SSH(name string, port int, privateKeyFile string, command []str
 func build(id, onctlBin string) (cloud.CloudProviderInterface, error) {
 	switch id {
 	case "hetzner":
+		client, err := providerhtz.GetClient()
+		if err != nil {
+			return nil, err
+		}
 		return &cloud.ProviderHetzner{
-			Client: providerhtz.GetClient(),
+			Client: client,
 			Config: cloud.HetznerConfig{
 				Location:      viper.GetString("hetzner.location"),
 				VMType:        viper.GetString("hetzner.vm.type"),
@@ -244,27 +248,43 @@ func build(id, onctlBin string) (cloud.CloudProviderInterface, error) {
 			},
 		}, nil
 	case "gcp":
+		client, err := providergcp.GetClient()
+		if err != nil {
+			return nil, err
+		}
+		groupClient, err := providergcp.GetGroupClient()
+		if err != nil {
+			return nil, err
+		}
 		return &cloud.ProviderGcp{
-			Client:      providergcp.GetClient(),
-			GroupClient: providergcp.GetGroupClient(),
+			Client:      client,
+			GroupClient: groupClient,
 		}, nil
 	case "aws":
 		return &cloud.ProviderAws{
 			Client: provideraws.GetClient(),
 		}, nil
 	case "azure":
-		return &cloud.ProviderAzure{
-			ResourceGraphClient: providerazure.GetResourceGraphClient(),
-			VmClient:            providerazure.GetVmClient(),
-			NicClient:           providerazure.GetNicClient(),
-			PublicIPClient:      providerazure.GetIPClient(),
-			SSHKeyClient:        providerazure.GetSSHKeyClient(),
-			VnetClient:          providerazure.GetVnetClient(),
-			NSGClient:           providerazure.GetNSGClient(),
-		}, nil
+		p := &cloud.ProviderAzure{}
+		var errs [7]error
+		p.ResourceGraphClient, errs[0] = providerazure.GetResourceGraphClient()
+		p.VmClient, errs[1] = providerazure.GetVmClient()
+		p.NicClient, errs[2] = providerazure.GetNicClient()
+		p.PublicIPClient, errs[3] = providerazure.GetIPClient()
+		p.SSHKeyClient, errs[4] = providerazure.GetSSHKeyClient()
+		p.VnetClient, errs[5] = providerazure.GetVnetClient()
+		p.NSGClient, errs[6] = providerazure.GetNSGClient()
+		if err := errors.Join(errs[:]...); err != nil {
+			return nil, err
+		}
+		return p, nil
 	case "ovh":
+		client, err := providerovh.GetClient()
+		if err != nil {
+			return nil, err
+		}
 		return &cloud.ProviderOvh{
-			Client: providerovh.GetClient(),
+			Client: client,
 			Config: cloud.OvhConfig{
 				ServiceName:   viper.GetString("ovh.serviceName"),
 				Region:        viper.GetString("ovh.location"),

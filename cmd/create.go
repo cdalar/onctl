@@ -383,14 +383,20 @@ var createCmd = &cobra.Command{
 		if cloudProvider != "fc" && cloudProvider != "ch" && cloudProvider != "ac" && cloudProvider != "boxes" && cloudProvider != "openshell" {
 			s.Suffix = " Waiting for VM to be ready..."
 			s.Restart()
-			remote.WaitForCloudInit(viper.GetString("vm.cloud-init.timeout"))
+			if err := remote.WaitForCloudInit(viper.GetString("vm.cloud-init.timeout")); err != nil {
+				s.Stop()
+				log.Fatalln("Exiting.. " + err.Error())
+			}
 			s.Stop()
 			fmt.Println("\033[32m✔\033[0m VM is Ready")
 			log.Println("[DEBUG] cloud-init finished")
 		} else {
 			s.Suffix = " Waiting for SSH to be ready..."
 			s.Restart()
-			remote.WaitForSSH(viper.GetString("vm.cloud-init.timeout"))
+			if err := remote.WaitForSSH(viper.GetString("vm.cloud-init.timeout")); err != nil {
+				s.Stop()
+				log.Fatalln("Exiting.. " + err.Error())
+			}
 			s.Stop()
 			fmt.Println("\033[32m✔\033[0m VM is Ready")
 			log.Println("[DEBUG] SSH ready")
