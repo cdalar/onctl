@@ -137,13 +137,14 @@ func (r *Remote) NewSSHConnection() error {
 
 // WaitForSSH waits until an SSH connection to the remote can be established.
 // It is used by providers (e.g. Firecracker) whose microVMs have no
-// cloud-init readiness signal to wait on.
-func (r *Remote) WaitForSSH(timeout string) {
+// cloud-init readiness signal to wait on. It fails once timeout (a
+// time.ParseDuration string) has passed.
+func (r *Remote) WaitForSSH(timeout string) error {
 	log.Println("[DEBUG] Waiting for SSH to be ready timeout:", timeout)
 
 	duration, err := time.ParseDuration(timeout)
 	if err != nil {
-		log.Fatalf("Invalid timeout value: %v", err)
+		return fmt.Errorf("invalid timeout value: %w", err)
 	}
 
 	timer := time.After(duration)
@@ -155,16 +156,15 @@ func (r *Remote) WaitForSSH(timeout string) {
 	for {
 		select {
 		case <-timer:
-			msg := "Exiting.. Timeout reached while waiting for SSH on IP " + r.IPAddress + " on port " + strconv.Itoa(r.SSHPort)
+			msg := "timeout reached while waiting for SSH on IP " + r.IPAddress + " on port " + strconv.Itoa(r.SSHPort)
 			if lastErr != nil {
 				msg += ": " + lastErr.Error()
 			}
-			log.Fatalln(msg)
-			return
+			return errors.New(msg)
 		default:
 			err := r.NewSSHConnection()
 			if err == nil {
-				return
+				return nil
 			}
 			// Log each distinct failure, not every 100ms retry of it.
 			if lastErr == nil || err.Error() != lastErr.Error() {
@@ -388,7 +388,7 @@ func (r *Remote) CopyAndRunRemoteFile(config *CopyAndRunRemoteFileConfig) error 
 	fileBaseName := filepath.Base(config.File)
 	fileContent, err := files.EmbededFiles.ReadFile("apply_dir.sh")
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 	command := string(fileContent)
 	nextApplyDir, err := r.RemoteRun(&RemoteRunConfig{
@@ -397,8 +397,7 @@ func (r *Remote) CopyAndRunRemoteFile(config *CopyAndRunRemoteFileConfig) error 
 	})
 	log.Println("[DEBUG] nextApplyDir: ", nextApplyDir)
 	if err != nil {
-		fmt.Println(nextApplyDir)
-		log.Fatalln(err)
+		return fmt.Errorf("making the apply dir: %w: %s", err, nextApplyDir)
 	}
 	dstPath := ONCTLDIR + "/" + nextApplyDir + "/" + fileBaseName
 	log.Println("[DEBUG] dstPath:", dstPath)

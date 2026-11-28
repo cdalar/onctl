@@ -145,7 +145,7 @@ func (p ProviderOvh) Deploy(server Vm) (Vm, error) {
 
 	var created ovhInstance
 	if err := p.Client.Post(p.projectPath("/instance"), req, &created); err != nil {
-		log.Fatalln(err)
+		return Vm{}, err
 	}
 
 	final, err := p.waitForStatus(created.ID, ovhStatusActive, 10*time.Minute)
@@ -273,11 +273,11 @@ func (p ProviderOvh) GetByName(serverName string) (Vm, error) {
 func (p ProviderOvh) CreateSSHKey(publicKeyFile string) (keyID string, err error) {
 	publicKey, err := os.ReadFile(publicKeyFile)
 	if err != nil {
-		log.Fatalln(err)
+		return "", err
 	}
 	pk, _, _, _, err := ssh.ParseAuthorizedKey(publicKey)
 	if err != nil {
-		panic(err)
+		return "", fmt.Errorf("parsing %s: %w", publicKeyFile, err)
 	}
 	fingerprint := ssh.FingerprintSHA256(pk)
 

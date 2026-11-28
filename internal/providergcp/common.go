@@ -2,7 +2,6 @@ package providergcp
 
 import (
 	"context"
-	"log"
 	"os/exec"
 	"strings"
 	"time"
@@ -10,22 +9,12 @@ import (
 	compute "cloud.google.com/go/compute/apiv1"
 )
 
-func GetClient() *compute.InstancesClient {
-	ctx := context.Background()
-	client, err := compute.NewInstancesRESTClient(ctx)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	return client
+func GetClient() (*compute.InstancesClient, error) {
+	return compute.NewInstancesRESTClient(context.Background())
 }
 
-func GetGroupClient() *compute.InstanceGroupsClient {
-	ctx := context.Background()
-	client, err := compute.NewInstanceGroupsRESTClient(ctx)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	return client
+func GetGroupClient() (*compute.InstanceGroupsClient, error) {
+	return compute.NewInstanceGroupsRESTClient(context.Background())
 }
 
 // GCloudDefaultProject best-effort resolves the gcloud CLI's active project

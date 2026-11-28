@@ -13,7 +13,11 @@ import (
 
 // hetznerImageLister returns the ImageLister to use. Overridable in tests.
 var hetznerImageLister = func() cloud.ImageLister {
-	return cloud.ProviderHetzner{Client: providerhtz.GetClient()}
+	client, err := providerhtz.GetClient()
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return cloud.ProviderHetzner{Client: client}
 }
 
 // fcImageLister lists the images published for the fc provider.
