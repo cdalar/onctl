@@ -127,11 +127,11 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case failed:
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, `<Response><Errors><Error><Code>%s</Code><Message>fake %s</Message></Error></Errors><RequestID>r</RequestID></Response>`, code, code)
+		_, _ = fmt.Fprintf(w, `<Response><Errors><Error><Code>%s</Code><Message>fake %s</Message></Error></Errors><RequestID>r</RequestID></Response>`, code, code)
 	case !ok:
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, `<Response><Errors><Error><Code>UnknownAction</Code><Message>no canned reply for %s</Message></Error></Errors><RequestID>r</RequestID></Response>`, action)
+		_, _ = fmt.Fprintf(w, `<Response><Errors><Error><Code>UnknownAction</Code><Message>no canned reply for %s</Message></Error></Errors><RequestID>r</RequestID></Response>`, action)
 	default:
-		fmt.Fprintf(w, `<%sResponse %s><requestId>r</requestId>%s</%sResponse>`, action, ns, body, action)
+		_, _ = fmt.Fprintf(w, `<%sResponse %s><requestId>r</requestId>%s</%sResponse>`, action, ns, body, action)
 	}
 }
