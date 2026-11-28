@@ -90,7 +90,7 @@ var destroyCmd = &cobra.Command{
 			log.Println("[DEBUG] Tear down server: " + serverName)
 			// box.Client.Destroy tells a snapshot from a VM itself; this
 			// asks first so the prompt and the result say which it is.
-			if _, ok := provider.(cloud.SnapshotDestroyer); ok && isPaused(serverName) {
+			if boxClient().IsSnapshot(serverName) {
 				destroySnapshot(serverName)
 				return
 			}
@@ -112,22 +112,6 @@ var destroyCmd = &cobra.Command{
 			fmt.Println("\033[32m✔\033[0m VM Destroyed: " + serverName)
 		}
 	},
-}
-
-// isPaused tells whether name is among the provider's paused VMs that are
-// only a snapshot (ListPaused's, not a stopped server).
-func isPaused(name string) bool {
-	paused, err := boxClient().Provider().ListPaused()
-	if err != nil {
-		log.Println("[DEBUG] listing paused VMs: ", err)
-		return false
-	}
-	for _, vm := range paused.List {
-		if vm.Name == name {
-			return true
-		}
-	}
-	return false
 }
 
 // destroySnapshot deletes a paused VM that's only a snapshot (Hetzner's),

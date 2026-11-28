@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"github.com/cdalar/onctl/pkg/box"
 	"log"
 	"net"
 	"os"
@@ -137,14 +139,12 @@ func remoteForVM(vm cloud.Vm, keyFlag string, port int, portChanged bool) (tools
 		return remote, err
 	}
 	remote.PrivateKey = string(privateKey)
-	if ka, ok := provider.(cloud.KeyAuthorizer); ok {
-		pub, err := os.ReadFile(publicKeyFile)
-		if err != nil {
-			return remote, err
-		}
-		if err := ka.AuthorizeKey(vm, string(pub)); err != nil {
-			return remote, err
-		}
+	pub, err := os.ReadFile(publicKeyFile)
+	if err != nil {
+		return remote, err
+	}
+	if err := boxClient().AuthorizeKey(vm, string(pub)); err != nil && !errors.Is(err, box.ErrUnsupported) {
+		return remote, err
 	}
 	attachDialer(&remote, vm)
 	return remote, nil

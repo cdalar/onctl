@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"github.com/cdalar/onctl/pkg/box"
 	"io"
 	"os"
 	"strconv"
@@ -89,7 +90,7 @@ func TestListVMs_SnapshotHiddenWhileServerExists(t *testing.T) {
 		vms:    []cloud.Vm{{Name: "api", Status: "initializing"}, {Name: "db", Status: "stopped"}},
 		paused: []cloud.Vm{{Name: "api", Status: "paused"}, {Name: "web", Status: "paused"}},
 	}
-	running, paused, err := listVMs(p)
+	running, paused, err := box.Wrap("hetzner", p).List()
 	assert.NoError(t, err)
 	assert.Equal(t, []cloud.Vm{{Name: "api", Status: "initializing"}}, running.List)
 	assert.Equal(t, []cloud.Vm{{Name: "db", Status: "stopped"}, {Name: "web", Status: "paused"}}, paused.List)

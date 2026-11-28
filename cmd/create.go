@@ -332,7 +332,7 @@ var createCmd = &cobra.Command{
 			log.Fatalln(err)
 		}
 		s.Stop()
-		if _, viaProvider := provider.(cloud.Dialer); viaProvider {
+		if c.Tunneled() {
 			// No public address (boxes): reached through the provider.
 			if vm.PrivateIP != "" {
 				fmt.Println("\033[32m✔\033[0m VM: " + vm.Name + " (private IP " + vm.PrivateIP + ")")

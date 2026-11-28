@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -237,7 +236,7 @@ func (m tuiModel) infoBlock() []string {
 // restart after resume where the provider can (cloud.Restarter).
 func (m tuiModel) hotkeys(v *tableView) []hotkey {
 	var keys []hotkey
-	_, restarts := m.p.(cloud.Restarter)
+	restarts := m.c.CanRestart()
 	for _, k := range v.hotkeys {
 		keys = append(keys, k)
 		if v == vmsView && k.label == "resume" && restarts {

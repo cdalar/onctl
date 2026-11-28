@@ -97,8 +97,7 @@ func Wrap(id string, p cloud.CloudProviderInterface) *Client {
 // ID is the provider's ID.
 func (c *Client) ID() string { return c.id }
 
-// Provider is the provider itself, for what this package doesn't cover
-// (images, sizes, restart, dialing a VM).
+// Provider is the provider itself, for what this package doesn't cover.
 func (c *Client) Provider() cloud.CloudProviderInterface { return c.p }
 
 // Exists reports whether a live VM is named name. A dead fc or ch microVM
@@ -202,14 +201,19 @@ func PausedStatus(status string) bool {
 // snapshot (Hetzner's pause deletes the server) has its snapshot deleted,
 // so it can never be resumed.
 func (c *Client) Destroy(name string) error {
-	if sd, ok := c.p.(cloud.SnapshotDestroyer); ok && c.isSnapshot(name) {
+	if sd, ok := c.p.(cloud.SnapshotDestroyer); ok && c.IsSnapshot(name) {
 		return sd.DestroySnapshot(name)
 	}
 	return c.p.Destroy(cloud.Vm{Name: name})
 }
 
-// isSnapshot tells whether name is among the provider's paused VMs.
-func (c *Client) isSnapshot(name string) bool {
+// IsSnapshot reports whether the VM named name is paused on a provider
+// where that leaves only a snapshot (Hetzner): destroying it deletes the
+// snapshot, and it can never be resumed.
+func (c *Client) IsSnapshot(name string) bool {
+	if _, ok := c.p.(cloud.SnapshotDestroyer); !ok {
+		return false
+	}
 	paused, err := c.p.ListPaused()
 	if err != nil {
 		log.Println("[DEBUG] listing paused VMs: ", err)
