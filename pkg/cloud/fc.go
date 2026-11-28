@@ -92,6 +92,10 @@ type FCConfig struct {
 // FCVMConfig describes a microVM to be configured and booted by a
 // FCProcess.
 type FCVMConfig struct {
+	// CPUSet, when set, pins the firecracker process to these host CPUs
+	// before it boots, so its vCPU threads start there (taskset -c's list
+	// form).
+	CPUSet      string
 	KernelImage string
 	KernelArgs  string
 	RootfsPath  string
@@ -666,6 +670,9 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 	}
 
 	kernelImage := p.Config.KernelImage
+	if server.KernelImage != "" {
+		kernelImage = server.KernelImage
+	}
 	rootfsImage := p.Config.RootfsImage
 	if server.Image != "" {
 		rootfsImage = server.Image
@@ -701,13 +708,17 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 		_ = os.RemoveAll(dir)
 		return Vm{}, fmt.Errorf("failed to prepare rootfs: %w", err)
 	}
-	if p.Config.RootfsSizeMib > 0 {
+	rootfsSize := p.Config.RootfsSizeMib
+	if server.DiskMiB > 0 {
+		rootfsSize = server.DiskMiB
+	}
+	if rootfsSize > 0 {
 		resizer, ok := p.Rootfs.(RootfsResizer)
 		if !ok {
 			_ = os.RemoveAll(dir)
 			return Vm{}, errors.New("fc.rootfsSizeMib is set but this rootfs preparer can't grow a rootfs")
 		}
-		if err := resizer.GrowRootfs(rootfsPath, p.Config.RootfsSizeMib); err != nil {
+		if err := resizer.GrowRootfs(rootfsPath, rootfsSize); err != nil {
 			_ = os.RemoveAll(dir)
 			return Vm{}, fmt.Errorf("failed to grow rootfs: %w", err)
 		}
@@ -784,6 +795,7 @@ func (p ProviderFC) Deploy(server Vm) (Vm, error) {
 	vsockPath := fcVsockPath(dir)
 
 	pid, err := p.Process.Start(socketPath, FCVMConfig{
+		CPUSet:      server.CPUSet,
 		KernelImage: kernelImage,
 		KernelArgs:  kernelArgs,
 		RootfsPath:  rootfsPath,

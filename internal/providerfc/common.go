@@ -267,6 +267,12 @@ func (m ProcessManager) Start(socketPath string, cfg cloud.FCVMConfig, logFile s
 	if err != nil {
 		return 0, err
 	}
+	if cfg.CPUSet != "" {
+		if err := pinCPUs(pid, cfg.CPUSet); err != nil {
+			_ = m.Stop(pid)
+			return 0, fmt.Errorf("pinning firecracker to CPUs %s: %w", cfg.CPUSet, err)
+		}
+	}
 	if err := configureAndBoot(socketPath, cfg); err != nil {
 		_ = m.Stop(pid)
 		return 0, err

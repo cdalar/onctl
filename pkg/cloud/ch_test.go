@@ -444,6 +444,21 @@ func newTestCHProviderWindows(t *testing.T) (ProviderCH, *fakeCHProcess, *fakeNe
 	return p, proc, net, winGuest, dhcp
 }
 
+// A VM's own OS wins over ch.os: a host can boot a Windows box without
+// every box on it being Windows.
+func TestProviderCH_Deploy_PerVMWindows(t *testing.T) {
+	p, proc, _, winGuest, _ := newTestCHProviderWindows(t)
+	p.Config.OS = ""
+
+	_, err := p.Deploy(Vm{Name: "win-vm", SSHKeyID: writeTestPublicKey(t), OS: chOSWindows})
+	require.NoError(t, err)
+	assert.True(t, proc.lastCfg.Firmware, "booted as Windows")
+	assert.Equal(t, 1, winGuest.diskCalls)
+	meta, err := loadCHMetadata(p.metadataPath("win-vm"))
+	require.NoError(t, err)
+	assert.Equal(t, chOSWindows, meta.OS)
+}
+
 // TestProviderCH_Deploy_Windows verifies the ch.os=windows boot path: no
 // Linux kernel cmdline is generated, CHVMConfig.Firmware/KvmHyperv are set,
 // a seed ISO is built and attached, and the guest's DHCP reservation is
