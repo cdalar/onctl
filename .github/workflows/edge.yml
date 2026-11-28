@@ -25,7 +25,8 @@ name: edge
 # (github.com/cdalar/onctl/releases/tag/edge) instead of a growing pile
 # of timestamped ones.
 #
-# Runs on the self-hosted onctl-2 runner, like goreleaser.yml.
+# Runs on GitHub-hosted ubuntu-latest (it was on the self-hosted onctl-2
+# runner, which went offline and left hosts without new edge builds).
 
 on:
   push:
@@ -37,9 +38,9 @@ permissions:
 
 jobs:
   build:
-    runs-on: onctl-2
-    # Cancelling a stale build as soon as a newer push starts avoids wasting
-    # onctl-2's limited memory on artifacts nobody will publish. Safe to
+    runs-on: ubuntu-latest
+    # Cancelling a stale build as soon as a newer push starts avoids
+    # building artifacts nobody will publish. Safe to
     # cancel here because build never touches the shared `edge` release --
     # unlike the publish job below, an interrupted build leaves nothing
     # half-done on GitHub.
@@ -87,13 +88,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          # --parallelism=1: this workflow moved from ubuntu-latest (7-16GB)
-          # to the self-hosted onctl-2 runner, which can't sustain
-          # GoReleaser's default of building all 3 targets at once --
-          # compiling aws-sdk-go-v2/service/ec2 three times in parallel OOM
-          # (SIGKILL) on that box. Serializing the builds keeps peak memory
-          # to one target's worth at a time.
-          args: release --snapshot --clean -f .goreleaser.edge.yml --skip=publish --parallelism=1
+          args: release --snapshot --clean -f .goreleaser.edge.yml --skip=publish
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -107,7 +102,7 @@ jobs:
 
   publish:
     needs: build
-    runs-on: onctl-2
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     # `gh release create` with assets is 3 separate API calls under the hood
