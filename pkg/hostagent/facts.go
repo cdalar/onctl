@@ -8,8 +8,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"golang.org/x/sys/unix"
 )
 
 // Facts is a host's health and capacity self-report, the body of register
@@ -69,13 +67,8 @@ func (a *Agent) facts(providers []string) Facts {
 			f.UptimeSeconds = int64(up)
 		}
 	}
-	var st unix.Statfs_t
-	if err := unix.Statfs(a.cfg.StateDir, &st); err == nil {
-		bsize := uint64(st.Bsize) //nolint:unconvert // int64 on linux, uint32 on darwin
-		f.StateDirTotalMiB = int64(uint64(st.Blocks) * bsize / (1 << 20))
-		f.StateDirFreeMiB = int64(uint64(st.Bavail) * bsize / (1 << 20))
-	}
-	f.KVM = unix.Access("/dev/kvm", unix.R_OK|unix.W_OK) == nil
+	f.StateDirTotalMiB, f.StateDirFreeMiB = diskMiB(a.cfg.StateDir)
+	f.KVM = kvmUsable()
 	f.Images, f.ImageGenerations = images(a.cfg.ImageDirs)
 	if f.Labels == nil {
 		f.Labels = map[string]string{}
