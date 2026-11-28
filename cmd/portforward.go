@@ -1,9 +1,7 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
-	"github.com/cdalar/onctl/pkg/box"
 	"log"
 	"net"
 	"os"
@@ -11,9 +9,7 @@ import (
 	"syscall"
 
 	"github.com/cdalar/onctl/internal/tools"
-	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -62,14 +58,18 @@ Local ports listen on 127.0.0.1 unless --address says otherwise.`,
 		if err != nil {
 			return err
 		}
-		remote, err := remoteForVM(vm, pfKey, pfSSHPort, cmd.Flags().Changed("ssh-port"))
+		port := pfSSHPort
+		if cloudProvider == "static" && !cmd.Flags().Changed("ssh-port") {
+			port = 0 // the imported host's own
+		}
+		conn, err := connect(vm, pfKey, port, nil)
 		if err != nil {
 			return err
 		}
-		f := &tools.Forwarder{Remote: &remote}
+		defer func() { _ = conn.Close() }()
 		// Connect now, so a wrong key or an unreachable VM fails here
 		// rather than on the first forwarded connection.
-		if err := remote.NewSSHConnection(); err != nil {
+		if err := conn.Open(); err != nil {
 			return fmt.Errorf("connecting to %s: %w", vm.Name, err)
 		}
 
@@ -87,7 +87,7 @@ Local ports listen on 127.0.0.1 unless --address says otherwise.`,
 			listeners = append(listeners, ln)
 			fmt.Printf("Forwarding %s -> %s:%d on %s\n", ln.Addr(), fw.RemoteHost, fw.RemotePort, vm.Name)
 			go func(ln net.Listener, fw tools.Forward) {
-				if err := f.Serve(ln, fw, func(err error) {
+				if err := conn.Forward(ln, fw.RemoteHost, fw.RemotePort, func(err error) {
 					fmt.Fprintln(os.Stderr, "forward:", err)
 				}); err != nil {
 					log.Println("[ERROR] forward:", err)
@@ -100,54 +100,6 @@ Local ports listen on 127.0.0.1 unless --address says otherwise.`,
 		<-stop
 		return nil
 	},
-}
-
-// remoteForVM builds the ssh connection settings onctl uses for vm:
-// the provider's username, key (keyFlag, or the default), and port --
-// an imported (static) host's own from the inventory -- through the
-// provider's tunnel when it has one. A provider that can put the key on
-// the VM itself (boxes) is asked to first.
-func remoteForVM(vm cloud.Vm, keyFlag string, port int, portChanged bool) (tools.Remote, error) {
-	publicKeyFile, privateKeyFile := getSSHKeyFilePaths(keyFlag)
-	remote := tools.Remote{
-		Username:  viper.GetString(cloudProvider + ".vm.username"),
-		IPAddress: vm.IP,
-		SSHPort:   port,
-	}
-	if cloudProvider == "static" {
-		sp, err := staticProvider()
-		if err != nil {
-			return remote, err
-		}
-		h, err := sp.GetHost(vm.Name)
-		if err != nil {
-			return remote, err
-		}
-		remote.Username = h.Username
-		if !portChanged {
-			remote.SSHPort = h.SSHPort
-		}
-		if keyFlag == "" && h.PrivateKey != "" {
-			publicKeyFile, privateKeyFile = getSSHKeyFilePaths(h.PrivateKey)
-		}
-	}
-	if remote.Username == "" {
-		remote.Username = "root"
-	}
-	privateKey, err := os.ReadFile(privateKeyFile)
-	if err != nil {
-		return remote, err
-	}
-	remote.PrivateKey = string(privateKey)
-	pub, err := os.ReadFile(publicKeyFile)
-	if err != nil {
-		return remote, err
-	}
-	if err := boxClient().AuthorizeKey(vm, string(pub)); err != nil && !errors.Is(err, box.ErrUnsupported) {
-		return remote, err
-	}
-	attachDialer(&remote, vm)
-	return remote, nil
 }
 
 func init() {

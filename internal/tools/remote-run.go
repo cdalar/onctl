@@ -39,6 +39,12 @@ type Remote struct {
 	// TCP dial to IPAddress -- for providers whose VMs have no reachable
 	// address (cloud.Dialer).
 	Dial func(ctx context.Context, port int) (net.Conn, error)
+	// AskPassphrase, when set, is asked for an encrypted key's passphrase
+	// instead of reading it from the terminal.
+	AskPassphrase func() (string, error)
+	// Hint, when set, gets WaitForSSH's hints (a firewall, a VPN) instead
+	// of stderr.
+	Hint func(string)
 }
 
 type RemoteRunConfig struct {
@@ -49,6 +55,8 @@ type RemoteRunConfig struct {
 type CopyAndRunRemoteFileConfig struct {
 	File string
 	Vars []string
+	// Out gets the file's output; nil is stdout.
+	Out io.Writer
 }
 
 func (r *Remote) ReadPassphrase() (string, error) {
@@ -81,12 +89,18 @@ func (r *Remote) NewSSHConnection() error {
 	if err != nil {
 		if _, ok := err.(*ssh.PassphraseMissingError); ok {
 			// fmt.Println("Error: Passphrase is missing for the private key")
-			if r.Spinner != nil {
-				r.Spinner.Stop()
-			}
-			passphrase, err := r.ReadPassphrase()
-			if r.Spinner != nil {
-				r.Spinner.Restart()
+			var passphrase string
+			if r.AskPassphrase != nil {
+				passphrase, err = r.AskPassphrase()
+				r.Passphrase = passphrase
+			} else {
+				if r.Spinner != nil {
+					r.Spinner.Stop()
+				}
+				passphrase, err = r.ReadPassphrase()
+				if r.Spinner != nil {
+					r.Spinner.Restart()
+				}
 			}
 			if err != nil {
 				return fmt.Errorf("error reading passphrase: %w", err)
@@ -181,12 +195,16 @@ func (r *Remote) WaitForSSH(timeout string) error {
 			}
 			if hint != "" && !hinted && time.Since(hintSince) >= 3*time.Second {
 				hinted = true
-				if r.Spinner != nil {
-					r.Spinner.Stop()
-				}
-				fmt.Fprintln(os.Stderr, hint)
-				if r.Spinner != nil {
-					r.Spinner.Restart()
+				if r.Hint != nil {
+					r.Hint(hint)
+				} else {
+					if r.Spinner != nil {
+						r.Spinner.Stop()
+					}
+					fmt.Fprintln(os.Stderr, hint)
+					if r.Spinner != nil {
+						r.Spinner.Restart()
+					}
 				}
 			}
 			// 100ms: measured against a real firecracker microVM, a failed
@@ -411,7 +429,11 @@ func (r *Remote) CopyAndRunRemoteFile(config *CopyAndRunRemoteFileConfig) error 
 	command = applyCommand(ONCTLDIR+"/"+nextApplyDir, fileBaseName, variablesToEnvVars(config.Vars))
 
 	log.Println("[DEBUG] command: ", command)
-	return r.remoteRunStream(command, os.Stdout)
+	out := config.Out
+	if out == nil {
+		out = os.Stdout
+	}
+	return r.remoteRunStream(command, out)
 }
 
 // applyCommand is the remote shell script that runs an apply file and

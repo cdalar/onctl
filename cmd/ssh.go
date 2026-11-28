@@ -9,7 +9,6 @@ import (
 	"github.com/cdalar/onctl/internal/ui"
 	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
 )
 
@@ -154,50 +153,22 @@ var sshCmd = &cobra.Command{
 				log.Fatalln(err)
 			}
 		}
-		// Imported (static) hosts carry their own key/port from `onctl import`;
-		// skip reading the global default key — we'll load credentials from inventory below.
+		// Imported (static) hosts carry their own key/port from `onctl
+		// import`; box.Connect uses them unless -k/--port say otherwise.
 		usesImportedKey := cloudProvider == "static" && sshOpt.Key == ""
-
-		var privateKey []byte
-		if !usesImportedKey {
-			pk, err := os.ReadFile(privateKeyFile)
-			if err != nil {
-				log.Fatal(err)
-			}
-			privateKey = pk
+		sshPort := sshOpt.Port
+		if cloudProvider == "static" && !cmd.Flags().Changed("port") {
+			sshPort = 0
 		}
 		vm, err := boxClient().Get(args[0])
 		if err != nil {
 			log.Fatalln(err)
 		}
-		remote := tools.Remote{
-			Username:   viper.GetString(cloudProvider + ".vm.username"),
-			IPAddress:  vm.IP,
-			SSHPort:    sshOpt.Port,
-			PrivateKey: string(privateKey),
-			Spinner:    s,
+		conn, err := connect(vm, sshOpt.Key, sshPort, s)
+		if err != nil {
+			log.Fatalln(err)
 		}
-		attachDialer(&remote, vm)
-		// For imported (static) hosts, the username/port/key live in the
-		// inventory, not in viper config or global SSH defaults.
-		if cloudProvider == "static" {
-			if sp, spErr := staticProvider(); spErr == nil {
-				if h, hErr := sp.GetHost(args[0]); hErr == nil {
-					remote.Username = h.Username
-					if !cmd.Flags().Changed("port") {
-						remote.SSHPort = h.SSHPort
-					}
-					if sshOpt.Key == "" && h.PrivateKey != "" {
-						_, privateKeyPath := getSSHKeyFilePaths(h.PrivateKey)
-						if pk, err := os.ReadFile(privateKeyPath); err == nil {
-							remote.PrivateKey = string(pk)
-						} else {
-							log.Println("[DEBUG] failed to read imported host private key:", err)
-						}
-					}
-				}
-			}
-		}
+		defer func() { _ = conn.Close() }()
 
 		if sshOpt.DotEnvFile != "" {
 			dotEnvVars, err := tools.ParseDotEnvFile(sshOpt.DotEnvFile)
@@ -208,7 +179,7 @@ var sshCmd = &cobra.Command{
 		}
 
 		if len(sshOpt.UploadFiles) > 0 {
-			ProcessUploadSlice(sshOpt.UploadFiles, remote)
+			ProcessUploadSlice(sshOpt.UploadFiles, conn, s)
 		}
 
 		// BEGIN Apply File
@@ -219,10 +190,7 @@ var sshCmd = &cobra.Command{
 			s.Stop()
 			fmt.Println("Running " + sshOpt.ApplyFiles[i] + " on Remote...")
 
-			err = remote.CopyAndRunRemoteFile(&tools.CopyAndRunRemoteFileConfig{
-				File: applyFile,
-				Vars: sshOpt.Variables,
-			})
+			err = conn.Apply(applyFile, sshOpt.Variables, os.Stdout)
 			if err != nil {
 				log.Println(err)
 			}
@@ -233,7 +201,7 @@ var sshCmd = &cobra.Command{
 		// END Apply File
 
 		if len(sshOpt.DownloadFiles) > 0 {
-			ProcessDownloadSlice(sshOpt.DownloadFiles, remote)
+			ProcessDownloadSlice(sshOpt.DownloadFiles, conn)
 		}
 		remoteCmd := parseRemoteCmd(os.Args)
 		// Run the trailing `-- command` whenever one is given, even alongside
@@ -241,15 +209,8 @@ var sshCmd = &cobra.Command{
 		// it was silently dropped whenever those flags were also present.
 		if shouldSSHInto(isDirectSSH, remoteCmd) {
 			sshKey := privateKeyFile
-			sshPort := sshOpt.Port
-			if cloudProvider == "static" {
-				if usesImportedKey {
-					sshKey = ""
-				}
-				if !cmd.Flags().Changed("port") {
-					// let static.SSHInto fall back to the imported host's own port
-					sshPort = 0
-				}
+			if usesImportedKey {
+				sshKey = ""
 			}
 			code, err := boxClient().SSH(args[0], sshPort, sshKey, remoteCmd, cloud.Stdio{})
 			if err != nil {

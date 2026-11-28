@@ -225,6 +225,12 @@ func TestEnsureClaudeVMRecreatesADeadMicroVM(t *testing.T) {
 	prev := provider
 	provider = fake
 	t.Cleanup(func() { provider = prev })
+	// ensureClaudeVM writes --size and --image into the provider's config
+	// when set; with the flag defaults that would leak "medium" into
+	// <provider>.vm.type for every test after this one.
+	prevSize, prevImage := claudeSize, claudeImage
+	claudeSize, claudeImage = "", ""
+	t.Cleanup(func() { claudeSize, claudeImage = prevSize, prevImage })
 
 	_, created, err := ensureClaudeVM("claude-onctl", "/dev/null", true)
 	require.NoError(t, err)

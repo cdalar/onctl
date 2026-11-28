@@ -11,7 +11,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
-	"github.com/cdalar/onctl/internal/tools"
 	"github.com/gofrs/uuid/v5"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -371,12 +370,7 @@ func TestDirSize_NonExistentPath(t *testing.T) {
 }
 
 func TestProcessUploadSlice_Directory(t *testing.T) {
-	mockRemote := tools.Remote{
-		Username:   "test",
-		IPAddress:  "127.0.0.1",
-		SSHPort:    22,
-		PrivateKey: "fake-key",
-	}
+	mockRemote := unreachableConn(t)
 
 	tmpDir, err := os.MkdirTemp("", "upload-dir-test-")
 	if err != nil {
@@ -392,21 +386,17 @@ func TestProcessUploadSlice_Directory(t *testing.T) {
 	// ProcessUploadSlice should handle that gracefully (log and continue)
 	// rather than panicking.
 	assert.NotPanics(t, func() {
-		ProcessUploadSlice([]string{tmpDir + ":/remote/dir"}, mockRemote)
+		ProcessUploadSlice([]string{tmpDir + ":/remote/dir"}, mockRemote, nil)
 	})
 }
 
 func TestProcessUploadSlice(t *testing.T) {
 	// Mock Remote struct
-	mockRemote := tools.Remote{
-		Username:  "test",
-		IPAddress: "127.0.0.1",
-		SSHPort:   22,
-	}
+	mockRemote := unreachableConn(t)
 
 	// Test with empty slice - should not panic and should do nothing
 	assert.NotPanics(t, func() {
-		ProcessUploadSlice([]string{}, mockRemote)
+		ProcessUploadSlice([]string{}, mockRemote, nil)
 	})
 
 	// Test that function exists and is callable
@@ -415,11 +405,7 @@ func TestProcessUploadSlice(t *testing.T) {
 
 func TestProcessDownloadSlice(t *testing.T) {
 	// Mock Remote struct
-	mockRemote := tools.Remote{
-		Username:  "test",
-		IPAddress: "127.0.0.1",
-		SSHPort:   22,
-	}
+	mockRemote := unreachableConn(t)
 
 	// Test with empty slice - should not panic and should do nothing
 	assert.NotPanics(t, func() {

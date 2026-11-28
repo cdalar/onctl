@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/cdalar/onctl/pkg/box"
 	"os"
 	"path/filepath"
 	"testing"
@@ -126,38 +127,13 @@ func TestCheckCloudProvider_AutoDetectsAndExports(t *testing.T) {
 	assert.Equal(t, "hetzner", os.Getenv("ONCTL_CLOUD"))
 }
 
-// An imported host connects with what `onctl import` recorded (user, port,
-// key), not the provider defaults; only an explicit -p on the command line
-// overrides the inventory's port.
-func TestRemoteForVM_StaticUsesInventory(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	orig := cloudProvider
-	t.Cleanup(func() { cloudProvider = orig })
-	cloudProvider = "static"
-
-	key := filepath.Join(home, "imported_key")
-	require.NoError(t, os.WriteFile(key, []byte("PRIVATE"), 0o600))
-	require.NoError(t, os.WriteFile(key+".pub", []byte("ssh-ed25519 AAAA"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(home, ".ssh"), 0o700))
-	sp := cloud.ProviderStatic{InventoryPath: filepath.Join(home, ".ssh", "onctl_config")}
-	require.NoError(t, sp.SaveInventory(cloud.StaticInventory{Hosts: []cloud.StaticHost{
-		{Name: "legacy", IP: "10.0.0.5", Username: "ubuntu", SSHPort: 2222, PrivateKey: key},
-	}}))
-	withProvider(t, &sp)
-	vm := cloud.Vm{Name: "legacy", IP: "10.0.0.5"}
-
-	remote, err := remoteForVM(vm, "", 22, false)
+// unreachableConn is a box.Conn to a port nothing listens on: every
+// transfer through it fails to connect.
+func unreachableConn(t *testing.T) *box.Conn {
+	t.Helper()
+	key := filepath.Join(t.TempDir(), "id")
+	require.NoError(t, os.WriteFile(key, []byte("not a key"), 0o600))
+	conn, err := box.Wrap("hetzner", &tuiFakeProvider{}).Connect(cloud.Vm{Name: "web", IP: "127.0.0.1"}, box.ConnectOptions{KeyFile: key, Port: 1})
 	require.NoError(t, err)
-	assert.Equal(t, "ubuntu", remote.Username)
-	assert.Equal(t, 2222, remote.SSHPort, "inventory port wins over the flag default")
-	assert.Equal(t, "10.0.0.5", remote.IPAddress)
-	assert.Equal(t, "PRIVATE", remote.PrivateKey)
-
-	remote, err = remoteForVM(vm, "", 2200, true)
-	require.NoError(t, err)
-	assert.Equal(t, 2200, remote.SSHPort, "an explicit -p wins over the inventory")
-
-	_, err = remoteForVM(cloud.Vm{Name: "ghost"}, "", 22, false)
-	assert.Error(t, err, "a host missing from the inventory is an error, not a root@ guess")
+	return conn
 }
