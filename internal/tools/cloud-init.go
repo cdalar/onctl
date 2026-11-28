@@ -2,6 +2,8 @@ package tools
 
 import (
 	"encoding/base64"
+	"errors"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -29,15 +31,16 @@ func FileToBase64(filepath string) string {
 	return encoded
 }
 
-// WaitForCloudInit waits for cloud-init to finish
-func (r *Remote) WaitForCloudInit(timeout string) {
+// WaitForCloudInit waits for cloud-init to finish, or fails once timeout
+// (a time.ParseDuration string) has passed.
+func (r *Remote) WaitForCloudInit(timeout string) error {
 	log.Println("[DEBUG] Waiting for cloud-init to finish timeout:", timeout)
 	command := "[ -f /run/cloud-init/result.json ] && echo -n \"OK\""
 
 	// Parse the timeout string into a time.Duration
 	duration, err := time.ParseDuration(timeout)
 	if err != nil {
-		log.Fatalf("Invalid timeout value: %v", err)
+		return fmt.Errorf("invalid timeout value: %w", err)
 	}
 
 	timer := time.After(duration)
@@ -45,8 +48,7 @@ func (r *Remote) WaitForCloudInit(timeout string) {
 	for {
 		select {
 		case <-timer:
-			log.Fatalln("Exiting.. Timeout reached while waiting for cloud-init to finish on IP " + r.IPAddress + " on port " + strconv.Itoa(r.SSHPort))
-			return
+			return errors.New("timeout reached while waiting for cloud-init to finish on IP " + r.IPAddress + " on port " + strconv.Itoa(r.SSHPort))
 		default:
 			isOK, err := r.RemoteRun(&RemoteRunConfig{
 				Command: command,
@@ -55,7 +57,7 @@ func (r *Remote) WaitForCloudInit(timeout string) {
 				log.Println("[DEBUG] RemoteRun:" + err.Error())
 			}
 			if err == nil && isOK == "OK" {
-				return
+				return nil
 			}
 			time.Sleep(3 * time.Second)
 		}

@@ -35,7 +35,7 @@ func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 	log.Println("[DEBUG] Deploy server: ", server)
 	sshKeyIDint, err := strconv.ParseInt(server.SSHKeyID, 10, 64)
 	if err != nil {
-		log.Fatalln(err)
+		return Vm{}, fmt.Errorf("hetzner SSH key ID %q: %w", server.SSHKeyID, err)
 	}
 
 	// Use server.Type if provided, otherwise fall back to config
@@ -76,16 +76,15 @@ func (p ProviderHetzner) Deploy(server Vm) (Vm, error) {
 				log.Println("Server already exists")
 				s, _, err := p.Client.Server.GetByName(context.TODO(), server.Name)
 				if err != nil {
-					log.Fatalln(err)
+					return Vm{}, err
+				}
+				if s == nil {
+					return Vm{}, fmt.Errorf("server %s exists but can't be found", server.Name)
 				}
 				return mapHetznerServer(*s), nil
-			default:
-				fmt.Println(herr.Error())
 			}
-		} else {
-			fmt.Println(err.Error())
 		}
-		log.Fatalln(err)
+		return Vm{}, err
 	}
 	return mapHetznerServer(*result.Server), nil
 }
@@ -483,13 +482,13 @@ func (p ProviderHetzner) List() (VmList, error) {
 func (p ProviderHetzner) CreateSSHKey(publicKeyFile string) (keyID string, err error) {
 	publicKey, err := os.ReadFile(publicKeyFile)
 	if err != nil {
-		log.Fatalln(err)
+		return "", err
 	}
 
 	SSHKeyMD5 := fmt.Sprintf("%x", md5.Sum(publicKey))
 	pk, _, _, _, err := ssh.ParseAuthorizedKey(publicKey)
 	if err != nil {
-		panic(err)
+		return "", fmt.Errorf("parsing %s: %w", publicKeyFile, err)
 	}
 
 	// Get the fingerprint
@@ -510,17 +509,16 @@ func (p ProviderHetzner) CreateSSHKey(publicKeyFile string) (keyID string, err e
 				log.Println("[DEBUG] SSH Key already exists (onctl-" + SSHKeyMD5[:8] + ")")
 				key, _, err := p.Client.SSHKey.GetByFingerprint(context.TODO(), SSHKeyFingerPrint)
 				if err != nil {
-					log.Fatalln(err)
+					return "", err
+				}
+				if key == nil {
+					return "", fmt.Errorf("SSH key onctl-%s exists but can't be found by fingerprint", SSHKeyMD5[:8])
 				}
 				log.Println("[DEBUG] SSH Key ID: " + strconv.FormatInt(key.ID, 10))
 				return fmt.Sprint(key.ID), nil
-			default:
-				fmt.Println(herr.Error())
 			}
-		} else {
-			fmt.Println(err.Error())
 		}
-		log.Fatalln(err)
+		return "", err
 	}
 	// fmt.Println("DONE")
 	return fmt.Sprint(hkey.ID), nil
