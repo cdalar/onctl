@@ -72,6 +72,17 @@ Checked in `boxctl-io/boxctl` at `2994b92` and `boxctl-io/boxctl-cli` at
    runner trust it, so the forge, the control plane, the object store and
    a local model behind an internal CA all work. The install kit
    (`deploy/onprem`) and `onctl` both take the bundle.
+8. **Everything onctl and boxctl do is in Go packages; the CLIs only
+   parse flags and print.** Boxes, provisioning, connecting, runs,
+   harnesses, forges and the control plane are importable packages under
+   `pkg/`, which the onctl CLI, the boxctl CLI and the boxctl server all
+   call. Package `cmd` keeps flags, prompts, output formats and the tui's
+   rendering, nothing else. Package code doesn't print to stdout, prompt,
+   or exit the process: it returns values and errors, and takes writers
+   for progress and command output. Not in the packages: what only the
+   hosted service needs (decision 1: accounts, billing, the dashboard,
+   admission, usage). The boxes provider's API client is in: it's how
+   either CLI reaches the hosted service.
 
 ## Steps
 
@@ -82,17 +93,28 @@ boxctl-cli. Independent of the rest.
 
 ### 2. onctl as a library
 
-- A stable Go package for what a provider does: create, list, destroy,
-  pause, resume, connect. The CLI becomes one caller of it.
-- The host service calls that package instead of running `onctl`, behind
+- `pkg/box` ([pkg.go.dev](https://pkg.go.dev/github.com/cdalar/onctl/pkg/box)):
+  everything onctl does to a box, for any provider (decision 8).
+  - Lifecycle: create, list, get, destroy, pause, resume. Done
+    (#1348, #1353, #1355, #1356); the CLI and tui go through it.
+  - Provider capabilities: images, sizes, restart.
+  - Connecting: ssh and exec with the caller's streams and the exit
+    code (done, #1355), dialing a box's port, port forwarding, the ssh
+    proxy, putting a key on a box.
+  - Files: upload and download.
+  - Provisioning: waiting for ssh and cloud-init, apply files and
+    templates, the domain: all of `onctl create` after the provider has
+    the VM, so a caller gets a configured box, not only a created one.
+  - Importing hosts (the static provider).
+- The host service calls `pkg/box` instead of running `onctl`, behind
   the server's existing `dispatcher` interface. CLI output stops being a
   contract.
-- Useful on its own, and the first place duplication goes away. Can start
-  now.
+- Useful on its own, and the first place duplication goes away.
 
 ### 3. A control plane interface in onctl
 
-- One Go interface: Boxes, Tasks, Runs. Two implementations:
+- One Go interface, `pkg/controlplane`: Boxes, Tasks, Runs. Two
+  implementations:
   - **Local**: in the same process, over the step 2 package. No daemon,
     no port.
   - **Remote**: an HTTP client of the server, starting with today's
@@ -126,6 +148,10 @@ boxctl-cli. Independent of the rest.
   and `glab`, and the agent's instructions are the same everywhere.
 - Agent profiles (harness, model, effort) are files, as harnesses are
   today; the server stores none.
+- The agent layer's packages (decision 8): `pkg/run` (workspaces,
+  harnesses and agent profiles, runs, sessions, repo and auth copy, wip
+  refs, run status) and `pkg/forge`. What `onctl claude` keeps in `cmd`
+  today moves there, and the boxctl CLI's copy goes.
 - The backlog dispatcher moves out of the boxctl CLI into onctl, behind
   the interface. The run-status channel is reused as it is.
 - Still the largest step, but the server gains no task or run
