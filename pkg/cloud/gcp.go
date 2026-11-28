@@ -43,11 +43,15 @@ func (p ProviderGcp) List() (VmList, error) {
 			break
 		}
 		if err != nil {
-			log.Fatalln(err)
+			return VmList{}, err
 		}
 		for _, instance := range resp.Value.Instances {
-			cloudList = append(cloudList, mapGcpServer(instance))
-			log.Println("[DEBUG] server name: " + *instance.Name)
+			vm, err := mapGcpServer(instance)
+			if err != nil {
+				return VmList{}, err
+			}
+			cloudList = append(cloudList, vm)
+			log.Println("[DEBUG] server name: " + instance.GetName())
 		}
 		_ = resp
 	}
@@ -59,9 +63,6 @@ func (p ProviderGcp) List() (VmList, error) {
 
 func (p ProviderGcp) CreateSSHKey(publicKeyFile string) (keyID string, err error) {
 	publicKey, err = os.ReadFile(publicKeyFile)
-	if err != nil {
-		log.Fatalln(err)
-	}
 	return
 }
 
@@ -84,7 +85,7 @@ func (p ProviderGcp) Destroy(server Vm) error {
 		Instance: server.Name,
 	})
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 	log.Println("[DEBUG] Operation: ", opt)
 	return nil
@@ -98,9 +99,9 @@ func (p ProviderGcp) GetByName(serverName string) (Vm, error) {
 		Instance: serverName,
 	})
 	if err != nil {
-		log.Fatalln(err)
+		return Vm{}, err
 	}
-	return mapGcpServer(server), nil
+	return mapGcpServer(server)
 
 }
 
@@ -192,11 +193,11 @@ func (p ProviderGcp) Deploy(server Vm) (Vm, error) {
 		InstanceResource: instance,
 	})
 	if err != nil {
-		log.Fatalln(err)
+		return Vm{}, err
 	}
 	err = op.Wait(context.Background())
 	if err != nil {
-		log.Fatalln(err)
+		return Vm{}, err
 	}
 	return p.GetByName(server.Name)
 }
@@ -219,21 +220,29 @@ func (p ProviderGcp) SSHInto(serverName string, port int, privateKey string, com
 }
 
 // mapGcpServer maps a GCP server to a Vm struct
-func mapGcpServer(server *computepb.Instance) Vm {
-	createdAt, err := time.Parse(time.RFC3339, *server.CreationTimestamp)
+func mapGcpServer(server *computepb.Instance) (Vm, error) {
+	createdAt, err := time.Parse(time.RFC3339, server.GetCreationTimestamp())
 	if err != nil {
-		log.Fatalln(err)
+		return Vm{}, fmt.Errorf("instance %q: bad creation timestamp: %w", server.GetName(), err)
+	}
+
+	// An instance without an external address has no access config.
+	var ip string
+	if nics := server.GetNetworkInterfaces(); len(nics) > 0 {
+		if acs := nics[0].GetAccessConfigs(); len(acs) > 0 {
+			ip = acs[0].GetNatIP()
+		}
 	}
 
 	return Vm{
 		Provider: "gcp",
 		ID:       strconv.FormatUint(server.GetId(), 10),
 		Name:     server.GetName(),
-		IP:       server.GetNetworkInterfaces()[0].GetAccessConfigs()[0].GetNatIP(),
+		IP:       ip,
 		// PrivateIP:   server.GetNetworkInterfaces()[0].GetNetworkIP(),
 		Type:      filepath.Base(server.GetMachineType()),
 		Status:    server.GetStatus(),
 		CreatedAt: createdAt,
 		Location:  filepath.Base(server.GetZone()),
-	}
+	}, nil
 }
