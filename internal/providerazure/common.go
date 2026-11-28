@@ -2,7 +2,7 @@ package providerazure
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"os/exec"
 	"strings"
 	"time"
@@ -15,102 +15,102 @@ import (
 	"github.com/spf13/viper"
 )
 
-func GetResourceGraphClient() (resourceGraphClient *armresourcegraph.Client) {
+func GetResourceGraphClient() (resourceGraphClient *armresourcegraph.Client, err error) {
 	cred, err := connectionAzure()
 	if err != nil {
-		log.Fatalf("cannot connect to Azure:%+v", err)
+		return nil, err
 	}
 	resourceGraphClient, err = armresourcegraph.NewClient(cred, nil)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
-	return resourceGraphClient
+	return resourceGraphClient, nil
 }
 
-func GetVmClient() (vmClient *armcompute.VirtualMachinesClient) {
+func GetVmClient() (vmClient *armcompute.VirtualMachinesClient, err error) {
 	cred, err := connectionAzure()
 	if err != nil {
-		log.Fatalf("cannot connect to Azure:%+v", err)
+		return nil, err
 	}
 	vmClient, err = armcompute.NewVirtualMachinesClient(viper.GetString("azure.subscriptionId"), cred, nil)
 	// armCompute, err = armcompute.
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
-	return vmClient
+	return vmClient, nil
 }
 
-func GetNicClient() (nicClient *armnetwork.InterfacesClient) {
+func GetNicClient() (nicClient *armnetwork.InterfacesClient, err error) {
 	cred, err := connectionAzure()
 	if err != nil {
-		log.Fatalf("cannot connect to Azure:%+v", err)
+		return nil, err
 	}
 	nicClient, err = armnetwork.NewInterfacesClient(viper.GetString("azure.subscriptionId"), cred, nil)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
-	return nicClient
+	return nicClient, nil
 }
 
-func GetSSHKeyClient() (sshClient *armcompute.SSHPublicKeysClient) {
+func GetSSHKeyClient() (sshClient *armcompute.SSHPublicKeysClient, err error) {
 	cred, err := connectionAzure()
 	if err != nil {
-		log.Fatalf("cannot connect to Azure:%+v", err)
+		return nil, err
 	}
 	sshClient, err = armcompute.NewSSHPublicKeysClient(viper.GetString("azure.subscriptionId"), cred, nil)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
-	return sshClient
+	return sshClient, nil
 }
 
-func GetIPClient() (publicIpClient *armnetwork.PublicIPAddressesClient) {
+func GetIPClient() (publicIpClient *armnetwork.PublicIPAddressesClient, err error) {
 	cred, err := connectionAzure()
 	if err != nil {
-		log.Fatalf("cannot connect to Azure:%+v", err)
+		return nil, err
 	}
-	ipClient, err := armnetwork.NewPublicIPAddressesClient(viper.GetString("azure.subscriptionId"), cred, nil)
+	publicIpClient, err = armnetwork.NewPublicIPAddressesClient(viper.GetString("azure.subscriptionId"), cred, nil)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
-	return ipClient
+	return publicIpClient, nil
 }
 
-func GetVnetClient() (vnetClient *armnetwork.VirtualNetworksClient) {
+func GetVnetClient() (vnetClient *armnetwork.VirtualNetworksClient, err error) {
 	cred, err := connectionAzure()
 	if err != nil {
-		log.Fatalf("cannot connect to Azure:%+v", err)
+		return nil, err
 	}
 	vnetClient, err = armnetwork.NewVirtualNetworksClient(viper.GetString("azure.subscriptionId"), cred, nil)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
-	return vnetClient
+	return vnetClient, nil
 }
 
-func GetNSGClient() (nsgClient *armnetwork.SecurityGroupsClient) {
+func GetNSGClient() (nsgClient *armnetwork.SecurityGroupsClient, err error) {
 	cred, err := connectionAzure()
 	if err != nil {
-		log.Fatalf("cannot connect to Azure:%+v", err)
+		return nil, err
 	}
 	nsgClient, err = armnetwork.NewSecurityGroupsClient(viper.GetString("azure.subscriptionId"), cred, nil)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
-	return nsgClient
+	return nsgClient, nil
 }
 
 func connectionAzure() (azcore.TokenCredential, error) {
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot connect to Azure: %w", err)
 	}
 	return cred, nil
 }
