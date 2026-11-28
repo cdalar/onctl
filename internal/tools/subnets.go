@@ -26,6 +26,7 @@ func GetSubnets(svc *ec2.Client, vpcId *string) []types.Subnet {
 		} else {
 			fmt.Println(err.Error())
 		}
+		return nil
 	}
 	return subnets.Subnets
 

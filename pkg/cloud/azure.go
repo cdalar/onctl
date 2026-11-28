@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -79,12 +80,14 @@ func (p ProviderAzure) List() (VmList, error) {
 		},
 		nil)
 	if err != nil {
-		log.Fatalf("failed to finish the request: %v", err)
-	} else {
-		// Print the obtained query results
-		log.Printf("[DEBUG] Resources found: %d\n", *resp.TotalRecords)
-		log.Printf("[DEBUG] Results: %v\n", resp.Data)
+		return VmList{}, fmt.Errorf("failed to finish the request: %w", err)
 	}
+	if resp.TotalRecords == nil {
+		return VmList{}, nil
+	}
+	// Print the obtained query results
+	log.Printf("[DEBUG] Resources found: %d\n", *resp.TotalRecords)
+	log.Printf("[DEBUG] Results: %v\n", resp.Data)
 	if len(strconv.FormatInt(*resp.TotalRecords, 10)) == 0 {
 		return VmList{}, nil
 	}
@@ -92,25 +95,34 @@ func (p ProviderAzure) List() (VmList, error) {
 	cloudList := make([]Vm, 0, len(strconv.FormatInt(*resp.TotalRecords, 10)))
 	if m, ok := resp.Data.([]interface{}); ok {
 		for _, r := range m {
-			items := r.(map[string]interface{})
-			createdAt, err := time.Parse("2006-01-02T15:04:05Z", items["timeCreated"].(string))
-			if err != nil {
-				log.Fatalln(err)
+			items, ok := r.(map[string]interface{})
+			if !ok {
+				return VmList{}, fmt.Errorf("unexpected resource graph row: %v", r)
 			}
-			if items["publicIpAddress"] == nil {
-				items["publicIpAddress"] = "N/A"
+			// A column the query left out or nulled reads as "".
+			str := func(key string) string {
+				s, _ := items[key].(string)
+				return s
+			}
+			createdAt, err := time.Parse("2006-01-02T15:04:05Z", str("timeCreated"))
+			if err != nil {
+				return VmList{}, fmt.Errorf("VM %q: bad creation time: %w", str("vmName"), err)
+			}
+			publicIP := str("publicIpAddress")
+			if publicIP == "" {
+				publicIP = "N/A"
 			}
 
 			cloudList = append(cloudList, Vm{
 				Provider:  "azure",
-				ID:        filepath.Base(items["vmId"].(string)),
-				Name:      items["vmName"].(string),
-				IP:        items["publicIpAddress"].(string),
-				PrivateIP: items["privateIp"].(string),
-				Type:      items["vmSize"].(string),
-				Status:    items["status"].(string),
+				ID:        filepath.Base(str("vmId")),
+				Name:      str("vmName"),
+				IP:        publicIP,
+				PrivateIP: str("privateIp"),
+				Type:      str("vmSize"),
+				Status:    str("status"),
 				CreatedAt: createdAt,
-				Location:  items["location"].(string),
+				Location:  str("location"),
 				Cost: CostStruct{
 					Currency:        "N/A",
 					CostPerHour:     0,
@@ -133,7 +145,7 @@ func (p ProviderAzure) CreateSSHKey(publicKeyFileName string) (string, error) {
 	username := tools.GenerateUserName()
 	sshPublicKeyData, err := os.ReadFile(publicKeyFileName)
 	if err != nil {
-		log.Println(err)
+		return "", err
 	}
 	// Create the SSH Key
 	sshKey, err := p.SSHKeyClient.Create(context.Background(), viper.GetString("azure.resourceGroup"), username, armcompute.SSHPublicKeyResource{
@@ -143,19 +155,25 @@ func (p ProviderAzure) CreateSSHKey(publicKeyFileName string) (string, error) {
 		Location: to.Ptr(viper.GetString("azure.location")),
 	}, nil)
 	if err != nil {
-		log.Fatalln(err)
+		return "", err
 	}
-	return *sshKey.ID, err
+	if sshKey.ID == nil {
+		return "", errors.New("Azure returned no ID for the SSH key")
+	}
+	return *sshKey.ID, nil
 }
 
-func (p ProviderAzure) getSSHKeyPublicData() string {
+func (p ProviderAzure) getSSHKeyPublicData() (string, error) {
 	userName := tools.GenerateUserName()
 	sshKey, err := p.SSHKeyClient.Get(context.Background(), viper.GetString("azure.resourceGroup"), userName, nil)
 	if err != nil {
-		log.Println(err)
+		return "", err
 	}
 	log.Println("[DEBUG] ", sshKey)
-	return *sshKey.Properties.PublicKey
+	if sshKey.Properties == nil || sshKey.Properties.PublicKey == nil {
+		return "", fmt.Errorf("SSH key %q has no public key", userName)
+	}
+	return *sshKey.Properties.PublicKey, nil
 }
 
 // Pause deallocates the VM. A deallocated Azure VM accrues no compute cost (only
@@ -198,32 +216,36 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 	if viper.GetString("azure.vm.vnet.create") == "true" {
 		vnet, err = createVirtualNetwork(context.Background(), &p)
 		if err != nil {
-			log.Fatalln(err)
+			return Vm{}, fmt.Errorf("creating virtual network: %w", err)
 		}
 		log.Println("[DEBUG] ", vnet)
 	} else { // Get the Vnet
 		vnetResp, err := p.VnetClient.Get(context.Background(), viper.GetString("azure.resourceGroup"), viper.GetString("azure.vm.vnet.name"), nil)
 		if err != nil {
-			log.Fatalln(err)
+			return Vm{}, fmt.Errorf("getting virtual network: %w", err)
 		}
 		log.Println("[DEBUG] ", vnetResp)
 		vnet = &vnetResp.VirtualNetwork
 	}
 	pip, err := createPublicIP(context.Background(), &p, server)
 	if err != nil {
-		log.Fatalln(err)
+		return Vm{}, fmt.Errorf("creating public IP: %w", err)
 	}
 	log.Println("[DEBUG] ", pip)
 	nsg, err := createNSG(context.Background(), &p, server)
 	if err != nil {
-		log.Fatalln(err)
+		return Vm{}, fmt.Errorf("creating network security group: %w", err)
 	}
 	log.Println("[DEBUG] ", nsg)
 	nic, err := createNic(context.Background(), &p, server, vnet, pip, nsg)
 	if err != nil {
-		log.Fatalln(err)
+		return Vm{}, fmt.Errorf("creating network interface: %w", err)
 	}
 	log.Println("[DEBUG] ", nic)
+	sshKeyData, err := p.getSSHKeyPublicData()
+	if err != nil {
+		return Vm{}, fmt.Errorf("reading the SSH public key: %w", err)
+	}
 
 	// Create the VM
 	vmDefinition := armcompute.VirtualMachine{
@@ -265,7 +287,7 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 					SSH: &armcompute.SSHConfiguration{
 						PublicKeys: []*armcompute.SSHPublicKey{
 							{
-								KeyData: to.Ptr(p.getSSHKeyPublicData()),
+								KeyData: to.Ptr(sshKeyData),
 								Path:    to.Ptr("/home/" + viper.GetString("azure.vm.username") + "/.ssh/authorized_keys"),
 							},
 						},
@@ -283,11 +305,19 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 
 	poller, err := p.VmClient.BeginCreateOrUpdate(context.Background(), viper.GetString("azure.resourceGroup"), server.Name, vmDefinition, nil)
 	if err != nil {
-		log.Fatalln(err)
+		return Vm{}, fmt.Errorf("creating VM: %w", err)
 	}
 	resp, err := poller.PollUntilDone(context.Background(), &runtime.PollUntilDoneOptions{
 		Frequency: time.Duration(3) * time.Second,
 	})
+	if err != nil {
+		return Vm{}, fmt.Errorf("creating VM: %w", err)
+	}
+	if resp.Properties == nil || resp.Properties.HardwareProfile == nil || resp.Name == nil ||
+		resp.Properties.VMID == nil || resp.Properties.ProvisioningState == nil || resp.Properties.TimeCreated == nil ||
+		pip.Properties == nil || pip.Properties.IPAddress == nil || resp.Properties.HardwareProfile.VMSize == nil {
+		return Vm{}, errors.New("Azure returned an incomplete VM or public IP")
+	}
 	return Vm{
 		ID:        *resp.Properties.VMID,
 		Name:      *resp.Name,
@@ -295,14 +325,14 @@ func (p ProviderAzure) Deploy(server Vm) (Vm, error) {
 		Type:      string(*resp.Properties.HardwareProfile.VMSize),
 		Status:    *resp.Properties.ProvisioningState,
 		CreatedAt: *resp.Properties.TimeCreated,
-	}, err
+	}, nil
 }
 
 func (p ProviderAzure) Destroy(server Vm) error {
 	log.Println("[DEBUG] Destroy Server")
 	resp, err := p.VmClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name, nil)
 	if err != nil {
-		log.Fatalln(err)
+		return fmt.Errorf("deleting VM: %w", err)
 	}
 	log.Println("[DEBUG] ", resp)
 
@@ -310,7 +340,7 @@ func (p ProviderAzure) Destroy(server Vm) error {
 		Frequency: time.Duration(3) * time.Second,
 	})
 	if err != nil {
-		log.Fatalln(err)
+		return fmt.Errorf("deleting VM: %w", err)
 	}
 	log.Println("[DEBUG] ", respDone)
 	if resp.Done() {
@@ -319,13 +349,13 @@ func (p ProviderAzure) Destroy(server Vm) error {
 
 	nic, err := p.NicClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-nic", nil)
 	if err != nil {
-		log.Fatalln(err)
+		return fmt.Errorf("deleting network interface: %w", err)
 	}
 	nicDone, err := nic.PollUntilDone(context.Background(), &runtime.PollUntilDoneOptions{
 		Frequency: time.Duration(3) * time.Second,
 	})
 	if err != nil {
-		log.Fatalln(err)
+		return fmt.Errorf("deleting network interface: %w", err)
 	}
 	log.Println("[DEBUG] ", nicDone)
 	if nic.Done() {
@@ -333,30 +363,26 @@ func (p ProviderAzure) Destroy(server Vm) error {
 	}
 	pip, err := p.PublicIPClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-pip", nil)
 	if err != nil {
-		log.Fatalln(err)
-	}
-	if err != nil {
-		log.Fatalln(err)
+		return fmt.Errorf("deleting public IP: %w", err)
 	}
 	log.Println("[DEBUG] ", pip)
 
 	nsg, err := p.NSGClient.BeginDelete(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-nsg", nil)
 	if err != nil {
-		log.Fatalln(err)
+		return fmt.Errorf("deleting network security group: %w", err)
 	}
 	nsgDone, err := nsg.PollUntilDone(context.Background(), &runtime.PollUntilDoneOptions{
 		Frequency: time.Duration(3) * time.Second,
 	})
 	if err != nil {
-		log.Fatalln(err)
+		return fmt.Errorf("deleting network security group: %w", err)
 	}
 	log.Println("[DEBUG] ", nsgDone)
 	if nsg.Done() {
 		log.Println("[DEBUG] NSG DONE")
 	}
 
-	return err
-
+	return nil
 }
 
 func (p ProviderAzure) SSHInto(serverName string, port int, privateKey string, command []string) {
@@ -504,6 +530,9 @@ func createNSG(ctx context.Context, p *ProviderAzure, server Vm) (*armnetwork.Se
 }
 
 func createNic(ctx context.Context, p *ProviderAzure, server Vm, vnet *armnetwork.VirtualNetwork, pip *armnetwork.PublicIPAddress, nsg *armnetwork.SecurityGroup) (*armnetwork.Interface, error) {
+	if vnet == nil || vnet.Properties == nil || len(vnet.Properties.Subnets) == 0 {
+		return nil, errors.New("the virtual network has no subnet")
+	}
 	fmt.Print("Creating network interface...")
 	nicResp, err := p.NicClient.BeginCreateOrUpdate(context.Background(), viper.GetString("azure.resourceGroup"), server.Name+"-nic", armnetwork.Interface{
 		Location: to.Ptr(viper.GetString("azure.location")),
@@ -528,19 +557,18 @@ func createNic(ctx context.Context, p *ProviderAzure, server Vm, vnet *armnetwor
 		},
 	}, nil)
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
 	}
 	nicRespDone, err := nicResp.PollUntilDone(ctx, &runtime.PollUntilDoneOptions{
 		Frequency: time.Duration(3) * time.Second,
 	})
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
 	}
 	if nicResp.Done() {
 		log.Println("[DEBUG] DONE")
 	}
 
 	log.Println("[DEBUG] ", nicRespDone)
-	return &nicRespDone.Interface, err
-
+	return &nicRespDone.Interface, nil
 }
