@@ -92,6 +92,15 @@ jobs:
       - name: Go Build
         run: go build -o /dev/null ./...
 
+      # The edge and release builds also make macOS and Windows binaries
+      # (.goreleaser*.yml); building for them here catches a Linux-only
+      # import before it reaches main and breaks edge.
+      - name: Go Build (other release targets)
+        run: |
+          for target in darwin/amd64 darwin/arm64 windows/amd64 linux/arm64; do
+            GOOS=${target%/*} GOARCH=${target#*/} go build -o /dev/null . || exit 1
+          done
+
       - name: Go Compile Tests
         if: ${{ inputs.skipTests }}
         run: go test -exec /bin/true ./...
