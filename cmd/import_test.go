@@ -3,6 +3,9 @@ package cmd
 import (
 	"testing"
 
+	"github.com/cdalar/onctl/internal/tools"
+	"github.com/cdalar/onctl/pkg/cloud"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -27,8 +30,9 @@ func TestImportCommand_WritesInventory(t *testing.T) {
 	}
 	assert.NoError(t, importCmd.RunE(importCmd, []string{"my-imported-box"}))
 
-	p, err := staticProvider()
+	path, err := tools.OnctlSSHConfigPath()
 	assert.NoError(t, err)
+	p := cloud.ProviderStatic{InventoryPath: path}
 
 	vm, err := p.GetByName("my-imported-box")
 	assert.NoError(t, err)

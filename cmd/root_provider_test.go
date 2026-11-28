@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/cdalar/onctl/internal/tools"
 	"os"
 	"path/filepath"
 	"testing"
@@ -125,7 +126,7 @@ func TestInitProvider_LocalProviders(t *testing.T) {
 		initProvider("static")
 		st, ok := provider.(*cloud.ProviderStatic)
 		require.True(t, ok, "got %T", provider)
-		want, err := onctlSSHConfigPath()
+		want, err := tools.OnctlSSHConfigPath()
 		require.NoError(t, err)
 		assert.Equal(t, want, st.InventoryPath)
 	})
