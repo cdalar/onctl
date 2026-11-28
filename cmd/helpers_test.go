@@ -125,4 +125,3 @@ func TestCheckCloudProvider_AutoDetectsAndExports(t *testing.T) {
 	assert.Equal(t, "hetzner", checkCloudProvider())
 	assert.Equal(t, "hetzner", os.Getenv("ONCTL_CLOUD"))
 }
-

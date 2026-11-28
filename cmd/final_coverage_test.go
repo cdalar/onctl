@@ -46,8 +46,6 @@ func TestGetSSHKeyFilePaths_ViperValues(t *testing.T) {
 	})
 }
 
-
-
 // Additional tests to improve coverage
 
 func TestGenerateIDToken_BranchCoverage(t *testing.T) {

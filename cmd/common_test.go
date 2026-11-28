@@ -369,9 +369,6 @@ func TestDirSize_NonExistentPath(t *testing.T) {
 	}
 }
 
-
-
-
 func TestMergeConfig(t *testing.T) {
 	// Create test configs
 	opt := &cmdCreateOptions{

@@ -81,8 +81,6 @@ func TestReadConfig_HomeDirectory(t *testing.T) {
 	}
 }
 
-
-
 func TestCheckCloudProvider_InvalidProvider(t *testing.T) {
 	// Save original env var
 	originalEnv := os.Getenv("ONCTL_CLOUD")

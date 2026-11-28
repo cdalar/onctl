@@ -7,7 +7,6 @@ import (
 	"github.com/cdalar/onctl/pkg/cloud"
 )
 
-
 func TestOpenShellSSHCheck(t *testing.T) {
 	if err := openShellSSHCheck(nil, nil, nil); err != nil {
 		t.Errorf("plain ssh: %v", err)

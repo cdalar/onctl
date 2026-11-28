@@ -193,4 +193,3 @@ func TestCmdCreateOptions_ZeroValues(t *testing.T) {
 	assert.Equal(t, "", opts.Vm.Name)
 	assert.Equal(t, 0, opts.Vm.SSHPort)
 }
-
