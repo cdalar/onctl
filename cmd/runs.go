@@ -14,9 +14,9 @@ import (
 	"time"
 )
 
-// Claude sessions on boxes, for the tui's :agents view (tuiagents.go): a
-// proof of concept of working the way herdr does, each session a box of
-// its own. A new session is `onctl claude --repo` detached on a new box,
+// Claude's runs on boxes, for the tui's :runs view (tuiruns.go): a
+// proof of concept of working the way herdr does, each run a box of
+// its own. A new run is `onctl claude --repo` detached on a new box,
 // in herdr (whose agent status says when Claude is waiting) with a
 // GitHub token stored there (so Claude can open the PR it's asked to
 // open when it's done). The view polls every box over ssh, and a desktop
@@ -25,27 +25,28 @@ import (
 // polled: connecting to a VM gives root ssh on it (connectClaudeVM),
 // which isn't for VMs onctl claude never touched.
 
-// agentsPRInstruction is added to every task: making the PR is the
-// point of the session, and writing its title and body is Claude's to do.
-const agentsPRInstruction = "\n\nWhen the task is done: commit your work on the current branch, push it to origin, and open a pull request with `gh pr create`, with a clear title and a body that says what changed and why. Then reply with the pull request's URL."
+// runPRInstruction is added to every task's description: making the PR
+// is the point of the run, and writing its title and body is Claude's to do.
+const runPRInstruction = "\n\nWhen the task is done: commit your work on the current branch, push it to origin, and open a pull request with `gh pr create`, with a clear title and a body that says what changed and why. Then reply with the pull request's URL."
 
-// agentSession is a box with a Claude project on it, as the list shows it.
-type agentSession struct {
+// boxRun is a run: a box with a Claude project on it, as the list shows
+// it. (Not `run`: the package's tests have a run helper.)
+type boxRun struct {
 	box, repo, dir, branch, mux, status, pr, err string
 }
 
 // waiting reports whether Claude needs you: herdr's blocked (asking for
 // a permission, a question) or done (finished its turn).
-func (s agentSession) waiting() bool { return s.status == "blocked" || s.status == "done" }
+func (s boxRun) waiting() bool { return s.status == "blocked" || s.status == "done" }
 
-// newlyWaiting is the sessions that started waiting since the last poll,
+// newlyWaiting is the runs that started waiting since the last poll,
 // whose statuses were prev (nil on the first poll: nothing is new then,
-// or every waiting session would notify each time the view opens).
-func newlyWaiting(prev map[string]string, now []agentSession) []agentSession {
+// or every waiting run would notify each time the view opens).
+func newlyWaiting(prev map[string]string, now []boxRun) []boxRun {
 	if prev == nil {
 		return nil
 	}
-	var out []agentSession
+	var out []boxRun
 	for _, s := range now {
 		if was, seen := prev[s.box]; s.waiting() && (!seen || was != s.status) {
 			out = append(out, s)
@@ -59,9 +60,9 @@ func newlyWaiting(prev map[string]string, now []agentSession) []agentSession {
 // have a real gh at /usr/bin/gh.
 var boxGH = "/usr/bin/gh"
 
-// agentStatusScript prints what the list shows of the box's project as
+// runStatusScript prints what the list shows of the box's project as
 // key=value lines, or nothing on a box without one.
-func agentStatusScript() string {
+func runStatusScript() string {
 	return `d=$(cat ` + projectMarker + ` 2>/dev/null); [ -n "$d" ] || exit 0
 gh=` + shellQuote(boxGH) + `; [ -x "$gh" ] || gh=gh
 echo "dir=$d"
@@ -72,9 +73,9 @@ echo "pr=$(cd "$d" && timeout 5 "$gh" pr view --json url -q .url 2>/dev/null)"
 echo "herdr=$(herdr workspace list 2>/dev/null | tr -d '\n')"`
 }
 
-// parseAgentStatus reads agentStatusScript's output for the box named
+// parseRunStatus reads runStatusScript's output for the box named
 // box; ok is false when the box holds no project.
-func parseAgentStatus(box, out string) (s agentSession, ok bool) {
+func parseRunStatus(box, out string) (s boxRun, ok bool) {
 	kv := map[string]string{}
 	for _, line := range strings.Split(out, "\n") {
 		if k, v, found := strings.Cut(line, "="); found {
@@ -84,7 +85,7 @@ func parseAgentStatus(box, out string) (s agentSession, ok bool) {
 	if kv["dir"] == "" {
 		return s, false
 	}
-	s = agentSession{box: box, dir: kv["dir"], branch: kv["branch"], mux: kv["mux"], pr: kv["pr"], repo: originRepo(kv["origin"])}
+	s = boxRun{box: box, dir: kv["dir"], branch: kv["branch"], mux: kv["mux"], pr: kv["pr"], repo: originRepo(kv["origin"])}
 	switch s.mux {
 	case "herdr":
 		s.status = herdrMux{}.parseList(kv["herdr"])[claudeSession]
@@ -181,9 +182,9 @@ var agentConn = func(ctx context.Context, name string) *boxSSH {
 	return b
 }
 
-// pollAgents lists the sessions: the provider's running VMs (on another
+// pollRuns lists the runs: the provider's running VMs (on another
 // provider than boxes, those started here) that hold a project.
-func pollAgents() ([]agentSession, error) {
+func pollRuns() ([]boxRun, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	vms, err := listClaudeVMs(ctx)
@@ -194,7 +195,7 @@ func pollAgents() ([]agentSession, error) {
 	var (
 		mu  sync.Mutex
 		wg  sync.WaitGroup
-		out []agentSession
+		out []boxRun
 	)
 	for _, vm := range vms {
 		if _, ours := reg[vm.name]; vm.state != "running" || (!onBoxes() && !ours) {
@@ -207,10 +208,10 @@ func pollAgents() ([]agentSession, error) {
 			if b == nil {
 				return
 			}
-			raw, err := b.output(ctx, agentStatusScript())
-			s, ok := parseAgentStatus(name, string(raw))
+			raw, err := b.output(ctx, runStatusScript())
+			s, ok := parseRunStatus(name, string(raw))
 			if err != nil {
-				s, ok = agentSession{box: name, repo: reg[name], err: lastLine(err.Error())}, true
+				s, ok = boxRun{box: name, repo: reg[name], err: lastLine(err.Error())}, true
 			}
 			if !ok {
 				return
@@ -235,18 +236,18 @@ var notifyDesktop = func(title, body string) {
 	}
 }
 
-// agentsStartArgs is the `onctl claude` command line that starts a
-// session: repo cloned on the new box, Claude in herdr (for its status),
+// runStartArgs is the `onctl claude` command line that starts a
+// run: repo cloned on the new box, Claude in herdr (for its status),
 // the GitHub token stored there (a detached Claude has no forwarding to
-// open its PR with), and the task as the first message.
-func agentsStartArgs(repo, box, task string) []string {
+// open its PR with), and the task's description as the first message.
+func runStartArgs(repo, box, task string) []string {
 	return tuiChildArgs("claude", "--repo", repo, "--box", box, "--mux", "herdr",
-		"--github", githubStore, "--detach", "--prompt", task+agentsPRInstruction)
+		"--github", githubStore, "--detach", "--prompt", task+runPRInstruction)
 }
 
-// agentAttachScript is what attaching runs on the box: herdr focused on
-// the session's workspace, or its tmux session.
-func agentAttachScript(s agentSession) string {
+// runAttachScript is what attaching runs on the box: herdr focused on
+// the run's herdr workspace, or its tmux session.
+func runAttachScript(s boxRun) string {
 	if s.mux != "herdr" {
 		return "exec tmux -u attach -t =" + claudeSession
 	}

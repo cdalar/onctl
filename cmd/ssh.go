@@ -250,7 +250,7 @@ var sshCmd = &cobra.Command{
 					sshPort = 0
 				}
 			}
-			provider.SSHInto(args[0], sshPort, sshKey, remoteCmd)
+			boxClient().SSH(args[0], sshPort, sshKey, remoteCmd)
 		}
 	},
 }

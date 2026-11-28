@@ -67,26 +67,26 @@ func TestStateStyle(t *testing.T) {
 func TestAttachHint(t *testing.T) {
 	orig := cloudProvider
 	t.Cleanup(func() { cloudProvider = orig })
-	sess := taskSession{task: "fix-ci"}
+	ws := workspace{name: "fix-ci"}
 
 	withProvider(t, &cloud.ProviderBoxes{})
-	assert.Equal(t, "onctl claude --box b1 --task fix-ci", attachHint(sess, "b1"))
+	assert.Equal(t, "onctl claude --box b1 --workspace fix-ci", attachHint(ws, "b1"))
 
 	withProvider(t, &cloud.ProviderStatic{})
 	cloudProvider = "ac"
-	assert.Equal(t, "onctl -p ac claude --box b1 --task fix-ci", attachHint(sess, "b1"))
+	assert.Equal(t, "onctl -p ac claude --box b1 --workspace fix-ci", attachHint(ws, "b1"))
 }
 
-// Each task's WIP lives under its own ref so pushes from parallel tasks
+// Each workspace's WIP lives under its own ref so pushes from parallel workspaces
 // don't clobber each other; the main checkout keeps the bare ref.
 func TestBoxWorktreeWipRef(t *testing.T) {
 	main := boxWorktree{}
 	assert.Equal(t, wipRef, main.wipRef())
 	assert.Equal(t, "wip", main.wipName())
 
-	task := boxWorktree{task: "fix-ci"}
-	assert.Equal(t, wipRef+"-fix-ci", task.wipRef())
-	assert.Equal(t, "wip-fix-ci", task.wipName())
+	w := boxWorktree{name: "fix-ci"}
+	assert.Equal(t, wipRef+"-fix-ci", w.wipRef())
+	assert.Equal(t, "wip-fix-ci", w.wipName())
 }
 
 func TestClaudeTokenPath(t *testing.T) {

@@ -59,7 +59,7 @@ func repoConflicts() []string {
 		flag string
 		set  bool
 	}{
-		{"--task", claudeTask != ""}, {"--own-box", claudeOwnBox},
+		{"--workspace", claudeWorkspace != ""}, {"--own-box", claudeOwnBox},
 		{"--handoff", claudeHandoff != ""}, {"--project", claudeProject != ""},
 	} {
 		if f.set {
@@ -146,9 +146,9 @@ func runRepo(cmd *cobra.Command, args []string) error {
 	if err := box.run(ctx, claudeStateScript([]string{dir}, localClaudeTheme(), apiKey), nil); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: couldn't skip Claude's first-run setup on %s: %v\n", name, err)
 	}
-	sess := newTaskSession(dir, "")
-	running := sessionRunning(ctx, box, sess)
-	return startSession(ctx, box, name, sess, env, running, repoAttachHint(repo), args)
+	ws := newWorkspace(dir, "")
+	running := sessionRunning(ctx, box, ws)
+	return startSession(ctx, box, name, ws, env, running, repoAttachHint(repo), args)
 }
 
 // repoAttachHint is the command that comes back to a --repo box: the

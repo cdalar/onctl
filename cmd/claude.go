@@ -72,19 +72,19 @@ const (
 )
 
 var (
-	claudeBox     string
-	claudeSize    string
-	claudeImage   string
-	claudePrompt  string
-	claudeDetach  bool
-	claudeGitHub  string
-	claudeIdle    time.Duration
-	claudeProject string
-	claudeHandoff string
-	claudeTask    string
-	claudeOwnBox  bool
-	claudeAuth    string
-	claudeRepo    string
+	claudeBox       string
+	claudeSize      string
+	claudeImage     string
+	claudePrompt    string
+	claudeDetach    bool
+	claudeGitHub    string
+	claudeIdle      time.Duration
+	claudeProject   string
+	claudeHandoff   string
+	claudeWorkspace string
+	claudeOwnBox    bool
+	claudeAuth      string
+	claudeRepo      string
 )
 
 var claudeCmd = &cobra.Command{
@@ -107,7 +107,7 @@ says how to come back.
 it: the first time it's created and the project put there the same way
 (a clone on branch onctl/<project>, or a copy); later runs come back to
 it, don't copy again, and nothing is synced back -- Claude commits and
-pushes from the box. --box, --detach and --task keep their box too.
+pushes from the box. --box, --detach and --workspace keep their box too.
 
 The box is a hosted one (-p boxes, the default) or a VM of any other
 provider: onctl -p hetzner claude creates claude-<project> on Hetzner
@@ -125,7 +125,7 @@ a box or on ac: the same image plus Go and gcc.
 Claude runs in tmux, so it keeps going when you detach (Ctrl-b d) or the
 connection drops; onctl claude --box <name> comes back to it. --mux herdr
 runs it in herdr (herdr.dev) instead: a terminal workspace manager made
-for coding agents that shows every task on the box in one window, each
+for coding agents that shows every run on the box in one window, each
 marked working, blocked or idle; Ctrl-b q detaches. ONCTL_MUX=herdr makes
 it the default, and a box keeps using whichever its sessions were started
 in.
@@ -163,11 +163,11 @@ there once gh is installed on it.`,
 
 func init() {
 	claudeCmd.PersistentFlags().StringVar(&claudeBox, "box", "", "box to use, kept after the run (default: claude-<project directory name> with --keep and for ls/fetch/push; otherwise a new box of the run's own)")
-	claudeCmd.Flags().BoolVarP(&claudeKeep, "keep", "k", false, "use the project's own box, claude-<project>, and keep it -- instead of a new box deleted when Claude exits (--box, --detach and --task keep it too)")
+	claudeCmd.Flags().BoolVarP(&claudeKeep, "keep", "k", false, "use the project's own box, claude-<project>, and keep it -- instead of a new box deleted when Claude exits (--box, --detach and --workspace keep it too)")
 	claudeCmd.PersistentFlags().StringVar(&claudeProject, "project", "", "project directory (default: the git repository, or directory, you're in)")
 	claudeCmd.Flags().StringVar(&claudeHandoff, "handoff", "", "continue this local Claude Code session (its ID) on the box")
-	claudeCmd.PersistentFlags().StringVarP(&claudeTask, "task", "t", "", "work on a task in parallel: its own worktree (<dir>@<task>, branch <task>) and Claude on the box")
-	claudeCmd.PersistentFlags().BoolVar(&claudeOwnBox, "own-box", false, "with --task: give the task a box of its own (claude-<project>-<task>) instead of a worktree")
+	claudeCmd.PersistentFlags().StringVarP(&claudeWorkspace, "workspace", "w", "", "work in a workspace of its own, in parallel: a worktree (<dir>@<name>, branch <name>) and Claude on the box")
+	claudeCmd.PersistentFlags().BoolVar(&claudeOwnBox, "own-box", false, "with --workspace: give the workspace a box of its own (claude-<project>-<name>) instead of a worktree")
 	claudeCmd.Flags().StringVar(&claudeAuth, "claude-auth", claudeAuthAuto, "how Claude on the box logs in: auto (the token onctl claude login saved, else /login), token, login or api-key")
 	_ = claudeCmd.RegisterFlagCompletionFunc("claude-auth", cobra.FixedCompletions([]string{claudeAuthAuto, claudeAuthToken, claudeAuthLogin, claudeAuthAPIKey}, cobra.ShellCompDirectiveNoFileComp))
 	claudeCmd.Flags().StringVarP(&claudeSize, "size", "s", claudeDefaultSize, "size of a box created for this (another provider: its VM type; default its onctl.yaml setting)")
@@ -213,7 +213,7 @@ func runClaude(cmd *cobra.Command, args []string) error {
 	if claudeRepo != "" {
 		return runRepo(cmd, args)
 	}
-	if err := resolveTask(); err != nil {
+	if err := resolveWorkspace(); err != nil {
 		return err
 	}
 	// Everything that can fail here fails before any box is created or
@@ -291,17 +291,17 @@ func runClaude(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		t.needsCopy = false
-	} else if claudeTask == "" {
+	} else if claudeWorkspace == "" {
 		fmt.Fprintf(os.Stderr, "%s is already on %s; working with the box's copy (it isn't copied again).\n", dir, name)
 		if claudeHandoff != "" {
 			fmt.Fprintf(os.Stderr, "Your local changes since then aren't on the box: commit them and run onctl claude push, or hand off to a fresh box with --box.\n")
 		}
 	}
-	sess := newTaskSession(dir, claudeTask)
-	sess.ephemeral = t.ephemeral
-	if sess.task != "" {
-		if err := box.run(ctx, worktreeScript(dir, sess.task), nil); err != nil {
-			return fmt.Errorf("making the %s worktree on %s: %w", sess.task, name, err)
+	ws := newWorkspace(dir, claudeWorkspace)
+	ws.ephemeral = t.ephemeral
+	if ws.name != "" {
+		if err := box.run(ctx, worktreeScript(dir, ws.name), nil); err != nil {
+			return fmt.Errorf("making the %s worktree on %s: %w", ws.name, name, err)
 		}
 	}
 	if err := copyClaudeConfig(ctx, box); err != nil {
@@ -310,47 +310,47 @@ func runClaude(cmd *cobra.Command, args []string) error {
 	if err := copyGitIdentity(ctx, box, dir); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: couldn't set your git identity on %s: %v\n", name, err)
 	}
-	if err := box.run(ctx, claudeStateScript([]string{sess.dir}, localClaudeTheme(), apiKey), nil); err != nil {
+	if err := box.run(ctx, claudeStateScript([]string{ws.dir}, localClaudeTheme(), apiKey), nil); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: couldn't skip Claude's first-run setup on %s: %v\n", name, err)
 	}
 
-	running := sessionRunning(ctx, box, sess)
+	running := sessionRunning(ctx, box, ws)
 	if claudeHandoff != "" {
 		if running {
-			return fmt.Errorf("a Claude session is already running there -- attach with %s and quit it, then hand off again", attachHint(sess, name))
+			return fmt.Errorf("a Claude session is already running there -- attach with %s and quit it, then hand off again", attachHint(ws, name))
 		}
-		if err := copyTranscript(ctx, box, sess.dir, transcript, claudeHandoff); err != nil {
+		if err := copyTranscript(ctx, box, ws.dir, transcript, claudeHandoff); err != nil {
 			return err
 		}
 		args = append([]string{"--resume", claudeHandoff}, args...)
 	}
-	err = startSession(ctx, box, name, sess, env, running, attachHint(sess, name), args)
+	err = startSession(ctx, box, name, ws, env, running, attachHint(ws, name), args)
 	if err == nil && t.ephemeral && !claudeDetach {
 		// Detaching (Ctrl-b d in tmux, Ctrl-b q in herdr) returns here with
 		// Claude still running -- maybe mid-task -- so the box isn't this
 		// run's to end: kept, work and all.
 		sctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		if sessionRunning(sctx, box, sess) {
+		if sessionRunning(sctx, box, ws) {
 			t.ephemeral = false
 			if _, ok := mux.(herdrMux); ok {
 				// Its pane would still stop herdr's server when Claude
 				// exits, and the box's other sessions with it.
-				if err := box.run(sctx, "rm -f "+shellQuote(herdrStopFile(sess)), nil); err != nil {
+				if err := box.run(sctx, "rm -f "+shellQuote(herdrStopFile(ws)), nil); err != nil {
 					fmt.Fprintf(os.Stderr, "warning: couldn't keep herdr's server past this session on %s: %v\n", name, err)
 				}
 			}
-			fmt.Fprintf(os.Stderr, "Claude is still running on %s, so it's kept -- attach with: %s\n", name, attachHint(sess, name))
+			fmt.Fprintf(os.Stderr, "Claude is still running on %s, so it's kept -- attach with: %s\n", name, attachHint(ws, name))
 		}
 	}
 	return err
 }
 
-// startSession starts Claude in sess on the box named name -- or, with
+// startSession starts Claude in ws on the box named name -- or, with
 // running set, leaves the one there be -- and attaches to it, unless
 // --detach, when hint is the command that attaches later. env is what
 // claudeEnv gave; args are claude's own.
-func startSession(ctx context.Context, box *boxSSH, name string, sess taskSession, env string, running bool, hint string, args []string) error {
+func startSession(ctx context.Context, box *boxSSH, name string, ws workspace, env string, running bool, hint string, args []string) error {
 	if running {
 		if claudePrompt != "" || len(args) > 0 {
 			fmt.Fprintf(os.Stderr, "Claude is already running there; attaching to it (--prompt and claude arguments only apply to a new session).\n")
@@ -359,21 +359,21 @@ func startSession(ctx context.Context, box *boxSSH, name string, sess taskSessio
 		if env == "" && claudeAuth == claudeAuthAuto {
 			fmt.Fprintln(os.Stderr, "Log Claude in on the box with /login -- or run onctl claude login once, and every box's Claude is logged in.")
 		}
-		if err := stageClaudeEnv(ctx, box, sess, env); err != nil {
+		if err := stageClaudeEnv(ctx, box, ws, env); err != nil {
 			return fmt.Errorf("passing Claude its credentials: %w", err)
 		}
 	}
-	line := sess.commandLine(claudePrompt, args)
+	line := ws.commandLine(claudePrompt, args)
 	if claudeDetach {
 		if !running {
-			if err := box.run(ctx, mux.start(sess, line, true), nil); err != nil {
+			if err := box.run(ctx, mux.start(ws, line, true), nil); err != nil {
 				return fmt.Errorf("starting Claude on %s: %w", name, err)
 			}
 		}
 		fmt.Fprintf(os.Stderr, "Claude is running on %s; attach with: %s\n", name, hint)
 		return nil
 	}
-	return attachClaude(ctx, box, sess, mux.start(sess, line, false))
+	return attachClaude(ctx, box, ws, mux.start(ws, line, false))
 }
 
 // resolveMux makes --mux's multiplexer the running command's.
@@ -386,49 +386,50 @@ func resolveMux(cmd *cobra.Command) error {
 	return nil
 }
 
-// sessionRunning reports whether sess's Claude is running on the box, in
+// sessionRunning reports whether ws's Claude is running on the box, in
 // its multiplexer.
-func sessionRunning(ctx context.Context, box *boxSSH, sess taskSession) bool {
-	return box.run(ctx, mux.running(sess), nil) == nil
+func sessionRunning(ctx context.Context, box *boxSSH, ws workspace) bool {
+	return box.run(ctx, mux.running(ws), nil) == nil
 }
 
 // attachHint is the command that comes back to this session, naming the
 // provider when it isn't the default.
-func attachHint(sess taskSession, box string) string {
-	hint := sess.attachHint(box)
+func attachHint(ws workspace, box string) string {
+	hint := ws.attachHint(box)
 	if onBoxes() {
 		return hint
 	}
 	return "onctl -p " + cloudProvider + " " + strings.TrimPrefix(hint, "onctl ")
 }
 
-// resolveTask checks --task and --own-box, and turns --own-box into the
-// task's own box: claude-<project>-<task>, where it's the main session.
-func resolveTask() error {
-	if claudeTask != "" && !taskNamePattern.MatchString(claudeTask) {
-		return fmt.Errorf("--task %q: use lowercase letters, digits and dashes, at most 30", claudeTask)
+// resolveWorkspace checks --workspace and --own-box, and turns --own-box
+// into the workspace's own box: claude-<project>-<name>, where it's the
+// main checkout.
+func resolveWorkspace() error {
+	if claudeWorkspace != "" && !workspaceNamePattern.MatchString(claudeWorkspace) {
+		return fmt.Errorf("--workspace %q: use lowercase letters, digits and dashes, at most 30", claudeWorkspace)
 	}
 	if !claudeOwnBox {
 		return nil
 	}
-	if claudeTask == "" {
-		return fmt.Errorf("--own-box needs --task")
+	if claudeWorkspace == "" {
+		return fmt.Errorf("--own-box needs --workspace")
 	}
 	if claudeBox == "" {
 		dir, err := projectDir()
 		if err != nil {
 			return err
 		}
-		claudeBox = claudeBoxName(dir) + "-" + claudeTask
+		claudeBox = claudeBoxName(dir) + "-" + claudeWorkspace
 	}
-	claudeTask = ""
+	claudeWorkspace = ""
 	return nil
 }
 
 // attachClaude attaches to Claude on the box, lending it GitHub
 // credentials for as long as the attach lasts unless --github says not to.
-func attachClaude(ctx context.Context, box *boxSSH, sess taskSession, command string) error {
-	extra, done := forwardGitHub(ctx, box, sess.ghSocket)
+func attachClaude(ctx context.Context, box *boxSSH, ws workspace, command string) error {
+	extra, done := forwardGitHub(ctx, box, ws.ghSocket)
 	defer done()
 	return box.attach(ctx, command, extra)
 }
@@ -551,7 +552,7 @@ func useBoxMux(ctx context.Context, box *boxSSH, dir, name string) error {
 }
 
 // claudeSessions is the Claude sessions in m's list output, sorted --
-// claude and claude-<task>, not whatever else runs in the multiplexer.
+// claude and claude-<workspace>, not whatever else runs in the multiplexer.
 func claudeSessions(m multiplexer, out string) []string {
 	var names []string
 	for name := range m.parseList(out) {
