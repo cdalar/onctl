@@ -47,7 +47,8 @@ With the cursor on a VM:
 | `a` | run Claude Code on it (`onctl claude --box <vm>`, see [Claude Code on a box](./claude)) |
 | `d` or `enter` | describe it; `y` for its JSON |
 | `c` | create a VM: a form asks name, image and type, then runs `onctl create` |
-| `p` / `r` | pause / resume (`onctl pause`, `onctl resume`) |
+| `p` | pause it (`onctl pause`), after asking |
+| `r` | resume it (`onctl resume`) |
 | `t` | restart it from its own disk (`onctl restart`), after asking; `fc` only |
 | `ctrl-d` | destroy it (`onctl destroy`), after asking |
 
@@ -103,7 +104,7 @@ a            run Claude Code on the VM (onctl claude --box vm)
 enter        in :repos (your GitHub repos, newest push first, from gh), start Claude
              on a box of this provider with the repo cloned (onctl claude --repo)
 c            create a VM (name, image and type are asked; runs onctl create)
-p / r        pause / resume
+p / r        pause (asks first) / resume
 t            restart the VM from its disk (fc only; asks first)
 ctrl-d       destroy the VM (asks first)
 0 / 1 / 2    all VMs / running only / paused only
