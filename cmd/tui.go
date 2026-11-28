@@ -55,7 +55,7 @@ var tuiCmd = &cobra.Command{
                one (pick a repo, describe the task), enter attaches, P pushes and opens
                a PR, o opens it. You get a desktop notification when Claude waits
   c            create a VM (name, image and type are asked; runs onctl create)
-  p / r        pause / resume
+  p / r        pause (asks first) / resume
   t            restart the VM from its disk (fc only; asks first)
   space        mark the VM (again: unmark), for ctrl-d
   ctrl-d       destroy the VM, or the marked ones (asks first)

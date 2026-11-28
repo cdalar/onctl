@@ -435,10 +435,21 @@ func TestTUIListAndKeys(t *testing.T) {
 	if len(m.pages) != 3 || !strings.Contains(m.View(), `"Name": "web"`) || !strings.Contains(m.View(), "<web.json>") {
 		t.Errorf("y didn't show web's json:\n%s", m.View())
 	}
-	// The page's VM takes the VM keys too: pause.go's call, by name.
+	// The page's VM takes the VM keys too. p asks first, as pause.go does
+	// without -f: a pause deletes the server, so a stray key mustn't.
 	m, cmd = press(t, m, "p")
+	if v := m.View(); hasAction(cmd) != nil || m.pending["web"] != "" || !strings.Contains(v, "Pause web?") || !strings.Contains(v, "onctl resume web") {
+		t.Fatalf("p on web's json page didn't ask first: pending=%v\n%s", m.pending, v)
+	}
+	m, _ = press(t, m, "esc")
+	if m.dialog != nil || len(f.calls) != 0 {
+		t.Fatalf("esc on the pause question: dialog=%v calls=%v", m.dialog, f.calls)
+	}
+	// y on the question is pause.go's call, by name.
+	m, _ = press(t, m, "p")
+	m, cmd = press(t, m, "y")
 	if hasAction(cmd) == nil || m.pending["web"] != "pause" {
-		t.Errorf("p on web's json page: pending=%v", m.pending)
+		t.Errorf("y on the pause question: pending=%v", m.pending)
 	}
 	if got := strings.Join(f.calls, ", "); got != "pause web" {
 		t.Errorf("provider saw %q", got)

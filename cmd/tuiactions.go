@@ -405,11 +405,7 @@ func (m tuiModel) handleVMKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "a":
 		return m.claude(vm.Name)
 	case "p":
-		// pause.go: the name is all the providers need.
-		name := vm.Name
-		return m.act(vm, "pause", 0, func() (string, error) {
-			return "", c.Pause(name, false)
-		})
+		return m.askPause(vm)
 	case "r":
 		// resume.go: make sure the onctl SSH key exists and attach it.
 		name := vm.Name
@@ -428,6 +424,35 @@ func (m tuiModel) handleVMKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "t":
 		return m.askRestart(vm)
 	}
+	return m, nil
+}
+
+// askPause is pause.go, after asking as pause.go does without -f: on a
+// cloud provider a pause snapshots the VM and deletes the server, so one
+// stray keypress on the selected row took down whatever ran there. A VM
+// that's already pending or isn't running is refused before the question.
+func (m tuiModel) askPause(vm *cloud.Vm) (tea.Model, tea.Cmd) {
+	if v, ok := m.pending[vm.Name]; ok {
+		return m, m.fail("%s is being %s", vm.Name, pastTense(v))
+	}
+	if vmStateRank(vm.Status) != 0 {
+		return m, m.fail("%s is %s, not running; can't pause it", vm.Name, vm.Status)
+	}
+	c := m.c
+	name := vm.Name
+	m.ask(fmt.Sprintf("Pause %s?", name), []string{
+		fmt.Sprintf("This will pause VM %q to stop its compute cost; it stops until resumed.", name),
+		fmt.Sprintf("Data is preserved; resume with r (onctl resume %s).", name),
+	}, func(m tuiModel) (tea.Model, tea.Cmd) {
+		vm := m.vm(name)
+		if vm == nil {
+			return m, nil
+		}
+		// pause.go: the name is all the providers need.
+		return m.act(vm, "pause", 0, func() (string, error) {
+			return "", c.Pause(name, false)
+		})
+	})
 	return m, nil
 }
 
