@@ -31,8 +31,10 @@ concurrency:
 jobs:
   run:
     name: Build
-    runs-on: onctl-2
-    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    # GitHub-hosted runners are slower than onctl-2 was; -race tests need
+    # the headroom.
+    timeout-minutes: 20
     strategy:
       fail-fast: true
       matrix:
