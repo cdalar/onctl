@@ -2,11 +2,11 @@ package tools
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
 )
 
 // OnctlSSHConfigPath is the fixed location of onctl's own ssh_config-format
@@ -28,9 +28,15 @@ type SSHIntoVMRequest struct {
 	// ProxyCommand, when set, is how ssh reaches the VM (for VMs with no
 	// address of their own, like boxes); IPAddress is then just a name.
 	ProxyCommand string
+	// Stdin, Stdout and Stderr are the session's streams; nil means this
+	// process's own.
+	Stdin          io.Reader
+	Stdout, Stderr io.Writer
 }
 
-func SSHIntoVM(request SSHIntoVMRequest) {
+// SSHIntoVM runs ssh to the VM. A remote command that exits non-zero comes
+// back as an *exec.ExitError carrying its exit code.
+func SSHIntoVM(request SSHIntoVMRequest) error {
 	sshArgs := []string{
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "StrictHostKeyChecking=no",
@@ -50,19 +56,19 @@ func SSHIntoVM(request SSHIntoVMRequest) {
 	}
 	log.Println("[DEBUG] sshArgs: ", sshArgs)
 	sshCommand := exec.Command("ssh", sshArgs...)
-	sshCommand.Stdin = os.Stdin
-	sshCommand.Stdout = os.Stdout
-	sshCommand.Stderr = os.Stderr
+	sshCommand.Stdin, sshCommand.Stdout, sshCommand.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if request.Stdin != nil {
+		sshCommand.Stdin = request.Stdin
+	}
+	if request.Stdout != nil {
+		sshCommand.Stdout = request.Stdout
+	}
+	if request.Stderr != nil {
+		sshCommand.Stderr = request.Stderr
+	}
 	// The VM has terminfo for the common terminals, not for every one
 	// (xterm-ghostty, xterm-kitty), and tmux won't start without it.
 	sshCommand.Env = append(os.Environ(), "TERM=xterm-256color")
 
-	if err := sshCommand.Run(); err != nil {
-		if exitError, ok := err.(*exec.ExitError); ok {
-			waitStatus := exitError.Sys().(syscall.WaitStatus)
-			os.Exit(waitStatus.ExitStatus())
-		} else {
-			log.Panic(err)
-		}
-	}
+	return sshCommand.Run()
 }

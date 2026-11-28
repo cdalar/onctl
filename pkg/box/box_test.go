@@ -1,7 +1,10 @@
 package box_test
 
 import (
+	"bytes"
 	"errors"
+	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/cdalar/onctl/pkg/box"
@@ -69,8 +72,19 @@ func (f *fakeProvider) CreateSSHKey(file string) (string, error) {
 	return "key-1", nil
 }
 
-func (f *fakeProvider) SSHInto(name string, port int, key string, command []string) {
+// SSHInto runs command locally with sh in place of ssh, so tests see a
+// real exit status and real output on stdio.
+func (f *fakeProvider) SSHInto(name string, port int, key string, command []string, stdio cloud.Stdio) error {
 	f.calls = append(f.calls, "ssh "+name)
+	if name == "missing" {
+		return errors.New("no VM found with name missing")
+	}
+	if len(command) == 0 {
+		return nil
+	}
+	sh := exec.Command("sh", "-c", strings.Join(command, " "))
+	sh.Stdout, sh.Stderr = stdio.Out, stdio.Err
+	return sh.Run()
 }
 
 func (f *fakeProvider) GetByName(name string) (cloud.Vm, error) {
@@ -198,8 +212,34 @@ func TestPauseResumeSSH(t *testing.T) {
 	vm, err := c.Resume("web", "key-1")
 	require.NoError(t, err)
 	assert.Equal(t, "10.0.0.9", vm.IP)
-	c.SSH("web", 22, "/keys/id", []string{"sync"})
+	_, err = c.SSH("web", 22, "/keys/id", nil, cloud.Stdio{})
+	require.NoError(t, err)
 	assert.Equal(t, []string{"pause web hot", "resume web key=key-1", "ssh web"}, p.calls)
+}
+
+// The boxctl host service runs commands on boxes through SSH (e.g. sync)
+// and has to report what they printed and whether they failed, without
+// the process exiting: so output goes to the caller's writers, a non-zero
+// exit is an exit code and not an error, and a VM that isn't there is an
+// error.
+func TestSSH_CapturesOutputAndExitCode(t *testing.T) {
+	c := box.Wrap("fake", &fakeProvider{})
+	var out, errOut bytes.Buffer
+	code, err := c.SSH("web", 22, "", []string{"echo synced; echo oops >&2; exit 3"}, cloud.Stdio{Out: &out, Err: &errOut})
+	require.NoError(t, err)
+	assert.Equal(t, 3, code)
+	assert.Equal(t, "synced\n", out.String())
+	assert.Equal(t, "oops\n", errOut.String())
+
+	code, err = c.SSH("web", 22, "", []string{"true"}, cloud.Stdio{Out: &out})
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
+}
+
+func TestSSH_MissingVMIsAnError(t *testing.T) {
+	c := box.Wrap("fake", &fakeProvider{})
+	_, err := c.SSH("missing", 22, "", []string{"true"}, cloud.Stdio{})
+	assert.Error(t, err)
 }
 
 func TestPausedStatus(t *testing.T) {

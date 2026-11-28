@@ -611,30 +611,22 @@ func (p ProviderHetzner) GetByName(serverName string) (Vm, error) {
 	return mapHetznerServer(*s), nil
 }
 
-func (p ProviderHetzner) SSHInto(serverName string, port int, privateKey string, command []string) {
+func (p ProviderHetzner) SSHInto(serverName string, port int, privateKey string, command []string, stdio Stdio) error {
 	server, _, err := p.Client.Server.GetByName(context.TODO(), serverName)
-	if server == nil {
-		fmt.Println("No Server found with name: " + serverName)
-		os.Exit(1)
-	}
-
 	if err != nil {
-		if herr, ok := err.(hcloud.Error); ok {
-			switch herr.Code {
-			case hcloud.ErrorCodeNotFound:
-				log.Fatalln("Server not found")
-			default:
-				log.Fatalln(herr.Error())
-			}
-		} else {
-			log.Fatalln(err.Error())
-		}
+		return err
+	}
+	if server == nil {
+		return errors.New("No Server found with name: " + serverName)
 	}
 
 	if privateKey == "" {
 		privateKey = p.Config.SSHPrivateKey
 	}
-	tools.SSHIntoVM(tools.SSHIntoVMRequest{
+	return tools.SSHIntoVM(tools.SSHIntoVMRequest{
+		Stdin:          stdio.In,
+		Stdout:         stdio.Out,
+		Stderr:         stdio.Err,
 		IPAddress:      server.PublicNet.IPv4.IP.String(),
 		User:           p.Config.Username,
 		Port:           port,

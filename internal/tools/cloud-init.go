@@ -24,7 +24,9 @@ func FileToBase64(filepath string) string {
 	// Read the file
 	data, err := os.ReadFile(filepath)
 	if err != nil {
-		log.Fatal(err)
+		log.Println("FileToBase64:" + err.Error())
+		log.Println("Setting empty cloud-init file")
+		return ""
 	}
 	// Encode to base64
 	encoded := base64.StdEncoding.EncodeToString(data)

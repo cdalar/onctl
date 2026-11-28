@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"sort"
@@ -243,18 +242,21 @@ func (p *ProviderOpenShell) CreateSSHKey(publicKeyFile string) (string, error) {
 
 // SSHInto runs the system ssh with `onctl ssh-proxy` as its
 // ProxyCommand, starting the sandbox first if it's stopped.
-func (p *ProviderOpenShell) SSHInto(serverName string, port int, privateKey string, command []string) {
+func (p *ProviderOpenShell) SSHInto(serverName string, port int, privateKey string, command []string, stdio Stdio) error {
 	if port == 0 {
 		port = openShellSSHPort
 	}
 	if err := p.ensureRunning(context.Background(), serverName); err != nil {
-		log.Fatalln(err)
+		return err
 	}
 	username := p.Config.Username
 	if username == "" {
 		username = "sandbox"
 	}
-	tools.SSHIntoVM(tools.SSHIntoVMRequest{
+	return tools.SSHIntoVM(tools.SSHIntoVMRequest{
+		Stdin:          stdio.In,
+		Stdout:         stdio.Out,
+		Stderr:         stdio.Err,
 		IPAddress:      serverName,
 		User:           username,
 		Port:           port,

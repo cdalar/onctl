@@ -3,6 +3,7 @@ package cloud
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"reflect"
 	"sync"
@@ -254,8 +255,19 @@ type CloudProviderInterface interface {
 	ListPaused() (VmList, error)
 	// CreateSSHKey creates a new SSH key
 	CreateSSHKey(publicKeyFile string) (keyID string, err error)
-	// SSHInto connects to a VM
-	SSHInto(serverName string, port int, privateKey string, command []string)
+	// SSHInto runs command on a VM over ssh, or opens a shell when command
+	// is empty, wired to stdio. It fails when the VM can't be found or
+	// reached; a command that ran and exited non-zero is an *exec.ExitError
+	// carrying its exit code (ssh's own failures exit 255).
+	SSHInto(serverName string, port int, privateKey string, command []string, stdio Stdio) error
 	// GetByName gets a VM by name
 	GetByName(serverName string) (Vm, error)
+}
+
+// Stdio is what SSHInto wires the ssh session to. A nil field is this
+// process's own stream (os.Stdin, os.Stdout, os.Stderr), as the CLI wants;
+// a server passes buffers to capture the output instead.
+type Stdio struct {
+	In       io.Reader
+	Out, Err io.Writer
 }
