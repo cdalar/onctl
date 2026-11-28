@@ -6,21 +6,8 @@ import (
 	"github.com/cdalar/onctl/pkg/cloud"
 )
 
-// openShellCreateCheck rejects what onctl create can't do on an OpenShell
-// sandbox, before one is made: running apply files and cloud-init (no
-// root, no file transfer through the relay) and pointing a domain at it
-// (it has no address).
-func openShellCreateCheck(o cmdCreateOptions) error {
-	if len(o.ApplyFiles) > 0 || len(o.UploadFiles) > 0 || len(o.DownloadFiles) > 0 || o.Vm.CloudInitFile != "" {
-		return cloud.ErrOpenShellApplyFiles
-	}
-	if o.Domain != "" {
-		return errors.New("--domain points a DNS record at the VM's public IP, and an OpenShell sandbox has none")
-	}
-	return nil
-}
-
-// openShellSSHCheck is openShellCreateCheck for onctl ssh's file options.
+// openShellSSHCheck refuses onctl ssh's file options on an OpenShell
+// sandbox (box.Client.CheckSetup does the same for create).
 func openShellSSHCheck(applyFiles, uploads, downloads []string) error {
 	if len(applyFiles) > 0 || len(uploads) > 0 || len(downloads) > 0 {
 		return cloud.ErrOpenShellApplyFiles

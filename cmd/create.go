@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"runtime"
 
-	"github.com/cdalar/onctl/internal/domain"
 	"github.com/cdalar/onctl/internal/tools"
 	"github.com/cdalar/onctl/internal/ui"
+	"github.com/cdalar/onctl/pkg/box"
 	"github.com/cdalar/onctl/pkg/cloud"
 	"gopkg.in/yaml.v2"
 
@@ -240,31 +239,24 @@ var createCmd = &cobra.Command{
 				viper.Set("aws.vm.image", opt.Vm.Image)
 			}
 		}
-		if opt.Vm.Image != "" && cloudProvider != "hetzner" && cloudProvider != "aws" && cloudProvider != "ovh" && cloudProvider != "boxes" && cloudProvider != "ac" && cloudProvider != "openshell" {
-			log.Fatalf("--image flag is only supported for the hetzner, aws, ovh, boxes, ac and openshell providers (current provider: %s)", cloudProvider)
+		if cloudProvider == "boxes" && cmd.Flags().Changed("type") {
+			opt.Vm.Type = flagType
 		}
-		if cloudProvider == "openshell" {
-			if err := openShellCreateCheck(opt); err != nil {
-				log.Fatalln(err)
-			}
+		c := boxClient()
+		setup := box.Setup{
+			Domain:     opt.Domain,
+			Uploads:    parseUploads(opt.UploadFiles),
+			ApplyFiles: opt.ApplyFiles,
+			Downloads:  parseDownloads(opt.DownloadFiles),
 		}
-		if err := localVMMCreateCheck(cloudProvider, runtime.GOOS); err != nil {
+		if err := c.CheckSetup(opt.Vm, setup); err != nil {
 			log.Fatalln(err)
-		}
-		if cloudProvider == "boxes" {
-			if opt.Domain != "" {
-				log.Fatalln("--domain points a DNS record at the VM's public IP, and a box has none")
-			}
-			if cmd.Flags().Changed("type") {
-				opt.Vm.Type = flagType
-			}
 		}
 		s := ui.New() // Build our new spinner
 		s.Suffix = " Checking vm..."
 		s.Start()
 		// box.Client.Create checks this again; checking here first fails
 		// before the key and domain steps, as it always has.
-		c := boxClient()
 		exists, err := c.Exists(opt.Vm.Name)
 		if err != nil {
 			s.Stop()
@@ -279,20 +271,8 @@ var createCmd = &cobra.Command{
 		s.Stop()
 		fmt.Println("\033[32m✔\033[0m " + creatingMessage(opt.Vm.Name))
 
-		// Check Domain Env
-		if opt.Domain != "" {
-			s.Suffix = " --domain flag is set... Checking Domain Env..."
-			s.Start()
-			err := domain.NewCloudFlareService().CheckEnv()
-			if err != nil {
-				s.Stop()
-				fmt.Println("\033[31m✘\033[0m Error on Domain: ", err)
-				os.Exit(1)
-			}
-		}
-
-		applyFileFound := findFile(opt.ApplyFiles)
-		log.Println("[DEBUG] applyFileFound: ", applyFileFound)
+		setup.ApplyFiles = findFile(opt.ApplyFiles)
+		log.Println("[DEBUG] applyFileFound: ", setup.ApplyFiles)
 		opt.Vm.CloudInitFile = findSingleFile(opt.Vm.CloudInitFile)
 
 		// BEGIN SSH Key
@@ -351,48 +331,6 @@ var createCmd = &cobra.Command{
 		}
 		defer func() { _ = conn.Close() }()
 
-		// BEGIN Domain
-		if opt.Domain != "" {
-			s.Suffix = " Requesting Domain..."
-			s.Restart()
-			_, err := domain.NewCloudFlareService().SetRecord(&domain.SetRecordRequest{
-				Subdomain: opt.Domain,
-				Ipaddress: vm.IP,
-			})
-			s.Stop()
-			if err != nil {
-				fmt.Println("\033[31m✘\033[0m Error on Domain: ")
-				log.Println(err)
-			} else {
-				fmt.Println("\033[32m✔\033[0m Domain is ready: ")
-			}
-		}
-
-		if cloudProvider != "fc" && cloudProvider != "ch" && cloudProvider != "ac" && cloudProvider != "boxes" && cloudProvider != "openshell" {
-			s.Suffix = " Waiting for VM to be ready..."
-			s.Restart()
-			if err := conn.WaitForCloudInit(cloudInitTimeout()); err != nil {
-				s.Stop()
-				log.Fatalln("Exiting.. " + err.Error())
-			}
-			s.Stop()
-			fmt.Println("\033[32m✔\033[0m VM is Ready")
-			log.Println("[DEBUG] cloud-init finished")
-		} else {
-			s.Suffix = " Waiting for SSH to be ready..."
-			s.Restart()
-			if err := conn.WaitForSSH(cloudInitTimeout()); err != nil {
-				s.Stop()
-				log.Fatalln("Exiting.. " + err.Error())
-			}
-			s.Stop()
-			fmt.Println("\033[32m✔\033[0m VM is Ready")
-			log.Println("[DEBUG] SSH ready")
-		}
-		// END Cloud-init
-
-		s.Suffix = " Configuring VM..."
-		s.Restart()
 		if opt.DotEnvFile != "" {
 			dotEnvVars, err := tools.ParseDotEnvFile(opt.DotEnvFile)
 			if err != nil {
@@ -400,48 +338,15 @@ var createCmd = &cobra.Command{
 			}
 			opt.Variables = append(dotEnvVars, opt.Variables...)
 		}
-
-		// Upload Files
-		if len(opt.UploadFiles) > 0 {
-			ProcessUploadSlice(opt.UploadFiles, conn, s)
-		}
-
-		// BEGIN Apply File
-		for i, applyFile := range applyFileFound {
-			// No spinner here: the apply file's own output streams to
-			// stdout (see tools.CopyAndRunRemoteFile) and would be
-			// garbled by one.
-			s.Stop()
-			fmt.Println("Running " + opt.ApplyFiles[i] + " on Remote...")
-
-			err = conn.Apply(applyFile, opt.Variables, os.Stdout)
-			if err != nil {
-				log.Println(err)
-			}
-			s.Stop()
-			fmt.Println("\033[32m✔\033[0m " + opt.ApplyFiles[i] + " ran on Remote")
-
-		}
-		if len(opt.DownloadFiles) > 0 {
-			ProcessDownloadSlice(opt.DownloadFiles, conn)
-		}
+		setup.Vars = opt.Variables
+		setup.ReadyTimeout = cloudInitTimeout()
+		setup.Out = os.Stdout
+		printProgress(s, &setup)
+		err = c.Provision(conn, setup)
 		s.Stop()
+		if err != nil {
+			log.Fatalln("Exiting.. " + err.Error())
+		}
 		fmt.Println("\033[32m✔\033[0m VM Configured...")
 	},
-}
-
-// localVMMCreateCheck refuses an fc or ch create on a host that can't run
-// one. Firecracker and Cloud Hypervisor are KVM virtual machine monitors,
-// so they run on Linux only; without this a create on a Mac gets as far
-// as preparing the rootfs and fails on a missing debugfs, which reads as
-// "install e2fsprogs" when no package would make it work.
-func localVMMCreateCheck(provider, goos string) error {
-	if (provider != "fc" && provider != "ch") || goos == "linux" {
-		return nil
-	}
-	hint := ""
-	if goos == "darwin" {
-		hint = "; on a Mac, use -p ac (Apple containers)"
-	}
-	return fmt.Errorf("the %s provider runs microVMs on KVM, so it needs a Linux host (this is %s): run onctl there%s", provider, goos, hint)
 }

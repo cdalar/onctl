@@ -369,53 +369,6 @@ func TestDirSize_NonExistentPath(t *testing.T) {
 	}
 }
 
-func TestProcessUploadSlice_Directory(t *testing.T) {
-	mockRemote := unreachableConn(t)
-
-	tmpDir, err := os.MkdirTemp("", "upload-dir-test-")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("hello"), 0o600); err != nil {
-		t.Fatalf("Failed to write file: %v", err)
-	}
-
-	// Without a real SSH server, SSHUploadDir will fail to connect, but
-	// ProcessUploadSlice should handle that gracefully (log and continue)
-	// rather than panicking.
-	assert.NotPanics(t, func() {
-		ProcessUploadSlice([]string{tmpDir + ":/remote/dir"}, mockRemote, nil)
-	})
-}
-
-func TestProcessUploadSlice(t *testing.T) {
-	// Mock Remote struct
-	mockRemote := unreachableConn(t)
-
-	// Test with empty slice - should not panic and should do nothing
-	assert.NotPanics(t, func() {
-		ProcessUploadSlice([]string{}, mockRemote, nil)
-	})
-
-	// Test that function exists and is callable
-	assert.NotNil(t, ProcessUploadSlice)
-}
-
-func TestProcessDownloadSlice(t *testing.T) {
-	// Mock Remote struct
-	mockRemote := unreachableConn(t)
-
-	// Test with empty slice - should not panic and should do nothing
-	assert.NotPanics(t, func() {
-		ProcessDownloadSlice([]string{}, mockRemote)
-	})
-
-	// Test that function exists and is callable
-	assert.NotNil(t, ProcessDownloadSlice)
-}
-
 func TestMergeConfig(t *testing.T) {
 	// Create test configs
 	opt := &cmdCreateOptions{
