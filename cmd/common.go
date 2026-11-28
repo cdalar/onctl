@@ -553,7 +553,7 @@ func completeVMName(cmd *cobra.Command, args []string, toComplete string) ([]str
 	if provider == nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
-	vms, err := provider.List()
+	vms, err := boxClient().Servers()
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}

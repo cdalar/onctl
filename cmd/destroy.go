@@ -31,7 +31,7 @@ var destroyCmd = &cobra.Command{
 		if provider == nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
-		VMList, err := provider.List()
+		VMList, err := boxClient().Servers()
 		list := []string{}
 		for _, vm := range VMList.List {
 			list = append(list, vm.Name)
@@ -61,7 +61,8 @@ var destroyCmd = &cobra.Command{
 				}
 			}
 			log.Println("[DEBUG] Tear down all servers")
-			servers, err := provider.List()
+			c := boxClient()
+			servers, err := c.Servers()
 			if err != nil {
 				log.Println(err)
 			}
@@ -73,7 +74,7 @@ var destroyCmd = &cobra.Command{
 					defer wg.Done()
 					s.Suffix = " Destroying VM..."
 					s.Start()
-					if err := provider.Destroy(server); err != nil {
+					if err := c.Destroy(server.Name); err != nil {
 						fmt.Println("\033[31m✘\033[0m Could not destroy VM: " + server.Name)
 						log.Println(err)
 					}
@@ -113,9 +114,10 @@ var destroyCmd = &cobra.Command{
 	},
 }
 
-// isPaused tells whether name is among the provider's paused VMs.
+// isPaused tells whether name is among the provider's paused VMs that are
+// only a snapshot (ListPaused's, not a stopped server).
 func isPaused(name string) bool {
-	paused, err := provider.ListPaused()
+	paused, err := boxClient().Provider().ListPaused()
 	if err != nil {
 		log.Println("[DEBUG] listing paused VMs: ", err)
 		return false

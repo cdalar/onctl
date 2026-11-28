@@ -56,7 +56,7 @@ Local ports listen on 127.0.0.1 unless --address says otherwise.`,
 			forwards = append(forwards, fw)
 		}
 
-		vm, err := provider.GetByName(args[0])
+		vm, err := boxClient().Get(args[0])
 		if err != nil {
 			return err
 		}

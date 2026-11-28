@@ -37,10 +37,10 @@ var listCmd = &cobra.Command{
 		)
 		var pausedList cloud.VmList
 		if output == "puppet" || output == "ansible" {
-			serverList, err = provider.List()
+			serverList, err = boxClient().Servers()
 			log.Println("[DEBUG] VM List: ", serverList)
 		} else {
-			serverList, pausedList, err = listVMs(provider)
+			serverList, pausedList, err = boxClient().List()
 		}
 		// What a failed call returned is still shown (listVMs hands back
 		// the other call's VMs); the failure is the command's result.

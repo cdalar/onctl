@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/cdalar/onctl/internal/tools"
+	"github.com/cdalar/onctl/pkg/box"
 	"github.com/cdalar/onctl/pkg/cloud"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/pflag"
@@ -397,7 +398,7 @@ func (m tuiModel) handleVMKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if vm == nil {
 		return m, nil
 	}
-	p := m.p
+	c := box.Wrap(cloudProvider, m.p)
 	switch msg.String() {
 	case "s":
 		return m.ssh(vm.Name)
@@ -407,18 +408,18 @@ func (m tuiModel) handleVMKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// pause.go: the name is all the providers need.
 		name := vm.Name
 		return m.act(vm, "pause", 0, func() (string, error) {
-			return "", p.Pause(cloud.Vm{Name: name}, false)
+			return "", c.Pause(name, false)
 		})
 	case "r":
 		// resume.go: make sure the onctl SSH key exists and attach it.
 		name := vm.Name
 		return m.act(vm, "resume", 1, func() (string, error) {
 			publicKeyFile, _ := getSSHKeyFilePaths("")
-			keyID, err := p.CreateSSHKey(publicKeyFile)
+			keyID, err := c.AddSSHKey(publicKeyFile)
 			if err != nil {
 				return "", err
 			}
-			resumed, err := p.Resume(cloud.Vm{Name: name, SSHKeyID: keyID})
+			resumed, err := c.Resume(name, keyID)
 			if err != nil {
 				return "", err
 			}
@@ -698,15 +699,17 @@ func (m tuiModel) isSnapshot(vm *cloud.Vm) bool {
 	return ok && vm.Status == "paused"
 }
 
-// destroyCall is the provider call destroying the VM named name: its
-// snapshot's deletion when that's all there is of it.
+// destroyCall destroys the VM named name through pkg/box, which deletes
+// its snapshot when that's all there is of it; snapshot only picks the
+// message saying so.
 func destroyCall(p cloud.CloudProviderInterface, name string, snapshot bool) func() (string, error) {
-	if sd, ok := p.(cloud.SnapshotDestroyer); ok && snapshot {
+	c := box.Wrap(cloudProvider, p)
+	if snapshot {
 		return func() (string, error) {
-			return "deleted " + name + "'s snapshot", sd.DestroySnapshot(name)
+			return "deleted " + name + "'s snapshot", c.Destroy(name)
 		}
 	}
-	return func() (string, error) { return "", p.Destroy(cloud.Vm{Name: name}) }
+	return func() (string, error) { return "", c.Destroy(name) }
 }
 
 // markedVMs is the names of the marked VMs still listed, in list order.
