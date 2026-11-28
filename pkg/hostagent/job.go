@@ -10,30 +10,53 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/cdalar/onctl/pkg/cloud"
 )
 
-// Job is one command the server wants run on this host: Bin with Args,
-// Env added to this process's environment, pinned to CPUSet (taskset -c)
-// when set.
+// Job is one thing the server wants done on this host. Either a command,
+// Bin with Args, Env added to this process's environment and pinned to
+// CPUSet (taskset -c) when set; or a typed Op (see OpCreate) run through
+// pkg/box, with the fields that op takes.
 type Job struct {
 	ID     string            `json:"id"`
-	Bin    string            `json:"bin"`
-	Args   []string          `json:"args"`
+	Bin    string            `json:"bin,omitempty"`
+	Args   []string          `json:"args,omitempty"`
 	Env    map[string]string `json:"env,omitempty"`
 	CPUSet string            `json:"cpuset,omitempty"`
+
+	Op          string    `json:"op,omitempty"`
+	Provider    string    `json:"provider,omitempty"` // default fc
+	Name        string    `json:"name,omitempty"`
+	VM          *cloud.Vm `json:"vm,omitempty"`
+	Template    string    `json:"template,omitempty"`
+	Vars        []string  `json:"vars,omitempty"`
+	Command     []string  `json:"command,omitempty"`
+	Hot         bool      `json:"hot,omitempty"`
+	KernelImage string    `json:"kernel_image,omitempty"`
 }
 
-// Result is a Job's combined stdout and stderr, and "exit status N" when
-// it failed. Output is base64 on the wire ([]byte in JSON), as the
+// Result is what a Job did: a command's combined stdout and stderr, and
+// "exit status N" when it failed; a typed op's failure, and the VM or
+// VMs it returns. Output is base64 on the wire ([]byte in JSON), as the
 // server's side expects.
 type Result struct {
-	Output []byte `json:"output"`
-	Error  string `json:"error"`
+	Output   []byte     `json:"output"`
+	Error    string     `json:"error"`
+	VM       *cloud.Vm  `json:"vm,omitempty"`
+	VMs      []cloud.Vm `json:"vms,omitempty"`
+	ExitCode int        `json:"exit_code,omitempty"`
 }
 
 // vmName is the VM a job acts on (`create -n NAME`, `destroy NAME`, ...),
 // or "" when it acts on none (ls).
 func (j Job) vmName() string {
+	if j.Op != "" {
+		if j.VM != nil {
+			return j.VM.Name
+		}
+		return j.Name
+	}
 	if len(j.Args) == 0 {
 		return ""
 	}
@@ -56,6 +79,9 @@ func (j Job) vmName() string {
 // masked: for a runner's create that's its GitHub credential, and this
 // line lands in the host's journal.
 func (j Job) logLine() string {
+	if j.Op != "" {
+		return j.Op + " " + j.vmName()
+	}
 	parts := []string{j.Bin}
 	for i, a := range j.Args {
 		if i > 0 && (j.Args[i-1] == "-e" || j.Args[i-1] == "--env") && strings.Contains(a, "=") {
@@ -149,10 +175,17 @@ func (a *Agent) next(ctx context.Context) (Job, error) {
 // server had already given up on it, and pushes a fresh VM list.
 func (a *Agent) runJob(ctx context.Context, j Job) {
 	a.cfg.Logf("running job %s: %s", j.ID, j.logLine())
-	out, err := j.command(ctx).CombinedOutput()
-	res := Result{Output: out}
-	if err != nil {
-		res.Error = "exit status " + exitStatus(err)
+	var res Result
+	if j.Op != "" {
+		res = a.runTyped(ctx, j)
+	} else {
+		out, err := j.command(ctx).CombinedOutput()
+		res = Result{Output: out}
+		if err != nil {
+			res.Error = "exit status " + exitStatus(err)
+		}
+	}
+	if res.Error != "" {
 		a.cfg.Logf("job %s failed: %s", j.ID, res.Error)
 	} else {
 		a.cfg.Logf("job %s: finished", j.ID)
@@ -167,7 +200,15 @@ func (a *Agent) runJob(ctx context.Context, j Job) {
 	// A successful create the server gave up on (its ctx ran out, it
 	// restarted) is a VM nobody tracks: names are never reused, so
 	// destroy it here.
-	if err == nil && answer.Abandoned && len(j.Args) > 0 && j.Args[0] == "create" {
+	if res.Error == "" && answer.Abandoned && j.Op == OpCreate && j.VM != nil {
+		a.cfg.Logf("job %s: the server abandoned the create of %s; destroying it", j.ID, j.VM.Name)
+		if c, err := a.cfg.NewClient(j.provider()); err == nil {
+			if err := c.Destroy(j.VM.Name); err != nil {
+				a.cfg.Logf("job %s: destroying %s failed: %v", j.ID, j.VM.Name, err)
+			}
+		}
+	}
+	if res.Error == "" && answer.Abandoned && len(j.Args) > 0 && j.Args[0] == "create" {
 		if name := j.vmName(); name != "" {
 			a.cfg.Logf("job %s: the server abandoned the create of %s; destroying it", j.ID, name)
 			cleanup := Job{Bin: j.Bin, Args: []string{"destroy", name, "-f"}, Env: j.Env}

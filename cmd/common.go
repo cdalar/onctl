@@ -6,9 +6,7 @@ import (
 	"github.com/cdalar/onctl/internal/ui"
 	"github.com/cdalar/onctl/pkg/box"
 	"golang.org/x/term"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,7 +16,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
-	"github.com/cdalar/onctl/internal/files"
 	"github.com/cdalar/onctl/pkg/cloud"
 	"github.com/gofrs/uuid/v5"
 	"github.com/manifoldco/promptui"
@@ -197,76 +194,15 @@ func findFile(files []string) []string {
 	return filePaths
 }
 
+// findSingleFile is box.ResolveFile for the CLI: a name it can't find
+// anywhere ends onctl.
 func findSingleFile(filename string) (filePath string) {
-	if filename == "" {
-		return ""
-	}
-
-	// Checking file in filesystem
-	_, err := os.Stat(filename)
-	if err == nil { // file found in filesystem
-		return filename
-	} else {
-		log.Println("[DEBUG]", filename, "file not found in filesystem, trying to find in embeded files")
-	}
-
-	// file not found in filesystem, trying to find in embeded files
-	fileContent, err := files.EmbededFiles.ReadFile(filename)
-	if err == nil {
-		log.Println("[DEBUG]", filename, "file found in embeded files")
-
-		dir, err := os.MkdirTemp("", "onctl")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		file := filepath.Join(dir, filename)
-		if err := os.WriteFile(file, fileContent, 0666); err != nil {
-			log.Fatal(err)
-		}
-
-		return file
-
-	} else {
-		log.Println("[DEBUG]", filename, "not found in embeded files, trying to find in templates.onctl.com/")
-	}
-
-	// file not found in embeded files, trying to find in templates.onctl.com/
-	if filename[0:4] != "http" {
-		filename = "https://templates.onctl.com/" + filename
-	}
-
-	resp, err := http.Get(filename)
-	if err == nil && resp.StatusCode == 200 {
-		log.Println("[DEBUG]", filename, "file found in templates.onctl.com/")
-
-		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				log.Printf("Failed to close response body: %v", err)
-			}
-		}()
-		dir, err := os.MkdirTemp("", "onctl")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		fileBaseName := filepath.Base(filename)
-		filePath := filepath.Join(dir, fileBaseName)
-		fileContent, err := io.ReadAll(resp.Body)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if err := os.WriteFile(filePath, fileContent, 0666); err != nil {
-			log.Fatal(err)
-		}
-
-		return filePath
-	} else {
-		log.Println("[DEBUG]", filename, "not found in templates.onctl.com/")
-		fmt.Println("Error: " + filename + " not found in (filesystem, embeded files and templates.onctl.com/)")
+	path, err := box.ResolveFile(filename)
+	if err != nil {
+		fmt.Println("Error: " + err.Error())
 		os.Exit(1)
 	}
-	return ""
+	return path
 }
 
 // getSSHKeyFilePaths is box.KeyFiles: filename's key pair, or the

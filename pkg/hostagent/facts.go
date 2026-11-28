@@ -87,10 +87,11 @@ func (a *Agent) facts(providers []string) Facts {
 // the server can tell before asking:
 //
 //	image-generations  previous image versions are kept (fetch-image.sh)
+//	typed-jobs         Job.Op jobs run through pkg/box (OpCreate, ...)
 //	ingress            frpc and the ingress sync script are installed
 //	disk-grow          the disk-grow script is installed
 func (a *Agent) capabilities() []string {
-	caps := []string{"image-generations"}
+	caps := []string{"image-generations", "typed-jobs"}
 	if executable(filepath.Join(a.cfg.BinDir, "boxctl-frpc")) && executable(filepath.Join(a.cfg.BinDir, "boxctl-ingress-sync.sh")) {
 		caps = append(caps, "ingress")
 	}

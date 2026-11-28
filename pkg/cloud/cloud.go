@@ -71,6 +71,16 @@ type Vm struct {
 	Provider string
 	// Cost is the cost of the vm
 	Cost CostStruct
+	// KernelImage, DiskMiB and OS are per-VM choices a local VMM takes at
+	// Deploy instead of its configured default: fc boots KernelImage and
+	// grows the rootfs to DiskMiB; ch boots a Windows guest when OS is
+	// "windows". Empty or 0 keeps the configuration's.
+	KernelImage string `json:",omitempty" yaml:"kernelImage,omitempty"`
+	DiskMiB     int64  `json:",omitempty" yaml:"diskMiB,omitempty"`
+	OS          string `json:",omitempty" yaml:"os,omitempty"`
+	// CPUSet pins an fc microVM to these host CPUs (taskset -c's list
+	// form, e.g. "0-3,8"); empty runs it on any.
+	CPUSet string `json:",omitempty" yaml:"cpuset,omitempty"`
 }
 
 type CostStruct struct {

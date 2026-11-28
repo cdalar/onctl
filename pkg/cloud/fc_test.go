@@ -415,6 +415,22 @@ func TestProviderFC_Deploy_GrowsRootfs(t *testing.T) {
 	assert.Equal(t, []string{wantPath + ":30720"}, rootfs.growCalls)
 }
 
+// A VM's own kernel and disk size win over the configured ones: the boxctl
+// server creates boxes of different sizes and kernels on one host, at the
+// same time, so they can't be host-wide settings.
+func TestProviderFC_Deploy_PerVMKernelAndDisk(t *testing.T) {
+	p, _, _, _, rootfs := newTestFCProvider(t)
+	p.Config.RootfsSizeMib = 10240
+
+	_, err := p.Deploy(Vm{Name: "test-vm", KernelImage: "/images/boxctl-kernel.vmlinux", DiskMiB: 30720})
+	require.NoError(t, err)
+	wantPath := filepath.Join(p.vmDir("test-vm"), "rootfs.ext4")
+	assert.Equal(t, []string{wantPath + ":30720"}, rootfs.growCalls)
+	meta, err := loadFCMetadata(p.metadataPath("test-vm"))
+	require.NoError(t, err)
+	assert.Equal(t, "/images/boxctl-kernel.vmlinux", meta.KernelImage)
+}
+
 func TestProviderFC_Deploy_GrowFailureCleansUp(t *testing.T) {
 	p, proc, _, _, rootfs := newTestFCProvider(t)
 	p.Config.RootfsSizeMib = 30720

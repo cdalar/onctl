@@ -442,7 +442,11 @@ func (p ProviderCH) Deploy(server Vm) (Vm, error) {
 		sshPublicKey = strings.TrimSpace(string(data))
 	}
 
-	isWindows := p.Config.OS == chOSWindows
+	guestOS := p.Config.OS
+	if server.OS != "" {
+		guestOS = server.OS
+	}
+	isWindows := guestOS == chOSWindows
 
 	var rootfsPath, seedDiskPath string
 	if isWindows {
@@ -578,7 +582,7 @@ func (p ProviderCH) Deploy(server Vm) (Vm, error) {
 		KernelImage:   kernelImage,
 		RootfsPath:    rootfsPath,
 		BaseImagePath: rootfsImage,
-		OS:            p.Config.OS,
+		OS:            guestOS,
 		SeedDiskPath:  seedDiskPath,
 		SSHPort:       sshPort,
 		CreatedAt:     time.Now(),
