@@ -52,7 +52,7 @@ var (
 				return nil
 			}
 			switch cmd.Name() {
-			case "init", "version", "help", "import", "login", "logout", "__complete", "__completeNoDesc":
+			case "init", "version", "help", "import", "login", "logout", "host-agent", "__complete", "__completeNoDesc":
 				return nil
 			}
 			// `onctl completion <shell>` only prints a script; the install
